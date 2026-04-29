@@ -30,7 +30,10 @@ Assigns review cadence and expected holding horizon by company category and risk
 Stores decisions, structured packets, raw responses, benchmark start prices, outcome updates, recommendation table rows, and review candidates.
 
 `longterm/report_builder.py`
-Creates a markdown decision report with benchmark outcomes and a Motley-Fool-style recommendation table.
+Creates a markdown decision report with benchmark outcomes and a Motley-Fool-style recommendation table. `RecommendationTableBuilder` is the preferred seam for report/next-action rows: it starts from `DecisionJournal` rows, optionally hydrates volatile fields, and does not write enrichment back into the journal.
+
+`longterm/recommendation_enrichment.py`
+Provides `CachedRecommendationEnricher`, a daily cache wrapper for recommendation-table enrichment such as current price, daily change, market cap, revenue growth, estimated return range, and max drawdown. This keeps external data calls out of core journal storage and avoids repeated fetches during report generation.
 
 `longterm/action_planner.py`
 Converts a structured decision into a non-executing proposed `BUY`, `SELL`, or `NONE` intent.
@@ -39,7 +42,7 @@ Converts a structured decision into a non-executing proposed `BUY`, `SELL`, or `
 Loads read-only portfolio snapshots and separates active versus protected holdings.
 
 `longterm/next_actions.py`
-Combines recommendation table, portfolio state, benchmark guard, and dry-run planner into a prioritized next-actions report.
+Combines recommendation table builder output, portfolio state, benchmark guard, and dry-run planner into a prioritized next-actions report.
 
 `longterm/benchmark_guard.py`
 Pauses new active buys when evaluated results lag `FXAIX` enough to question the active process.
@@ -52,7 +55,7 @@ Checks review due dates and whether current evidence matches invalidation condit
 
 ## Decision Flow
 
-Raw idea -> `ResearchPacket` -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table -> dry-run action plan -> next-actions report.
+Raw idea -> `ResearchPacket` -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment -> dry-run action plan -> next-actions report.
 
 ## Data Flow Safety
 

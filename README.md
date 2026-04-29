@@ -38,6 +38,7 @@ This repo is not a swing-trader clone. It is meant to evaluate fewer ideas more 
 - `ai_trader/trading_agent/longterm/rebalance_planner.py` - dry-run rebalance proposal helper
 - `ai_trader/trading_agent/longterm/capital_alert.py` - capital-needed alert payloads
 - `ai_trader/trading_agent/longterm/report_builder.py` - markdown reports and recommendation table
+- `ai_trader/trading_agent/longterm/recommendation_enrichment.py` - daily cached recommendation-table enrichment
 - `ai_trader/trading_agent/longterm/configs/roth_ira_profile.json` - default Roth IRA profile
 - `ai_trader/trading_agent/agent/configs/longterm_trading_agent_specs.json` - long-term CGH agent domains
 - `ai_trader/trading_agent/agent/utils/cheap_grok_heavy.py` - config-driven multi-agent Grok helper

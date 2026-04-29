@@ -20,6 +20,8 @@
     "ai_trader/trading_agent/portfolio/portfolio_profile.py",
     "ai_trader/trading_agent/longterm/research_runner.py",
     "ai_trader/trading_agent/longterm/decision_journal.py",
+    "ai_trader/trading_agent/longterm/report_builder.py",
+    "ai_trader/trading_agent/longterm/recommendation_enrichment.py",
     "ai_trader/trading_agent/longterm/action_planner.py",
     "ai_trader/trading_agent/longterm/next_actions.py"
   ],

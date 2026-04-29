@@ -29,6 +29,8 @@ python scripts/longterm_journal.py report --limit 10
 python scripts/longterm_journal.py update-outcome --decision-id <id> --candidate-price 190 --benchmark-price 170 --notes "monthly review"
 ```
 
+The recommendation table is derived from `DecisionJournal` rows through `RecommendationTableBuilder`. Volatile market/fundamental fields should be enriched at report time and cached daily; do not write transient enrichment directly into the journal unless it becomes part of a durable decision record.
+
 ## Dry-Run Action Plan
 
 ```powershell

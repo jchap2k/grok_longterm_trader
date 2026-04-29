@@ -94,6 +94,24 @@ def test_next_actions_planner_builds_prioritized_actions(tmp_path):
     assert any(action.category == "review_holding" and action.symbol == "AAPL" for action in actions)
 
 
+def test_next_actions_planner_uses_recommendation_table_builder_rows(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    _record_decision(journal, "NVDA", confidence=92, size=8, thesis="AI leader.")
+    profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
+    state = PortfolioState(cash=5000, protected_symbols=["FXAIX"])
+
+    actions = NextActionsPlanner(
+        review_status_by_symbol={"NVDA": {"review_due": True}}
+    ).plan(
+        journal,
+        profile=profile,
+        portfolio_state=state,
+    )
+
+    assert actions[0].symbol == "NVDA"
+    assert "review due" in actions[0].reason.lower()
+
+
 def test_next_actions_markdown_includes_table_and_benchmark_gate(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     first = _record_decision(journal, "NVDA", confidence=90, size=8)

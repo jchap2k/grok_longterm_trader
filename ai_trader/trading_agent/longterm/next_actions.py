@@ -8,6 +8,7 @@ from longterm.action_planner import ActionPlanner
 from longterm.benchmark_guard import BenchmarkGuard
 from longterm.decision_journal import LongTermDecisionJournal
 from longterm.portfolio_state import PortfolioState
+from longterm.report_builder import RecommendationEnricher, RecommendationTableBuilder
 from portfolio.portfolio_profile import PortfolioProfile
 from research.intake import create_research_packet_from_idea
 
@@ -24,6 +25,15 @@ class NextAction:
 class NextActionsPlanner:
     """Create a concise list of research, review, and dry-run trade priorities."""
 
+    def __init__(
+        self,
+        *,
+        enricher: RecommendationEnricher | None = None,
+        review_status_by_symbol: dict[str, dict] | None = None,
+    ):
+        self.enricher = enricher
+        self.review_status_by_symbol = review_status_by_symbol or {}
+
     def plan(
         self,
         journal: LongTermDecisionJournal,
@@ -32,7 +42,11 @@ class NextActionsPlanner:
         portfolio_state: PortfolioState,
         limit: int = 10,
     ) -> list[NextAction]:
-        recommendations = journal.list_recommendation_table(limit=limit)
+        recommendations = RecommendationTableBuilder(
+            journal,
+            enricher=self.enricher,
+            review_status_by_symbol=self.review_status_by_symbol,
+        ).build(limit=limit)
         actions: list[NextAction] = []
 
         for row in recommendations:
@@ -49,23 +63,29 @@ class NextActionsPlanner:
                 },
             )
             if portfolio_state.holding_value(symbol) <= 0 and planned.order_intent == "BUY":
+                reason = planned.reason
+                if row.get("review_due"):
+                    reason += " Review due before committing new capital."
                 actions.append(
                     NextAction(
                         priority=len(actions) + 1,
                         category="buy_candidate",
                         symbol=symbol,
                         action=planned.action,
-                        reason=planned.reason,
+                        reason=reason,
                     )
                 )
             elif portfolio_state.holding_value(symbol) > 0:
+                reason = row.get("reason") or "Held symbol remains on recommendation table."
+                if row.get("review_due"):
+                    reason += " Review due."
                 actions.append(
                     NextAction(
                         priority=len(actions) + 1,
                         category="review_holding",
                         symbol=symbol,
                         action="REVIEW",
-                        reason=row.get("reason") or "Held symbol remains on recommendation table.",
+                        reason=reason,
                     )
                 )
 

@@ -2,7 +2,43 @@
 
 from __future__ import annotations
 
+from typing import Protocol
+
 from longterm.decision_journal import LongTermDecisionJournal
+
+
+class RecommendationEnricher(Protocol):
+    """Optional read-only enrichment provider for recommendation rows."""
+
+    def enrich(self, symbol: str) -> dict:
+        ...
+
+
+class RecommendationTableBuilder:
+    """Build enriched recommendation rows without mutating the decision journal."""
+
+    def __init__(
+        self,
+        journal: LongTermDecisionJournal,
+        *,
+        enricher: RecommendationEnricher | None = None,
+        review_status_by_symbol: dict[str, dict] | None = None,
+    ):
+        self.journal = journal
+        self.enricher = enricher
+        self.review_status_by_symbol = {
+            symbol.upper(): status
+            for symbol, status in (review_status_by_symbol or {}).items()
+        }
+
+    def build(self, *, limit: int = 20) -> list[dict]:
+        rows = [dict(row) for row in self.journal.list_recommendation_table(limit=limit)]
+        for row in rows:
+            symbol = row["symbol"].upper()
+            if self.enricher is not None:
+                row.update(self.enricher.enrich(symbol) or {})
+            row.update(self.review_status_by_symbol.get(symbol, {}))
+        return rows
 
 
 def _fmt_pct(value) -> str:
@@ -37,13 +73,13 @@ def build_markdown_report(
         "",
         "## Recommendation Table",
         "",
-        "| Rank | Symbol | Company | Action | Service | Price | Change | Previous Rank | Market Cap | Type | 1Y Rev. Growth | Return Since Rec | Rec Date | Est. Return | Est. Max Drawdown | Times Rec'd | Notes | Reason | Link |",
-        "|---:|---|---|---|---|---:|---:|---:|---:|---|---:|---:|---|---:|---:|---:|---:|---|---|",
+        "| Rank | Symbol | Company | Action | Service | Price | Change | Previous Rank | Market Cap | Type | 1Y Rev. Growth | Return Since Rec | Rec Date | Est. Return | Est. Max Drawdown | Review Due | Thesis State | Data As Of | Times Rec'd | Notes | Reason | Link |",
+        "|---:|---|---|---|---|---:|---:|---:|---:|---|---:|---:|---|---:|---:|---|---|---|---:|---:|---|---|",
     ]
 
-    for row in journal.list_recommendation_table(limit=limit):
+    for row in RecommendationTableBuilder(journal).build(limit=limit):
         lines.append(
-            "| {rank} | {symbol} | {company} | {action} | {service} | {price} | {change} | {previous_rank} | {market_cap} | {risk_type} | {growth} | {return_since_rec} | {rec_date} | {return_range} | {drawdown} | {times} | {notes} | {reason} | {link} |".format(
+            "| {rank} | {symbol} | {company} | {action} | {service} | {price} | {change} | {previous_rank} | {market_cap} | {risk_type} | {growth} | {return_since_rec} | {rec_date} | {return_range} | {drawdown} | {review_due} | {thesis_state} | {data_as_of} | {times} | {notes} | {reason} | {link} |".format(
                 rank=row.get("rank", ""),
                 symbol=row.get("symbol", ""),
                 company=row.get("company_name") or "",
@@ -59,6 +95,9 @@ def build_markdown_report(
                 rec_date=row.get("rec_date") or "",
                 return_range=row.get("estimated_return_range") or "",
                 drawdown=_fmt_pct(row.get("estimated_max_drawdown_pct")),
+                review_due=row.get("review_due") if row.get("review_due") is not None else "",
+                thesis_state=row.get("thesis_state") or "",
+                data_as_of=row.get("data_as_of") or "",
                 times=row.get("times_recommended") or "",
                 notes=row.get("discussion_count") or "",
                 reason=row.get("reason") or "",
