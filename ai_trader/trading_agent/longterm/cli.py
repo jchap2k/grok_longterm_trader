@@ -18,7 +18,8 @@ DEFAULT_AGENT_CONFIG_PATH = LONGTERM_DIR / "configs" / "longterm_agent_specs_v1.
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run long-term research for one ticker.")
-    parser.add_argument("--symbol", required=True)
+    parser.add_argument("--symbol", default="")
+    parser.add_argument("--idea-file", default="")
     parser.add_argument("--company-name", default="")
     parser.add_argument("--company-category", default="")
     parser.add_argument("--business-summary", default="")
@@ -41,20 +42,41 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def load_idea_file(path: str) -> dict:
+    if not path:
+        return {}
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("Idea file must contain a JSON object.")
+    return payload
+
+
+def _choose_arg_value(value, fallback):
+    if value in (None, ""):
+        return fallback
+    return value
+
+
 def create_packet_from_args(args: argparse.Namespace):
     profile = PortfolioProfile.from_file(args.profile_config)
+    idea = load_idea_file(args.idea_file)
+    symbol = _choose_arg_value(args.symbol, idea.get("symbol", ""))
+    if not symbol:
+        raise ValueError("A symbol is required via --symbol or --idea-file.")
+
     return create_research_packet_from_idea(
         {
-            "symbol": args.symbol,
-            "company_name": args.company_name,
-            "company_category": args.company_category,
-            "business_summary": args.business_summary,
-            "thesis_summary": args.thesis,
-            "primary_growth_driver": args.growth_driver,
-            "industry_context": args.industry_context,
+            "symbol": symbol,
+            "company_name": _choose_arg_value(args.company_name, idea.get("company_name", "")),
+            "company_category": _choose_arg_value(args.company_category, idea.get("company_category", "")),
+            "business_summary": _choose_arg_value(args.business_summary, idea.get("business_summary", "")),
+            "thesis_summary": _choose_arg_value(args.thesis, idea.get("thesis_summary", "")),
+            "primary_growth_driver": _choose_arg_value(args.growth_driver, idea.get("primary_growth_driver", "")),
+            "industry_context": _choose_arg_value(args.industry_context, idea.get("industry_context", "")),
+            "source_notes": idea.get("source_notes", []),
         },
         profile=profile,
-        idea_source=args.idea_source,
+        idea_source=_choose_arg_value(args.idea_source, idea.get("idea_source", "manual_cli")),
     )
 
 

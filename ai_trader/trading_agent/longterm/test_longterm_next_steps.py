@@ -6,7 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from longterm.decision_parser import parse_decision_response
 from longterm.decision_journal import LongTermDecisionJournal
-from longterm.cli import build_parser, create_packet_from_args, run_cli
+from longterm.cli import build_parser, create_packet_from_args, load_idea_file, run_cli
 from longterm.research_runner import LongTermResearchRunner
 from portfolio.portfolio_profile import PortfolioProfile
 from research.intake import create_research_packet_from_idea
@@ -165,3 +165,37 @@ def test_create_packet_from_args_uses_profile_config_defaults():
     assert packet.symbol == "NVDA"
     assert packet.account_strategy_mode == "roth_ira"
     assert packet.protected_symbols == ["FXAIX"]
+
+
+def test_cli_can_load_idea_file_and_allow_argument_overrides(tmp_path):
+    idea_path = tmp_path / "idea.json"
+    idea_path.write_text(
+        json.dumps(
+            {
+                "symbol": "aapl",
+                "company_name": "Apple",
+                "business_summary": "Original summary.",
+                "thesis_summary": "Original thesis.",
+                "source_notes": ["Imported from manual list"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--idea-file",
+            str(idea_path),
+            "--business-summary",
+            "Overridden summary.",
+        ]
+    )
+
+    idea = load_idea_file(args.idea_file)
+    packet = create_packet_from_args(args)
+
+    assert idea["symbol"] == "aapl"
+    assert packet.symbol == "AAPL"
+    assert packet.business_summary == "Overridden summary."
+    assert packet.thesis_summary == "Original thesis."
+    assert packet.source_notes == ["Imported from manual list"]

@@ -170,6 +170,28 @@ class LongTermDecisionJournal:
             raise KeyError(f"Decision not found: {decision_id}")
         return dict(row)
 
+    def list_recent_decisions(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Return recent long-term decisions, newest first."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                """
+                SELECT decision_id, timestamp, symbol, company_name, idea_source,
+                       recommendation, confidence, suggested_size_pct, key_thesis,
+                       benchmark_symbol, candidate_price_at_decision,
+                       benchmark_price_at_decision, candidate_return_pct,
+                       benchmark_return_pct, excess_return_pct, outcome_updated_at
+                FROM longterm_decision_journal
+                ORDER BY timestamp DESC
+                LIMIT ?
+                """,
+                (int(limit),),
+            ).fetchall()
+        finally:
+            conn.close()
+        return [dict(row) for row in rows]
+
     def summarize_benchmark_performance(self) -> dict[str, Any]:
         """Summarize decisions that have both active and benchmark outcomes."""
         conn = sqlite3.connect(self.db_path)

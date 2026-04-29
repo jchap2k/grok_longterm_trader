@@ -56,6 +56,24 @@ python scripts/run_longterm_research.py --symbol AAPL --company-name Apple --the
 
 This prints the normalized packet without calling Grok.
 
+## Use An Idea File
+
+You can also pass a JSON idea file. Command-line fields override matching values from the file.
+
+```json
+{
+  "symbol": "AAPL",
+  "company_name": "Apple",
+  "business_summary": "Consumer technology platform.",
+  "thesis_summary": "Services and ecosystem durability.",
+  "source_notes": ["Manual watchlist"]
+}
+```
+
+```powershell
+python scripts/run_longterm_research.py --idea-file path\to\idea.json --dry-run
+```
+
 ## Run Research
 
 Set `XAI_API_KEY`, then run without `--dry-run`:
@@ -66,12 +84,32 @@ python scripts/run_longterm_research.py --symbol AAPL --company-name Apple --the
 
 The command prints the recorded `decision_id`.
 
+## Journal Tools
+
+Summarize active decisions versus `FXAIX`:
+
+```powershell
+python scripts/longterm_journal.py summary
+```
+
+List recent decisions:
+
+```powershell
+python scripts/longterm_journal.py list --limit 10
+```
+
+Update an outcome review:
+
+```powershell
+python scripts/longterm_journal.py update-outcome --decision-id <id> --candidate-price 190 --benchmark-price 170 --notes "monthly review"
+```
+
 ## Tests
 
 From the repo root:
 
 ```powershell
-python -m pytest ai_trader/trading_agent/longterm/test_longterm_foundation.py ai_trader/trading_agent/longterm/test_longterm_intake_runner.py ai_trader/trading_agent/longterm/test_longterm_decision_journal.py ai_trader/trading_agent/longterm/test_longterm_book_principles.py ai_trader/trading_agent/longterm/test_longterm_next_steps.py ai_trader/trading_agent/agent/utils/test_cheap_grok_heavy_config.py -q
+python -m pytest ai_trader/trading_agent/longterm/test_longterm_foundation.py ai_trader/trading_agent/longterm/test_longterm_intake_runner.py ai_trader/trading_agent/longterm/test_longterm_decision_journal.py ai_trader/trading_agent/longterm/test_longterm_book_principles.py ai_trader/trading_agent/longterm/test_longterm_next_steps.py ai_trader/trading_agent/longterm/test_longterm_journal_cli.py ai_trader/trading_agent/agent/utils/test_cheap_grok_heavy_config.py -q
 ```
 
 ## Safety Notes
