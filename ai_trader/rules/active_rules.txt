@@ -126,6 +126,54 @@ Default behavior:
 - add only when the thesis is confirmed
 - reduce or exit when thesis quality deteriorates
 
+AUTONOMOUS TARGET STATE
+
+The live system is intended to become autonomous inside explicit safety boundaries:
+- find candidate stocks
+- build research packets
+- rank best ideas against current holdings
+- buy, add, reduce, or rebalance when the active-sleeve opportunity is clearly better than alternatives
+- preserve protected holdings
+- track whether active decisions beat `FXAIX`
+
+Until live mode is explicitly enabled, this system should remain research, logging, reporting, and alerting only.
+
+RECOMMENDATION TABLE
+
+Maintain a ranked recommendation table of liked stocks, newest thesis per symbol, ordered from strongest to weakest conviction.
+
+Each row should include:
+- symbol
+- company
+- action / recommendation
+- service or source
+- price and daily change
+- previous rank
+- market cap
+- risk type
+- 1Y revenue growth
+- return since recommendation
+- recommendation date
+- estimated return range
+- estimated max drawdown
+- times recommended
+- notes or discussion count
+- reason / thesis summary
+- link or reference to supporting stock information when available
+
+If cash is added to the active sleeve, candidate buys should come from this ranked table rather than from an ad hoc one-off idea.
+
+CAPITAL NEEDED ALERTS
+
+If the system finds a very strong new candidate or a strong add-to-current-holding opportunity but lacks available active-sleeve cash:
+- log the opportunity
+- include it in the recommendation table
+- optionally alert the user with the ranked table and estimated capital shortfall
+
+Do not treat a capital alert as an instruction to deposit funds.
+Do not automatically request money.
+Do not sell protected holdings to fund the idea.
+
 ACCOUNT MODES
 
 If operating in a Roth IRA mode:

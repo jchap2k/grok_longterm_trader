@@ -121,6 +121,18 @@ The long-term trader should eventually decide:
 - how much to size initial positions
 - when to add to winners
 - when to trim or exit on thesis deterioration
+- how to rank liked candidates against current holdings
+- when a better idea is strong enough to justify rebalancing
+
+The live destination is autonomous inside explicit safety rails: the agent should find candidates, research them, compare them against current holdings, buy or rebalance when the active-sleeve opportunity is clearly superior, and continue measuring results against `FXAIX`.
+
+The system should maintain a recommendation table similar in spirit to a curated stock-ranking service:
+- one current row per liked symbol
+- rank from strongest to weakest conviction
+- include company, action, service/source, price, daily change, previous rank, market cap, risk type, 1Y revenue growth, return since recommendation, recommendation date, estimated return range, estimated max drawdown, times recommended, discussion/notes count, thesis reason, and a supporting link/reference when available
+- use the table as the source of truth when new cash becomes available
+
+If the table contains a high-conviction opportunity but active-sleeve cash is insufficient, the system may create a capital-needed alert. Brevo can later deliver that alert by email, but the alert should remain informational and should never automatically request deposits, sell protected holdings, or bypass sizing/risk rules.
 
 ### 6. Account Strategy Modes
 
@@ -171,6 +183,8 @@ Cash should also be an available defensive state for the active sleeve:
    - thesis strength
    - valuation attractiveness
    - review outcome
+6. Ranked recommendation table with links/reasons
+7. Capital-needed alert payloads for future Brevo digest delivery
 
 ## Non-Goals For V1
 

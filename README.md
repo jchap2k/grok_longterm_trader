@@ -30,6 +30,8 @@ This repo is not a swing-trader clone. It is meant to evaluate fewer ideas more 
 - `ai_trader/trading_agent/portfolio/portfolio_profile.py` - account/profile controls
 - `ai_trader/trading_agent/longterm/research_runner.py` - multi-agent research runner
 - `ai_trader/trading_agent/longterm/decision_journal.py` - SQLite decision journal
+- `ai_trader/trading_agent/longterm/capital_alert.py` - capital-needed alert payloads
+- `ai_trader/trading_agent/longterm/report_builder.py` - markdown reports and recommendation table
 - `ai_trader/trading_agent/longterm/configs/roth_ira_profile.json` - default Roth IRA profile
 - `ai_trader/trading_agent/longterm/configs/longterm_agent_specs_v1.json` - long-term agent domains
 - `ai_trader/trading_agent/agent/utils/cheap_grok_heavy.py` - config-driven multi-agent Grok helper
@@ -74,6 +76,14 @@ You can also pass a JSON idea file. Command-line fields override matching values
 python scripts/run_longterm_research.py --idea-file path\to\idea.json --dry-run
 ```
 
+## Use An Idea Batch
+
+Pass a JSON list of ideas to create multiple research packets from one file:
+
+```powershell
+python scripts/run_longterm_research.py --idea-batch path\to\ideas.json --dry-run
+```
+
 ## Run Research
 
 Set `XAI_API_KEY`, then run without `--dry-run`:
@@ -98,6 +108,14 @@ List recent decisions:
 python scripts/longterm_journal.py list --limit 10
 ```
 
+Render a markdown report with the ranked recommendation table:
+
+```powershell
+python scripts/longterm_journal.py report --limit 10
+```
+
+The recommendation table is modeled after curated stock-ranking services: rank, symbol, company, action, service/source, price, daily change, previous rank, market cap, risk type, 1Y revenue growth, return since recommendation, recommendation date, estimated return range, estimated max drawdown, times recommended, notes/discussion count, thesis reason, and supporting link when those fields are available from research.
+
 Update an outcome review:
 
 ```powershell
@@ -118,3 +136,4 @@ python -m pytest ai_trader/trading_agent/longterm/test_longterm_foundation.py ai
 - `FXAIX` is a protected symbol and should not be sold, trimmed, rotated, or rebalanced by this agent.
 - Temporary defensive index exposure should use `SPY`, not `FXAIX`.
 - Active results should be judged against `FXAIX`; if the active sleeve cannot beat it over a meaningful period, the benchmark is the better default.
+- Capital-needed alerts are informational only; they should not request deposits or bypass risk rules.

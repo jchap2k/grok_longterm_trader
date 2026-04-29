@@ -192,6 +192,76 @@ class LongTermDecisionJournal:
             conn.close()
         return [dict(row) for row in rows]
 
+    def list_recommendation_table(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Return latest actionable decisions ranked from most to least liked."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                """
+                SELECT decision_id, timestamp, symbol, company_name, recommendation,
+                       confidence, suggested_size_pct, key_thesis, decision_json
+                FROM longterm_decision_journal
+                WHERE recommendation IN ('BUY', 'ADD', 'HOLD')
+                ORDER BY timestamp DESC
+                """
+            ).fetchall()
+        finally:
+            conn.close()
+
+        latest_by_symbol: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            record = dict(row)
+            symbol = record["symbol"]
+            if symbol in latest_by_symbol:
+                continue
+            decision = json.loads(record.get("decision_json") or "{}")
+            reason = (
+                decision.get("key_thesis")
+                or decision.get("why_recommend")
+                or decision.get("rationale")
+                or record.get("key_thesis")
+                or ""
+            )
+            info_link = (
+                decision.get("info_link")
+                or decision.get("research_url")
+                or decision.get("source_url")
+                or decision.get("source_link")
+                or ""
+            )
+            record["reason"] = reason
+            record["info_link"] = info_link
+            record["company_name"] = record.get("company_name") or decision.get("company") or symbol
+            record["action"] = decision.get("action") or record.get("recommendation") or ""
+            record["service"] = decision.get("service") or record.get("idea_source") or ""
+            record["rec_date"] = decision.get("rec_date") or decision.get("recommendation_date") or ""
+            record["return_since_rec_pct"] = decision.get("return_since_rec_pct")
+            record["current_price"] = decision.get("current_price")
+            record["change_pct"] = decision.get("change_pct")
+            record["previous_rank"] = decision.get("previous_rank") or "-"
+            record["market_cap"] = decision.get("market_cap") or ""
+            record["risk_type"] = decision.get("risk_type") or decision.get("type") or ""
+            record["revenue_growth_1y_pct"] = decision.get("revenue_growth_1y_pct")
+            record["estimated_return_range"] = decision.get("estimated_return_range") or ""
+            record["estimated_max_drawdown_pct"] = decision.get("estimated_max_drawdown_pct")
+            record["times_recommended"] = sum(1 for item in rows if item["symbol"] == symbol)
+            record["discussion_count"] = decision.get("discussion_count")
+            latest_by_symbol[symbol] = record
+
+        ranked = sorted(
+            latest_by_symbol.values(),
+            key=lambda row: (
+                int(row.get("confidence") or 0),
+                float(row.get("suggested_size_pct") or 0.0),
+            ),
+            reverse=True,
+        )[: int(limit)]
+
+        for index, row in enumerate(ranked, start=1):
+            row["rank"] = index
+        return ranked
+
     def summarize_benchmark_performance(self) -> dict[str, Any]:
         """Summarize decisions that have both active and benchmark outcomes."""
         conn = sqlite3.connect(self.db_path)

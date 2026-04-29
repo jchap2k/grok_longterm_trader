@@ -6,6 +6,7 @@ import argparse
 import json
 
 from longterm.decision_journal import LongTermDecisionJournal
+from longterm.report_builder import build_markdown_report
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -18,6 +19,10 @@ def build_parser() -> argparse.ArgumentParser:
     list_cmd = subparsers.add_parser("list", help="List recent decisions.")
     list_cmd.add_argument("--journal-db", default=None)
     list_cmd.add_argument("--limit", type=int, default=20)
+
+    report = subparsers.add_parser("report", help="Render a markdown decision report.")
+    report.add_argument("--journal-db", default=None)
+    report.add_argument("--limit", type=int, default=20)
 
     update = subparsers.add_parser("update-outcome", help="Update active-vs-benchmark outcome.")
     update.add_argument("--journal-db", default=None)
@@ -38,6 +43,10 @@ def run_cli(args: argparse.Namespace) -> int:
 
     if args.command == "list":
         print(json.dumps(journal.list_recent_decisions(limit=args.limit), indent=2, sort_keys=True))
+        return 0
+
+    if args.command == "report":
+        print(build_markdown_report(journal, limit=args.limit), end="")
         return 0
 
     if args.command == "update-outcome":

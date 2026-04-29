@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from longterm.research_runner import LongTermResearchRunner
+from longterm.batch_intake import load_idea_batch
 from portfolio.portfolio_profile import PortfolioProfile
 from research.intake import create_research_packet_from_idea
 
@@ -20,6 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run long-term research for one ticker.")
     parser.add_argument("--symbol", default="")
     parser.add_argument("--idea-file", default="")
+    parser.add_argument("--idea-batch", default="")
     parser.add_argument("--company-name", default="")
     parser.add_argument("--company-category", default="")
     parser.add_argument("--business-summary", default="")
@@ -80,28 +82,43 @@ def create_packet_from_args(args: argparse.Namespace):
     )
 
 
+def create_packets_from_args(args: argparse.Namespace):
+    profile = PortfolioProfile.from_file(args.profile_config)
+    if args.idea_batch:
+        return load_idea_batch(
+            args.idea_batch,
+            profile=profile,
+            idea_source=args.idea_source,
+        )
+    return [create_packet_from_args(args)]
+
+
 def run_cli(args: argparse.Namespace) -> int:
-    packet = create_packet_from_args(args)
+    packets = create_packets_from_args(args)
     if args.dry_run:
-        print(json.dumps(packet.to_dict(), indent=2, sort_keys=True))
+        payload = [packet.to_dict() for packet in packets]
+        print(json.dumps(payload[0] if len(payload) == 1 else payload, indent=2, sort_keys=True))
         return 0
 
     runner = LongTermResearchRunner(
         config_path=args.agent_config,
         verbose=not args.quiet,
     )
-    decision_id = runner.run_and_record(
-        packet,
-        journal_db_path=args.journal_db,
-        candidate_price=args.candidate_price,
-        benchmark_price=args.benchmark_price,
-        financial_metrics=args.financial_metrics,
-        macro_regime=args.macro_regime,
-        market_risk_context=args.market_risk_context,
-        supporting_evidence=args.supporting_evidence,
-        risk_flags=args.risk_flags,
-    )
-    print(decision_id)
+    decision_ids = [
+        runner.run_and_record(
+            packet,
+            journal_db_path=args.journal_db,
+            candidate_price=args.candidate_price,
+            benchmark_price=args.benchmark_price,
+            financial_metrics=args.financial_metrics,
+            macro_regime=args.macro_regime,
+            market_risk_context=args.market_risk_context,
+            supporting_evidence=args.supporting_evidence,
+            risk_flags=args.risk_flags,
+        )
+        for packet in packets
+    ]
+    print(decision_ids[0] if len(decision_ids) == 1 else json.dumps(decision_ids, indent=2))
     return 0
 
 
