@@ -154,6 +154,20 @@ The live system is intended to become autonomous inside explicit safety boundari
 
 Until live mode is explicitly enabled, this system should remain research, logging, reporting, and alerting only.
 
+ACTION PLANNING SAFETY
+
+Action planning may translate a structured decision into a proposed BUY, SELL, or NONE intent, but it must not place broker orders.
+
+Before any future execution layer:
+- load current portfolio state
+- separate protected and active holdings
+- block any protected-symbol sell, trim, or rebalance
+- check available active-sleeve cash before buy/add
+- report cash shortfall as an informational capital-needed alert
+- keep the action as a dry-run plan unless live mode is explicitly enabled
+
+The planner is allowed to say "not allowed" even when the CGH decision is bullish.
+
 RECOMMENDATION TABLE
 
 Maintain a ranked recommendation table of liked stocks, newest thesis per symbol, ordered from strongest to weakest conviction.

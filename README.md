@@ -30,6 +30,9 @@ This repo is not a swing-trader clone. It is meant to evaluate fewer ideas more 
 - `ai_trader/trading_agent/portfolio/portfolio_profile.py` - account/profile controls
 - `ai_trader/trading_agent/longterm/research_runner.py` - multi-agent research runner
 - `ai_trader/trading_agent/longterm/decision_journal.py` - SQLite decision journal
+- `ai_trader/trading_agent/longterm/action_planner.py` - non-executing buy/sell intent planner
+- `ai_trader/trading_agent/longterm/portfolio_state.py` - read-only portfolio snapshot model
+- `ai_trader/trading_agent/longterm/thesis_monitor.py` - thesis review due/broken checks
 - `ai_trader/trading_agent/longterm/capital_alert.py` - capital-needed alert payloads
 - `ai_trader/trading_agent/longterm/report_builder.py` - markdown reports and recommendation table
 - `ai_trader/trading_agent/longterm/configs/roth_ira_profile.json` - default Roth IRA profile
@@ -133,6 +136,16 @@ Update an outcome review:
 ```powershell
 python scripts/longterm_journal.py update-outcome --decision-id <id> --candidate-price 190 --benchmark-price 170 --notes "monthly review"
 ```
+
+## Dry-Run Action Planning
+
+Given a portfolio snapshot and a structured decision JSON, produce a proposed intent without touching broker code:
+
+```powershell
+python scripts/longterm_action_plan.py --symbol NVDA --portfolio-state path\to\portfolio.json --decision-file path\to\decision.json
+```
+
+This outputs `BUY`, `SELL`, or `NONE` intent plus target value, trade value, cash shortfall, and whether the action is allowed under protected-symbol and cash rules.
 
 ## Tests
 

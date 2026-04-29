@@ -144,6 +144,21 @@ The system should maintain a recommendation table similar in spirit to a curated
 
 If the table contains a high-conviction opportunity but active-sleeve cash is insufficient, the system may create a capital-needed alert. Brevo can later deliver that alert by email, but the alert should remain informational and should never automatically request deposits, sell protected holdings, or bypass sizing/risk rules.
 
+Action planning should stay separate from execution:
+- read portfolio state from a snapshot
+- compute active vs protected holdings
+- convert CGH decisions into proposed BUY, SELL, or NONE intent
+- block protected-symbol actions
+- detect cash shortfalls before buy/add
+- emit dry-run JSON that can be audited before any future broker path exists
+- never place an order from this layer
+
+Thesis monitoring should track:
+- whether a position is due for review
+- how many days have passed since the last review
+- whether supplied evidence matches invalidation conditions
+- whether the thesis appears healthy or broken
+
 ### 6. Account Strategy Modes
 
 Support account-aware behavior when it changes the right action:
@@ -221,6 +236,7 @@ Cash should also be an available defensive state for the active sleeve:
 - connect to safe broker / paper path
 - add portfolio and sizing rules
 - add basic backtest or replay path for long-horizon decisions
+- keep dry-run action planning separate from broker execution until explicitly enabled
 
 ### Phase 4
 - widen research depth
