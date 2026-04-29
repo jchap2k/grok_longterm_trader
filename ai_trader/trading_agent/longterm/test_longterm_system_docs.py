@@ -1,5 +1,6 @@
 import json
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -27,3 +28,13 @@ def test_system_safety_doc_states_no_live_trading_and_protected_symbol():
     assert "not live-trading enabled" in safety_doc
     assert "FXAIX" in safety_doc
     assert "dry-run JSON" in safety_doc
+
+
+def test_active_rules_are_xml_structured_and_include_quality_durability():
+    rules_path = REPO_ROOT / "ai_trader" / "rules" / "active_rules.txt"
+    root = ET.fromstring(rules_path.read_text(encoding="utf-8"))
+
+    assert root.tag == "trading_rules"
+    assert root.findtext("metadata/paradigm") == "Long-term quality-growth active sleeve"
+    assert root.find("quality_durability_rules") is not None
+    assert "pricing power" in rules_path.read_text(encoding="utf-8")
