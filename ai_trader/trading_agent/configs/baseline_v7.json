@@ -1,0 +1,65 @@
+{
+  "_description": "v7 baseline: H1 + H4 + H5 permanently integrated. H1 = deployment floor (floor_n: 2). H4 = momentum reweight (proximity 0.45 / momentum 0.55). H5 = shorter PEAD hold (pead_max_hold_days: 10). Copy and modify for hypothesis testing.",
+  "_baseline": "v6 had H1+H4. v7 adds H5: pead_max_hold_days 15->10.",
+  "_h1_integrated": "H1 passed Tier 1. Deployment floor prevents over-deployment in bad regimes.",
+  "_h4_integrated": "H4 passed Tier 2. Jan-Mar +31.9% / Jul-Sep +6.9%. Momentum reweight 0.45/0.55 selects stronger drift candidates, improves bad-regime WR +3.2pp.",
+  "_h5_integrated": "H5 passed Tier 2. Jan-Mar +43.7% (+$21,838, WR 60.0%, R:R 2.37) / Jul-Sep +15.9% (+$9,029, WR 47.8%, R:R 2.71). Shorter hold cuts losers before extension, winners complete PEAD drift within 10d. Biggest single improvement of testing cycle.",
+  "_usage": "python run_backtest.py --config configs/baseline_v7.json [--run.run_id name --run.start_date 2024-01-02 --run.end_date 2024-03-31]",
+
+  "run": {
+    "run_id": "v7_baseline",
+    "start_date": "2024-01-02",
+    "end_date": "2024-12-31",
+    "initial_equity": 50000,
+    "max_api_calls": 2000,
+    "api_call_delay_s": 0.0,
+    "fork": "swing",
+    "dry_run": false,
+    "hypothesis_id": null,
+    "hypothesis_text": null
+  },
+
+  "universe": {
+    "min_price": 12.0,
+    "max_price": 500.0,
+    "min_volume": 500000,
+    "min_market_cap": 500000000,
+    "min_proximity_to_high": 0.85,
+    "min_momentum_3m": 0.0,
+    "top_n": 30,
+    "score_weight_proximity": 0.45,
+    "score_weight_momentum": 0.55
+  },
+
+  "entry": {
+    "max_open_positions": 0,
+    "max_fills_per_symbol": 0,
+    "deployment_floor_n": 2
+  },
+
+  "exit": {
+    "stop_pct": 0.04,
+    "max_hold_days": 7,
+    "pead_max_hold_days": 10
+  },
+
+  "regime": {
+    "vix_cash_threshold": 25.0,
+    "vix_defensive_threshold": 20.0,
+    "vix_standard_threshold": 15.0,
+    "regime_full_score": 4,
+    "regime_reduced_score": 2
+  },
+
+  "checkpoint": {
+    "load_from": null,
+    "load_date": null
+  },
+
+  "notes": [
+    "v7 changes from v6: exit.pead_max_hold_days 15->10 (H5).",
+    "v6 changes from v5: universe.score_weight_proximity 0.60->0.45, score_weight_momentum 0.40->0.55 (H4).",
+    "v5 changes from v4: entry.deployment_floor_n 0->2 (H1).",
+    "All other parameters unchanged from v4 baseline_default.json."
+  ]
+}

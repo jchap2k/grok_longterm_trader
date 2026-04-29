@@ -1,0 +1,68 @@
+{
+  "_description": "2025 Q2-Q4 continuation from Q1 end state (Mar 31). Picks up exactly where Q1 left off. Covers April tariff crash, May recovery, Jul-Oct bull run. Do not run until Q1 is complete.",
+  "_usage": "python run_backtest.py --config configs/2025_q2_q4_continuation.json",
+  "_note": "Requires 2025_q1_continuation_v7 to be finished. load_from points to Q1 final state.",
+
+  "run": {
+    "run_id": "2025_q2_q4_continuation_v7",
+    "start_date": "2025-04-01",
+    "end_date": "2025-12-31",
+    "initial_equity": 50000,
+    "max_api_calls": 5000,
+    "api_call_delay_s": 0.0,
+    "fork": "swing",
+    "dry_run": false,
+    "hypothesis_id": null,
+    "hypothesis_text": null
+  },
+
+  "universe": {
+    "min_price": 12.0,
+    "max_price": 500.0,
+    "min_volume": 500000,
+    "min_market_cap": 500000000,
+    "min_proximity_to_high": 0.85,
+    "min_momentum_3m": 0.0,
+    "top_n": 30,
+    "score_weight_proximity": 0.45,
+    "score_weight_momentum": 0.55
+  },
+
+  "entry": {
+    "max_open_positions": 0,
+    "max_fills_per_symbol": 0,
+    "deployment_floor_n": 2
+  },
+
+  "exit": {
+    "stop_pct": 0.04,
+    "max_hold_days": 7,
+    "pead_max_hold_days": 10
+  },
+
+  "regime": {
+    "vix_cash_threshold": 25.0,
+    "vix_defensive_threshold": 20.0,
+    "vix_standard_threshold": 15.0,
+    "regime_full_score": 4,
+    "regime_reduced_score": 2
+  },
+
+  "checkpoint": {
+    "load_from": "backtest_logs/2025_q1_continuation_v7/state_2025-03-31.json",
+    "load_date": "2025-03-31"
+  },
+
+  "notes": [
+    "Loads Q1 end state - equity, open positions, regime all carried over from Mar 31.",
+    "initial_equity ignored when checkpoint is loaded.",
+    "Key events covered:",
+    "  Apr 2-9: Tariff announcement, near-bear market (-19% SPY peak-to-trough)",
+    "  Apr 9: 90-day tariff pause, V-recovery begins",
+    "  May-Jun: Recovery rally, reclaimed pre-tariff highs",
+    "  Jul-Oct: New ATHs weekly, NVDA $4T->$5T, strong momentum regime",
+    "Key H5 test: Does 10d PEAD cap cut losses faster in April tariff crash?",
+    "Key H1 test: Does deployment floor over-deploy into April deterioration?",
+    "Key H4 test: Does momentum weighting capture Jul-Oct NVDA/AI bull run?"
+  ]
+}

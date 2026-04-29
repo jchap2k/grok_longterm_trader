@@ -1,0 +1,22 @@
+{
+  "description": "Tier 3: H6a (proximity 0.88) and H6b (momentum floor 0.15) on baseline_v5. Generated from Grok hypothesis analysis of H1-H3 results.",
+  "cwd": "s:/LLM_files/grok_swing_trader/ai_trader/trading_agent",
+  "runs": [
+    {
+      "name": "h6a_prox_jan_mar",
+      "command": "python run_backtest.py --config configs/h6a_proximity_88.json --run.run_id h6a_prox_jan_mar --run.start_date 2024-01-02 --run.end_date 2024-03-31 --run.max_parallel 2"
+    },
+    {
+      "name": "h6a_prox_jul_sep",
+      "command": "python run_backtest.py --config configs/h6a_proximity_88.json --run.run_id h6a_prox_jul_sep --run.start_date 2024-07-01 --run.end_date 2024-09-30 --checkpoint.load_from backtest_logs/v4_ckpts/state_2024-06-28.json --run.max_parallel 2"
+    },
+    {
+      "name": "h6b_mom_jan_mar",
+      "command": "python run_backtest.py --config configs/h6b_momentum_floor_15.json --run.run_id h6b_mom_jan_mar --run.start_date 2024-01-02 --run.end_date 2024-03-31 --run.max_parallel 2"
+    },
+    {
+      "name": "h6b_mom_jul_sep",
+      "command": "python run_backtest.py --config configs/h6b_momentum_floor_15.json --run.run_id h6b_mom_jul_sep --run.start_date 2024-07-01 --run.end_date 2024-09-30 --checkpoint.load_from backtest_logs/v4_ckpts/state_2024-06-28.json --run.max_parallel 2"
+    }
+  ]
+}

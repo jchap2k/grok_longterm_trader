@@ -1,0 +1,57 @@
+{
+  "_description": "H4: Momentum reweight - shift scoring from proximity 0.60 + momentum 0.40 to proximity 0.45 + momentum 0.55. Tests whether favoring momentum over proximity in candidate ranking improves trade quality. Built on baseline_v5 (H1 integrated).",
+  "_hypothesis": "H4 from 16-agent analysis: strong gains came from high-momentum names (NVDA, SMCI, VRT, APP) but win rate was only 45.9%. Proximity dominates current scoring but momentum may be under-weighted. Shifting to 0.45/0.55 should surface higher-momentum candidates first.",
+  "_baseline": "Compare to h1_floor_jan_mar and h1_floor_jul_sep. Delta = H4 momentum reweight effect only.",
+  "_code_change": "Requires score_weight_proximity + score_weight_momentum params added to WeeklyStockRotator (wired in run_backtest.py). Defaults preserved at 0.60/0.40 so existing runs unaffected.",
+  "_usage": "python run_backtest.py --config configs/h4_momentum_reweight.json [--run.run_id h4_momentum_jan_mar --run.start_date 2024-01-02 --run.end_date 2024-03-31]",
+
+  "run": {
+    "run_id": "h4_momentum_full_2024",
+    "start_date": "2024-01-02",
+    "end_date": "2024-12-31",
+    "initial_equity": 50000,
+    "max_api_calls": 2000,
+    "api_call_delay_s": 0.0,
+    "fork": "swing",
+    "dry_run": false,
+    "hypothesis_id": "H4",
+    "hypothesis_text": "Momentum reweight: scoring proximity 0.60+momentum 0.40 -> proximity 0.45+momentum 0.55"
+  },
+
+  "universe": {
+    "min_price": 12.0,
+    "max_price": 500.0,
+    "min_volume": 500000,
+    "min_market_cap": 500000000,
+    "min_proximity_to_high": 0.85,
+    "min_momentum_3m": 0.0,
+    "top_n": 30,
+    "score_weight_proximity": 0.45,
+    "score_weight_momentum": 0.55
+  },
+
+  "entry": {
+    "max_open_positions": 0,
+    "max_fills_per_symbol": 0,
+    "deployment_floor_n": 2
+  },
+
+  "exit": {
+    "stop_pct": 0.04,
+    "max_hold_days": 7,
+    "pead_max_hold_days": 15
+  },
+
+  "regime": {
+    "vix_cash_threshold": 25.0,
+    "vix_defensive_threshold": 20.0,
+    "vix_standard_threshold": 15.0,
+    "regime_full_score": 4,
+    "regime_reduced_score": 2
+  },
+
+  "checkpoint": {
+    "load_from": null,
+    "load_date": null
+  }
+}

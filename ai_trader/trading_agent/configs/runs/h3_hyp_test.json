@@ -1,0 +1,54 @@
+{
+  "description": "H3 hypothesis test runs - H1/H2/H3/H4 x Jul/Oct/Dec 2025 (12 runs, max_parallel=3)",
+  "cwd": "s:/LLM_files/grok_swing_trader/ai_trader/trading_agent",
+  "runs": [
+    {
+      "name": "h3_h1_prox092_jul25",
+      "command": "python run_backtest.py --config configs/2025_jul_hyp_test.json --run.run_id h3_h1_prox092_jul25 --universe.min_proximity_to_high 0.92 --run.max_parallel 3"
+    },
+    {
+      "name": "h3_h1_prox092_oct25",
+      "command": "python run_backtest.py --config configs/2025_oct_hyp_test.json --run.run_id h3_h1_prox092_oct25 --universe.min_proximity_to_high 0.92 --run.max_parallel 3"
+    },
+    {
+      "name": "h3_h1_prox092_dec25",
+      "command": "python run_backtest.py --config configs/2025_dec_hyp_test.json --run.run_id h3_h1_prox092_dec25 --universe.min_proximity_to_high 0.92 --run.max_parallel 3"
+    },
+    {
+      "name": "h3_h2_score5_jul25",
+      "command": "python run_backtest.py --config configs/2025_jul_hyp_test.json --run.run_id h3_h2_score5_jul25 --regime.regime_full_score 5 --run.max_parallel 3"
+    },
+    {
+      "name": "h3_h2_score5_oct25",
+      "command": "python run_backtest.py --config configs/2025_oct_hyp_test.json --run.run_id h3_h2_score5_oct25 --regime.regime_full_score 5 --run.max_parallel 3"
+    },
+    {
+      "name": "h3_h2_score5_dec25",
+      "command": "python run_backtest.py --config configs/2025_dec_hyp_test.json --run.run_id h3_h2_score5_dec25 --regime.regime_full_score 5 --run.max_parallel 3"
+    },
+    {
+      "name": "h3_h3_vixdef21_jul25",
+      "command": "python run_backtest.py --config configs/2025_jul_hyp_test.json --run.run_id h3_h3_vixdef21_jul25 --regime.vix_defensive_threshold 21.0 --run.max_parallel 3"
+    },
+    {
+      "name": "h3_h3_vixdef21_oct25",
+      "command": "python run_backtest.py --config configs/2025_oct_hyp_test.json --run.run_id h3_h3_vixdef21_oct25 --regime.vix_defensive_threshold 21.0 --run.max_parallel 3"
+    },
+    {
+      "name": "h3_h3_vixdef21_dec25",
+      "command": "python run_backtest.py --config configs/2025_dec_hyp_test.json --run.run_id h3_h3_vixdef21_dec25 --regime.vix_defensive_threshold 21.0 --run.max_parallel 3"
+    },
+    {
+      "name": "h3_h4_stop055_jul25",
+      "command": "python run_backtest.py --config configs/2025_jul_hyp_test.json --run.run_id h3_h4_stop055_jul25 --exit.stop_pct 0.055 --run.max_parallel 3"
+    },
+    {
+      "name": "h3_h4_stop055_oct25",
+      "command": "python run_backtest.py --config configs/2025_oct_hyp_test.json --run.run_id h3_h4_stop055_oct25 --exit.stop_pct 0.055 --run.max_parallel 3"
+    },
+    {
+      "name": "h3_h4_stop055_dec25",
+      "command": "python run_backtest.py --config configs/2025_dec_hyp_test.json --run.run_id h3_h4_stop055_dec25 --exit.stop_pct 0.055 --run.max_parallel 3"
+    }
+  ]
+}

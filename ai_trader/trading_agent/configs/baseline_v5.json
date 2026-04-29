@@ -1,0 +1,60 @@
+{
+  "_description": "v5 baseline: H1 (deployment floor) permanently integrated. This is the new default for all Tier 2+ hypothesis testing. Copy and modify for hypothesis testing.",
+  "_baseline": "v4 was baseline_default.json (deployment_floor_n: 0). v5 adds H1: deployment_floor_n: 2.",
+  "_h1_integrated": "H1 passed Tier 1 testing. Jan-Mar: +26% vs v4 +10.5%. Jul-Sep: +2.3% vs v4 +4.3% with 9pp margin above break-even vs H2's 0.4pp. H1 wins on robustness.",
+  "_usage": "python run_backtest.py --config configs/baseline_v5.json [--run.run_id name --run.start_date 2024-01-02 --run.end_date 2024-03-31]",
+
+  "run": {
+    "run_id": "v5_baseline",
+    "start_date": "2024-01-02",
+    "end_date": "2024-12-31",
+    "initial_equity": 50000,
+    "max_api_calls": 2000,
+    "api_call_delay_s": 0.0,
+    "fork": "swing",
+    "dry_run": false,
+    "hypothesis_id": null,
+    "hypothesis_text": null
+  },
+
+  "universe": {
+    "min_price": 12.0,
+    "max_price": 500.0,
+    "min_volume": 500000,
+    "min_market_cap": 500000000,
+    "min_proximity_to_high": 0.85,
+    "min_momentum_3m": 0.0,
+    "top_n": 30
+  },
+
+  "entry": {
+    "max_open_positions": 0,
+    "max_fills_per_symbol": 0,
+    "deployment_floor_n": 2
+  },
+
+  "exit": {
+    "stop_pct": 0.04,
+    "max_hold_days": 7,
+    "pead_max_hold_days": 15
+  },
+
+  "regime": {
+    "vix_cash_threshold": 25.0,
+    "vix_defensive_threshold": 20.0,
+    "vix_standard_threshold": 15.0,
+    "regime_full_score": 4,
+    "regime_reduced_score": 2
+  },
+
+  "checkpoint": {
+    "load_from": null,
+    "load_date": null
+  },
+
+  "notes": [
+    "v5 change from v4: entry.deployment_floor_n raised from 0 to 2.",
+    "deployment_floor_n: 2 = force at least 2 buy-stops on FULL regime days when open_positions <= 2.",
+    "All other parameters unchanged from v4 baseline_default.json."
+  ]
+}

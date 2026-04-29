@@ -1,0 +1,64 @@
+# Sensitive data
+ai_trader_data/broker_config.json
+ai_trader/ai_trader_data/broker_config.json
+*.env
+.env
+
+# API keys and tokens
+**/api_keys.txt
+**/tokens.json
+**/*_secret*
+**/config/*_api_key.txt
+**/config/*_key.txt
+**/config/discord_webhook.txt
+**/config/discord_bot_token.txt
+**/config/discord_thread_id.txt
+**/config/discord_channel_id.txt
+**/config/broker_config.json
+**/config/schwab_login.txt
+**/config/schwab_login.enc
+**/config/schwab_login.key
+**/config/schwab_app_key.txt
+**/config/schwab_app_secret.txt
+**/config/schwab_refresh_token.txt
+**/config/schwab_playwright_initialized.flag
+
+# Logs and data
+ai_trader_data/logs/
+ai_trader_data/alerts/
+ai_trader_data/charts/
+ai_trader_data/portfolio_exports/
+ai_trader_data/agent_state.json
+*.log
+
+# Polygon/other API storage (sensitive keys)
+poly_api_storage/*.txt
+poly_api_storage/Requesty_API_key/
+
+# Backtest data cache (large binary files, regenerated on first run)
+ai_trader/trading_agent/backtest_data/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*~

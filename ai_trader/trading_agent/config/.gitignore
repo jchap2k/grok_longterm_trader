@@ -1,0 +1,7 @@
+# Protect API keys and credentials
+*_key.txt
+*_secret.txt
+*_token.txt
+broker_config.json
+!.gitignore
+!README.md

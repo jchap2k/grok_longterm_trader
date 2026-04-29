@@ -1,0 +1,70 @@
+{
+  "_description": "2025 full-year continuation from v7 Dec 31 state. Most realistic simulation of continuous operation across the 2024->2025 boundary. Covers full 2025 regime cycle.",
+  "_usage": "python run_backtest.py --config configs/2025_full_year_continuation.json",
+  "_note": "Requires v7 to be finished. Run 2025_q1_continuation first to sanity check.",
+
+  "run": {
+    "run_id": "2025_full_year_continuation_v7",
+    "start_date": "2025-01-02",
+    "end_date": "2025-12-31",
+    "initial_equity": 50000,
+    "max_api_calls": 5000,
+    "api_call_delay_s": 0.0,
+    "fork": "swing",
+    "dry_run": false,
+    "hypothesis_id": null,
+    "hypothesis_text": null
+  },
+
+  "universe": {
+    "min_price": 12.0,
+    "max_price": 500.0,
+    "min_volume": 500000,
+    "min_market_cap": 500000000,
+    "min_proximity_to_high": 0.85,
+    "min_momentum_3m": 0.0,
+    "top_n": 30,
+    "score_weight_proximity": 0.45,
+    "score_weight_momentum": 0.55
+  },
+
+  "entry": {
+    "max_open_positions": 0,
+    "max_fills_per_symbol": 0,
+    "deployment_floor_n": 2
+  },
+
+  "exit": {
+    "stop_pct": 0.04,
+    "max_hold_days": 7,
+    "pead_max_hold_days": 10
+  },
+
+  "regime": {
+    "vix_cash_threshold": 25.0,
+    "vix_defensive_threshold": 20.0,
+    "vix_standard_threshold": 15.0,
+    "regime_full_score": 4,
+    "regime_reduced_score": 2
+  },
+
+  "checkpoint": {
+    "load_from": "backtest_logs/baseline_full_2024_v7/state_2024-12-31.json",
+    "load_date": "2024-12-31"
+  },
+
+  "notes": [
+    "CONTINUATION run - loads Dec 31 2024 portfolio state from v7.",
+    "initial_equity ignored - actual starting equity comes from v7 end state (~$80k+).",
+    "2025 regime calendar:",
+    "  Jan 27: DeepSeek shock",
+    "  Apr 2-9: Tariff near-bear market (-19% peak-to-trough)",
+    "  Apr 9: 90-day tariff pause, V-recovery",
+    "  May-Jun: Recovery rally, reclaimed highs",
+    "  Jul-Oct: New ATHs weekly, NVDA $4T->$5T",
+    "Key H1 test: Does deployment floor over-deploy into April deterioration?",
+    "Key H5 test: Does 10d PEAD cap cut losses faster in April crash?",
+    "Key H4 test: Does momentum weighting capture Jul-Oct NVDA/AI bull run?",
+    "Run after 2025_q1_continuation confirms clean Jan-Mar behavior."
+  ]
+}

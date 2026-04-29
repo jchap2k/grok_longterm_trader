@@ -1,0 +1,6 @@
+{
+  "allow_new_lessons": false,
+  "note": "LIVE SYSTEM: EOD lesson generation disabled. All new lessons come through hypothesis-driven testing pipeline (Friday generation + Sunday pruning). This prevents lesson bloat and ensures high-quality, tested lessons only.",
+  "live_system_pipeline": "Monday-Friday: Trade -> EOD: Collect data to weekly_summary.json -> Friday: Hypothesis generator -> Sunday: Pruning tests hypotheses -> Winners become lessons",
+  "why_disabled": "Single-pipeline (hypothesis-testing only) provides: (1) Higher statistical confidence (week of data), (2) Quality gate via pruning, (3) Semantic dedup prevents re-testing same idea, (4) Tracked failures prevent wasting cycles."
+}

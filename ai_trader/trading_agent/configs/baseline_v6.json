@@ -1,0 +1,63 @@
+{
+  "_description": "v6 baseline: H1 + H4 permanently integrated. H1 = deployment floor (floor_n: 2). H4 = momentum reweight (proximity 0.45 / momentum 0.55). Copy and modify for hypothesis testing.",
+  "_baseline": "v5 had H1 only (deployment_floor_n: 2). v6 adds H4: score_weight_proximity 0.60->0.45, score_weight_momentum 0.40->0.55.",
+  "_h1_integrated": "H1 passed Tier 1. Jan-Mar +26% / Jul-Sep +2.3%, margin +5.6pp bad regime.",
+  "_h4_integrated": "H4 passed Tier 2. Jan-Mar +31.9% (+$15,960) / Jul-Sep +6.9% (+$3,901). Jul-Sep WR 42.1% vs H1 38.9%, margin +9.2pp vs H1 +5.6pp. Momentum reweight selects stronger drift candidates.",
+  "_usage": "python run_backtest.py --config configs/baseline_v6.json [--run.run_id name --run.start_date 2024-01-02 --run.end_date 2024-03-31]",
+
+  "run": {
+    "run_id": "v6_baseline",
+    "start_date": "2024-01-02",
+    "end_date": "2024-12-31",
+    "initial_equity": 50000,
+    "max_api_calls": 2000,
+    "api_call_delay_s": 0.0,
+    "fork": "swing",
+    "dry_run": false,
+    "hypothesis_id": null,
+    "hypothesis_text": null
+  },
+
+  "universe": {
+    "min_price": 12.0,
+    "max_price": 500.0,
+    "min_volume": 500000,
+    "min_market_cap": 500000000,
+    "min_proximity_to_high": 0.85,
+    "min_momentum_3m": 0.0,
+    "top_n": 30,
+    "score_weight_proximity": 0.45,
+    "score_weight_momentum": 0.55
+  },
+
+  "entry": {
+    "max_open_positions": 0,
+    "max_fills_per_symbol": 0,
+    "deployment_floor_n": 2
+  },
+
+  "exit": {
+    "stop_pct": 0.04,
+    "max_hold_days": 7,
+    "pead_max_hold_days": 15
+  },
+
+  "regime": {
+    "vix_cash_threshold": 25.0,
+    "vix_defensive_threshold": 20.0,
+    "vix_standard_threshold": 15.0,
+    "regime_full_score": 4,
+    "regime_reduced_score": 2
+  },
+
+  "checkpoint": {
+    "load_from": null,
+    "load_date": null
+  },
+
+  "notes": [
+    "v6 changes from v5: universe.score_weight_proximity 0.60->0.45, universe.score_weight_momentum 0.40->0.55.",
+    "H4 effect: selects stocks with stronger 3M momentum, improving WR in bad regimes (+3.2pp Jul-Sep) and avg win size (+4.16% vs +3.49%).",
+    "All other parameters unchanged from v5."
+  ]
+}

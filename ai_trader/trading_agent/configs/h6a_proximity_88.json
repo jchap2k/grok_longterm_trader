@@ -1,0 +1,55 @@
+{
+  "_description": "H6a: Tighten proximity filter from 0.85 to 0.88. Tests whether requiring stocks to be within 12% of 52W high (vs 15%) improves WR in bad regimes by admitting only stronger momentum setups. Built on baseline_v5 (H1 integrated).",
+  "_hypothesis": "H3 showed loosening proximity (0.85->0.80) hurt bad-regime WR. H6a tests the inverse: tightening to 0.88 should admit only the highest-momentum setups and improve WR, at the cost of fewer trades.",
+  "_baseline": "Compare to h1_floor_jan_mar and h1_floor_jul_sep. H1 baseline: Jan-Mar +26.0% (WR 57.4%, R:R 2.04, margin +24.5pp) / Jul-Sep +2.3% (WR 38.9%, R:R 2.01, margin +5.6pp).",
+  "_usage": "python run_backtest.py --config configs/h6a_proximity_88.json [--run.run_id h6a_prox_jan_mar --run.start_date 2024-01-02 --run.end_date 2024-03-31]",
+  "_checkpoint_july": "Add: --run.run_id h6a_prox_jul_sep --run.start_date 2024-07-01 --run.end_date 2024-09-30 --checkpoint.load_from backtest_logs/v4_ckpts/state_2024-06-28.json",
+
+  "run": {
+    "run_id": "h6a_prox_full_2024",
+    "start_date": "2024-01-02",
+    "end_date": "2024-12-31",
+    "initial_equity": 50000,
+    "max_api_calls": 2000,
+    "api_call_delay_s": 0.0,
+    "fork": "swing",
+    "dry_run": false,
+    "hypothesis_id": "H6a",
+    "hypothesis_text": "Proximity filter tightened: min_proximity_to_high 0.85 -> 0.88"
+  },
+
+  "universe": {
+    "min_price": 12.0,
+    "max_price": 500.0,
+    "min_volume": 500000,
+    "min_market_cap": 500000000,
+    "min_proximity_to_high": 0.88,
+    "min_momentum_3m": 0.0,
+    "top_n": 30
+  },
+
+  "entry": {
+    "max_open_positions": 0,
+    "max_fills_per_symbol": 0,
+    "deployment_floor_n": 2
+  },
+
+  "exit": {
+    "stop_pct": 0.04,
+    "max_hold_days": 7,
+    "pead_max_hold_days": 15
+  },
+
+  "regime": {
+    "vix_cash_threshold": 25.0,
+    "vix_defensive_threshold": 20.0,
+    "vix_standard_threshold": 15.0,
+    "regime_full_score": 4,
+    "regime_reduced_score": 2
+  },
+
+  "checkpoint": {
+    "load_from": null,
+    "load_date": null
+  }
+}

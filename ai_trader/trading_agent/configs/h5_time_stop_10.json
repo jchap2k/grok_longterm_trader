@@ -1,0 +1,54 @@
+{
+  "_description": "H5: Shorten time stop from 15 to 10 trading days. Tests whether faster capital recycling improves returns by freeing position slots earlier. Built on baseline_v5 (H1 integrated).",
+  "_hypothesis": "H5 from 16-agent analysis: positions held to the 15-day time stop often saw capital tied up with lagging returns (Jan 24, Jun 21, Jul 8/11, Sep 30, Oct 14/22 examples). Reducing to 10 days recycles capital faster for new high-conviction setups.",
+  "_baseline": "Compare to h1_floor_jan_mar and h1_floor_jul_sep. Delta = H5 time stop effect only.",
+  "_usage": "python run_backtest.py --config configs/h5_time_stop_10.json [--run.run_id h5_timestop_jan_mar --run.start_date 2024-01-02 --run.end_date 2024-03-31]",
+
+  "run": {
+    "run_id": "h5_timestop_full_2024",
+    "start_date": "2024-01-02",
+    "end_date": "2024-12-31",
+    "initial_equity": 50000,
+    "max_api_calls": 2000,
+    "api_call_delay_s": 0.0,
+    "fork": "swing",
+    "dry_run": false,
+    "hypothesis_id": "H5",
+    "hypothesis_text": "Time stop shortened: pead_max_hold_days 15 -> 10 trading days"
+  },
+
+  "universe": {
+    "min_price": 12.0,
+    "max_price": 500.0,
+    "min_volume": 500000,
+    "min_market_cap": 500000000,
+    "min_proximity_to_high": 0.85,
+    "min_momentum_3m": 0.0,
+    "top_n": 30
+  },
+
+  "entry": {
+    "max_open_positions": 0,
+    "max_fills_per_symbol": 0,
+    "deployment_floor_n": 2
+  },
+
+  "exit": {
+    "stop_pct": 0.04,
+    "max_hold_days": 7,
+    "pead_max_hold_days": 10
+  },
+
+  "regime": {
+    "vix_cash_threshold": 25.0,
+    "vix_defensive_threshold": 20.0,
+    "vix_standard_threshold": 15.0,
+    "regime_full_score": 4,
+    "regime_reduced_score": 2
+  },
+
+  "checkpoint": {
+    "load_from": null,
+    "load_date": null
+  }
+}

@@ -1,0 +1,116 @@
+{
+  "agent_specs": [
+    {
+      "name": "CorrectnessReviewer",
+      "temperature": 0.1,
+      "system_prompt": "You review embedded code for correctness bugs, edge cases, bad assumptions, broken control flow, and behavior that does not match the stated intent.",
+      "input_sections": [],
+      "output_schema": {
+        "findings": [
+          "string"
+        ],
+        "blocking_bugs": [
+          "string"
+        ],
+        "confidence": "integer 0-100"
+      },
+      "weight": 1.25
+    },
+    {
+      "name": "SecurityReviewer",
+      "temperature": 0.15,
+      "system_prompt": "You review embedded code for security issues, unsafe inputs, secrets handling, injection risk, auth mistakes, filesystem risk, and unsafe network behavior.",
+      "input_sections": [],
+      "output_schema": {
+        "security_findings": [
+          "string"
+        ],
+        "severity": "High | Medium | Low | None",
+        "mitigations": [
+          "string"
+        ]
+      },
+      "weight": 1.1
+    },
+    {
+      "name": "PerformanceReviewer",
+      "temperature": 0.2,
+      "system_prompt": "You review embedded code for performance, scaling, memory usage, unnecessary work, concurrency risks, and avoidable latency.",
+      "input_sections": [],
+      "output_schema": {
+        "performance_risks": [
+          "string"
+        ],
+        "optimization_options": [
+          "string"
+        ]
+      },
+      "weight": 0.9
+    },
+    {
+      "name": "MaintainabilityReviewer",
+      "temperature": 0.25,
+      "system_prompt": "You review embedded code for readability, cohesion, naming, over-abstraction, hidden coupling, and fit with existing style.",
+      "input_sections": [],
+      "output_schema": {
+        "maintainability_findings": [
+          "string"
+        ],
+        "simplifications": [
+          "string"
+        ]
+      },
+      "weight": 1.0
+    },
+    {
+      "name": "TestCoverageReviewer",
+      "temperature": 0.15,
+      "system_prompt": "You review whether tests would catch the important behavior. Identify missing cases, bad mocks, weak assertions, and verification gaps.",
+      "input_sections": [],
+      "output_schema": {
+        "missing_tests": [
+          "string"
+        ],
+        "weak_assertions": [
+          "string"
+        ],
+        "recommended_checks": [
+          "string"
+        ]
+      },
+      "weight": 1.1
+    },
+    {
+      "name": "ReviewIntegrator",
+      "temperature": 0.05,
+      "system_prompt": "You integrate review findings into a concise code-review report. Prioritize real bugs and risks first. Do not pad with style nits.",
+      "input_sections": [],
+      "output_schema": {
+        "findings": [
+          "string"
+        ],
+        "open_questions": [
+          "string"
+        ],
+        "overall_risk": "High | Medium | Low"
+      },
+      "weight": 1.35
+    }
+  ],
+  "presets": {
+    "embedded_review_4": [
+      "CorrectnessReviewer",
+      "SecurityReviewer",
+      "TestCoverageReviewer",
+      "ReviewIntegrator"
+    ],
+    "embedded_review_6": [
+      "CorrectnessReviewer",
+      "SecurityReviewer",
+      "PerformanceReviewer",
+      "MaintainabilityReviewer",
+      "TestCoverageReviewer",
+      "ReviewIntegrator"
+    ]
+  }
+}

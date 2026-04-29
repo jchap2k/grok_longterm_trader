@@ -1,0 +1,28 @@
+{
+  "description": "Tier 2: H4 and H5 only (H3 already running separately). Jan-Mar and Jul-Sep on baseline_v5.",
+  "cwd": "s:/LLM_files/grok_swing_trader/ai_trader/trading_agent",
+  "runs": [
+    {
+      "name": "h4_momentum_jan_mar",
+      "command": "python run_backtest.py --config configs/h4_momentum_reweight.json --run.run_id h4_momentum_jan_mar --run.start_date 2024-01-02 --run.end_date 2024-03-31 --run.max_parallel 2"
+    },
+    {
+      "name": "h4_momentum_jul_sep",
+      "command": "python run_backtest.py --config configs/h4_momentum_reweight.json --run.run_id h4_momentum_jul_sep --run.start_date 2024-07-01 --run.end_date 2024-09-30 --checkpoint.load_from backtest_logs/v4_ckpts/state_2024-06-28.json --run.max_parallel 2"
+    },
+    {
+      "name": "h5_timestop_jan_mar",
+      "command": "python run_backtest.py --config configs/h5_time_stop_10.json --run.run_id h5_timestop_jan_mar --run.start_date 2024-01-02 --run.end_date 2024-03-31 --run.max_parallel 2"
+    },
+    {
+      "name": "h5_timestop_jul_sep",
+      "command": "python run_backtest.py --config configs/h5_time_stop_10.json --run.run_id h5_timestop_jul_sep --run.start_date 2024-07-01 --run.end_date 2024-09-30 --checkpoint.load_from backtest_logs/v4_ckpts/state_2024-06-28.json --run.max_parallel 2"
+    }
+  ],
+  "_notes": [
+    "H3 (h3_prox_jan_mar, h3_prox_jul_sep) excluded - already running in a separate terminal.",
+    "tier2.json has the full 6-run reference config.",
+    "Baseline for comparison: backtest_logs/h1_floor_jan_mar + backtest_logs/h1_floor_jul_sep",
+    "Launch: python launch_runs.py configs/runs/tier2_h4h5.json"
+  ]
+}

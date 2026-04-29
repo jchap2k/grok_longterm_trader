@@ -1,0 +1,63 @@
+{
+  "_description": "2025 Q1 out-of-sample spot check. Same v7 parameters (H1+H4+H5). Covers DeepSeek shock (Jan 27) and run-up to tariff shock (Apr 2). Fresh $50k start for clean comparison.",
+  "_usage": "python run_backtest.py --config configs/2025_q1_spot_check.json",
+
+  "run": {
+    "run_id": "2025_q1_v7",
+    "start_date": "2025-01-02",
+    "end_date": "2025-03-31",
+    "initial_equity": 50000,
+    "max_api_calls": 2000,
+    "api_call_delay_s": 0.0,
+    "fork": "swing",
+    "dry_run": false,
+    "hypothesis_id": null,
+    "hypothesis_text": null
+  },
+
+  "universe": {
+    "min_price": 12.0,
+    "max_price": 500.0,
+    "min_volume": 500000,
+    "min_market_cap": 500000000,
+    "min_proximity_to_high": 0.85,
+    "min_momentum_3m": 0.0,
+    "top_n": 30,
+    "score_weight_proximity": 0.45,
+    "score_weight_momentum": 0.55
+  },
+
+  "entry": {
+    "max_open_positions": 0,
+    "max_fills_per_symbol": 0,
+    "deployment_floor_n": 2
+  },
+
+  "exit": {
+    "stop_pct": 0.04,
+    "max_hold_days": 7,
+    "pead_max_hold_days": 10
+  },
+
+  "regime": {
+    "vix_cash_threshold": 25.0,
+    "vix_defensive_threshold": 20.0,
+    "vix_standard_threshold": 15.0,
+    "regime_full_score": 4,
+    "regime_reduced_score": 2
+  },
+
+  "checkpoint": {
+    "load_from": null,
+    "load_date": null
+  },
+
+  "notes": [
+    "OUT-OF-SAMPLE: All hypotheses developed on 2024 data. This is true validation.",
+    "Q1 2025 key events: DeepSeek shock Jan 27, tariff announcement Mar 4.",
+    "DeepSeek shock = sudden CASH/REDUCED day - tests regime filter responsiveness.",
+    "Tariff run-up = rising VIX into end of period - tests H5 hold reduction in stress.",
+    "Compare to 2024-q1 v7 performance (Jan-Mar 2024: +24.2% at day 58).",
+    "If Q1 clean, follow with 2025_full_year.json for full out-of-sample run."
+  ]
+}

@@ -1,0 +1,137 @@
+{
+  "version": "2.0",
+  "last_updated": "2026-03-11",
+  "description": "Tunable system parameters for swing trading system (2-7 day holds). Replaces intraday day-trading parameters.",
+  "parameters": {
+    "trading_mode": {
+      "description": "Active trading mode: swing or intraday",
+      "type": "string",
+      "source_file": "automated_scheduler.py",
+      "source_function": "main",
+      "values": {
+        "mode": {"current": "swing", "description": "Active trading mode"}
+      }
+    },
+    "hold_duration_days": {
+      "description": "Target hold period in trading days",
+      "type": "int_map",
+      "source_file": "automated_scheduler.py",
+      "source_function": "swing_exit_check",
+      "values": {
+        "min": {"current": 2, "description": "Minimum hold days before exit signals considered"},
+        "max": {"current": 7, "description": "Standard maximum hold days"},
+        "pead_max": {"current": 10, "description": "Extended max hold days for PEAD positions"}
+      }
+    },
+    "position_sizing": {
+      "description": "Per-position allocation. Base = equity / 15 (6.66%). ADV ceiling caps at 0.5% of avg daily dollar volume.",
+      "type": "float_map",
+      "source_file": "capital_manager.py",
+      "source_function": "calculate_swing_position_size",
+      "values": {
+        "base_pct": {"current": 6.66, "description": "equity / 15"},
+        "max_positions": {"current": 15, "description": "max concurrent swings"},
+        "max_per_sector": {"current": 3, "description": "concentration limit"},
+        "adv_ceiling_pct": {"current": 0.5, "description": "% of avg daily dollar volume ceiling"}
+      }
+    },
+    "stop_loss": {
+      "description": "Swing stop loss rules. Initial -4% hard stop. Trailing uses ATR x regime multiplier. Never moves down.",
+      "type": "mixed",
+      "source_file": "scheduler/swing_exit_engine.py",
+      "source_function": "update_trailing_stop",
+      "values": {
+        "initial_max_pct": {"current": 4.0, "description": "Max initial stop distance from entry"},
+        "trailing_method": {"current": "atr_regime_aware", "description": "Trailing method"},
+        "atr_multiplier_aggressive": {"current": 3.0, "description": "VIX < 15"},
+        "atr_multiplier_standard": {"current": 2.5, "description": "VIX 15-25, standard regime"},
+        "atr_multiplier_defensive": {"current": 1.5, "description": "VIX 25+, reduced mode"},
+        "atr_period": {"current": 14, "description": "ATR lookback period in days"},
+        "fixed_buffer_cents": {"current": 0.06, "description": "Cents below prev_low for mechanical stop"}
+      }
+    },
+    "profit_target": {
+      "description": "FORCESWING split-exit: sell 50% of shares at +7%, hold remainder with trailing stop.",
+      "type": "float_map",
+      "source_file": "scheduler/swing_exit_engine.py",
+      "source_function": "check_profit_target",
+      "values": {
+        "partial_exit_pct": {"current": 7.0, "description": "+7% triggers limit sell on 50% of shares"},
+        "partial_exit_shares_pct": {"current": 50, "description": "% of position to exit at profit target"}
+      }
+    },
+    "entry": {
+      "description": "Swing entry mechanics. Buy stop = prior high + buffer. Gap handling delays per FORCESWING rules.",
+      "type": "mixed",
+      "source_file": "scheduler/candidate_scanner.py",
+      "source_function": "build_entry_orders",
+      "values": {
+        "buy_stop_buffer_cents": {"current": 0.06, "description": "Cents above prior day high for buy stop"},
+        "gap_up_wait_minutes": {"current": 30, "description": "Minutes to wait after gap-up before setting entry"},
+        "gap_down_wait_minutes": {"current": 5, "description": "Minutes to wait after gap-down before setting entry"}
+      }
+    },
+    "regime": {
+      "description": "Market regime gates controlling position sizing and activity. Swing score 5 = full mode, 2-4 = reduced 50%, 0-1 = cash.",
+      "type": "int_map",
+      "source_file": "market_regime_filter.py",
+      "source_function": "get_swing_regime",
+      "values": {
+        "vix_aggressive": {"current": 15, "description": "VIX below this = full size, 7-day holds"},
+        "vix_standard": {"current": 20, "description": "VIX below this = normal sizing, 3-5 day holds"},
+        "vix_defensive": {"current": 25, "description": "VIX below this = 50% size, 2-3 day holds"},
+        "vix_cash": {"current": 25, "description": "VIX at/above this = no new longs"},
+        "vix_spike_exit_threshold": {"current": 5, "description": "VIX daily change > this points = exit all swings"},
+        "swing_score_full": {"current": 5, "description": "Min swing score for full position mode"},
+        "swing_score_reduced": {"current": 2, "description": "Min swing score for reduced mode; below = cash"}
+      }
+    },
+    "exit_triggers": {
+      "description": "Daily exit condition thresholds checked by SwingExitEngine.",
+      "type": "int_map",
+      "source_file": "scheduler/swing_exit_engine.py",
+      "source_function": "check_exit_conditions",
+      "values": {
+        "earnings_proximity_days": {"current": 3, "description": "Exit non-PEAD positions within this many days of earnings"},
+        "rsi_overbought": {"current": 75, "description": "RSI 14 above this triggers overbought exit"},
+        "time_kill_switch_days": {"current": 4, "description": "Exit if no meaningful move after this many days"},
+        "ema_exit_period": {"current": 21, "description": "Close below this EMA period triggers exit"}
+      }
+    },
+    "scan": {
+      "description": "FORCESWING scanner hard filters and indicator thresholds.",
+      "type": "mixed",
+      "source_file": "scheduler/candidate_scanner.py",
+      "source_function": "run_forceswing_scan",
+      "values": {
+        "price_min": {"current": 12, "description": "Min price for FORCESWING; $7 for catalyst-only"},
+        "price_max": {"current": 500, "description": "Max price filter"},
+        "adv_min": {"current": 500000, "description": "20-day avg daily volume minimum"},
+        "adx_min": {"current": 30, "description": "ADX(20) minimum for confirmed trend"},
+        "force3_long_max": {"current": 0, "description": "FORCE3 <= 0 = short-term selling confirming pullback"},
+        "force13_long_min": {"current": 0, "description": "FORCE13 >= 0 = long-term buying still dominant"}
+      }
+    },
+    "overnight_gap_check": {
+      "description": "Pre-market check at 7:30 ET. If gap-down breaches adjusted stop, generate immediate exit signal.",
+      "type": "float_map",
+      "source_file": "automated_scheduler.py",
+      "source_function": "overnight_gap_check",
+      "values": {
+        "check_time_et": {"current": "07:30", "description": "Time (ET) to run pre-market gap check"},
+        "gap_breach_pct": {"current": 0.03, "description": "If premarket price < current_stop * (1 - this), signal immediate sell"},
+        "check_enabled": {"current": true, "description": "Toggle overnight gap check on/off"}
+      }
+    },
+    "portfolio_heat": {
+      "description": "Portfolio heat gate: total at-risk dollars across all open swings must not exceed heat_limit_pct of equity before new entry.",
+      "type": "float_map",
+      "source_file": "capital_manager.py",
+      "source_function": "check_portfolio_heat",
+      "values": {
+        "heat_limit_pct": {"current": 12.0, "description": "Max total heat as % of equity (sum of (entry-stop)*shares per position)"},
+        "max_heat_reduction_pct": {"current": 15.0, "description": "Hard ceiling; triggers partial position reduction"}
+      }
+    }
+  }
+}

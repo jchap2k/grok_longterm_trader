@@ -1,0 +1,30 @@
+{
+  "description": "Tier 1 hypothesis testing - H1 (floor) + H2 (pool50) - Jan-Mar and Jul-Sep windows",
+  "cwd": "s:/LLM_files/grok_swing_trader/ai_trader/trading_agent",
+  "runs": [
+    {
+      "name": "h1_floor_jan_mar",
+      "command": "python run_backtest.py --config configs/h1_deployment_floor.json --run.run_id h1_floor_jan_mar --run.start_date 2024-01-02 --run.end_date 2024-03-28 --run.max_parallel 2"
+    },
+    {
+      "name": "h2_pool50_jan_mar",
+      "command": "python run_backtest.py --config configs/h2_pool_50.json --run.run_id h2_pool50_jan_mar --run.start_date 2024-01-02 --run.end_date 2024-03-28 --run.max_parallel 2"
+    },
+    {
+      "name": "h1h2_jan_mar",
+      "command": "python run_backtest.py --config configs/h1_h2_combined.json --run.run_id h1h2_jan_mar --run.start_date 2024-01-02 --run.end_date 2024-03-28 --run.max_parallel 2"
+    },
+    {
+      "name": "h1_floor_jul_sep",
+      "command": "python run_backtest.py --config configs/h1_deployment_floor.json --run.run_id h1_floor_jul_sep --run.start_date 2024-07-01 --run.end_date 2024-09-30 --checkpoint.load_from backtest_logs/v4_ckpts/state_2024-06-28.json --run.max_parallel 2"
+    },
+    {
+      "name": "h2_pool50_jul_sep",
+      "command": "python run_backtest.py --config configs/h2_pool_50.json --run.run_id h2_pool50_jul_sep --run.start_date 2024-07-01 --run.end_date 2024-09-30 --checkpoint.load_from backtest_logs/v4_ckpts/state_2024-06-28.json --run.max_parallel 2"
+    },
+    {
+      "name": "h1h2_jul_sep",
+      "command": "python run_backtest.py --config configs/h1_h2_combined.json --run.run_id h1h2_jul_sep --run.start_date 2024-07-01 --run.end_date 2024-09-30 --checkpoint.load_from backtest_logs/v4_ckpts/state_2024-06-28.json --run.max_parallel 2"
+    }
+  ]
+}

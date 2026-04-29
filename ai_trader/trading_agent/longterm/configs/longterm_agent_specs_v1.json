@@ -1,0 +1,92 @@
+{
+  "agent_specs": [
+    {
+      "name": "FundamentalAnalyst",
+      "temperature": 0.15,
+      "system_prompt": "You are a veteran fundamental analyst focused on long-term investing. Focus on business quality, financial strength, management execution, competitive positioning, and multi-year thesis durability. Ignore short-term price noise.",
+      "input_sections": [
+        "company_research_packet",
+        "financial_metrics",
+        "business_summary",
+        "research_principles"
+      ],
+      "output_schema": {
+        "thesis_strength": "High | Medium | Low",
+        "quality_score": "integer 0-100",
+        "growth_durability": "string",
+        "key_risks": [
+          "string"
+        ],
+        "supporting_evidence": "string"
+      },
+      "weight": 1.0
+    },
+    {
+      "name": "MacroRiskAnalyst",
+      "temperature": 0.2,
+      "system_prompt": "You are a macro and risk analyst for a long-term trading process. Focus on rates, inflation, policy, market regime, drawdown risk, sector sensitivity, and whether the active sleeve should stay offensive, go defensive, or hold cash.",
+      "input_sections": [
+        "macro_regime",
+        "portfolio_context",
+        "market_risk_context"
+      ],
+      "output_schema": {
+        "macro_tailwinds": [
+          "string"
+        ],
+        "macro_headwinds": [
+          "string"
+        ],
+        "drawdown_risk": "string",
+        "defensive_posture": "stay_offensive | move_to_defensive_parking | move_to_cash | hold_defensive | redeploy"
+      },
+      "weight": 1.1
+    },
+    {
+      "name": "ThesisCritic",
+      "temperature": 0.3,
+      "system_prompt": "You are the thesis critic. Challenge the bull case, identify what could break, and surface contrarian evidence or weak assumptions. Focus on disconfirmation and kill criteria over persuasive writing.",
+      "input_sections": [
+        "bull_thesis",
+        "supporting_evidence",
+        "risk_flags",
+        "research_principles"
+      ],
+      "output_schema": {
+        "failure_modes": [
+          "string"
+        ],
+        "invalidation_triggers": [
+          "string"
+        ],
+        "kill_criteria": [
+          "string"
+        ],
+        "contrarian_evidence": "string"
+      },
+      "weight": 1.1
+    },
+    {
+      "name": "DecisionIntegrator",
+      "temperature": 0.1,
+      "system_prompt": "You are the final decision integrator for a long-term trading process. Combine the strongest evidence, weigh risk heavily when conviction is borderline, and produce a decisive recommendation with sizing and monitoring guidance.",
+      "input_sections": [
+        "portfolio_context",
+        "decision_constraints",
+        "benchmark_context",
+        "research_principles"
+      ],
+      "output_schema": {
+        "recommendation": "BUY | HOLD | PASS | REDUCE",
+        "suggested_size_pct": "number",
+        "confidence": "integer 0-100",
+        "key_thesis": "string",
+        "monitoring_triggers": [
+          "string"
+        ],
+        "rebalancing_notes": "string"
+      },
+      "weight": 1.2
+    }
+  ]
+}

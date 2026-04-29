@@ -1,0 +1,69 @@
+{
+  "_description": "2025 full-year out-of-sample validation. Same v7 parameters (H1+H4+H5). Covers full regime cycle: DeepSeek shock (Jan), tariff near-bear (Apr), recovery rally (May-Jun), NVDA $5T bull (Jul-Oct). Fresh $50k start.",
+  "_usage": "python run_backtest.py --config configs/2025_full_year.json",
+
+  "run": {
+    "run_id": "2025_full_year_v7",
+    "start_date": "2025-01-02",
+    "end_date": "2025-12-31",
+    "initial_equity": 50000,
+    "max_api_calls": 5000,
+    "api_call_delay_s": 0.0,
+    "fork": "swing",
+    "dry_run": false,
+    "hypothesis_id": null,
+    "hypothesis_text": null
+  },
+
+  "universe": {
+    "min_price": 12.0,
+    "max_price": 500.0,
+    "min_volume": 500000,
+    "min_market_cap": 500000000,
+    "min_proximity_to_high": 0.85,
+    "min_momentum_3m": 0.0,
+    "top_n": 30,
+    "score_weight_proximity": 0.45,
+    "score_weight_momentum": 0.55
+  },
+
+  "entry": {
+    "max_open_positions": 0,
+    "max_fills_per_symbol": 0,
+    "deployment_floor_n": 2
+  },
+
+  "exit": {
+    "stop_pct": 0.04,
+    "max_hold_days": 7,
+    "pead_max_hold_days": 10
+  },
+
+  "regime": {
+    "vix_cash_threshold": 25.0,
+    "vix_defensive_threshold": 20.0,
+    "vix_standard_threshold": 15.0,
+    "regime_full_score": 4,
+    "regime_reduced_score": 2
+  },
+
+  "checkpoint": {
+    "load_from": null,
+    "load_date": null
+  },
+
+  "notes": [
+    "OUT-OF-SAMPLE: All hypotheses (H1/H4/H5) developed on 2024 data. True forward validation.",
+    "2025 regime calendar:",
+    "  Jan 27: DeepSeek shock - AI confidence hit, CASH/REDUCED day expected",
+    "  Apr 2-9: Tariff announcement, near-bear market (-19% peak-to-trough)",
+    "  Apr 9: 90-day tariff pause - V-recovery begins",
+    "  May-Jun: Recovery rally back to pre-tariff levels",
+    "  Jul-Oct: New all-time highs weekly, NVDA $4T->$5T, strong momentum regime",
+    "Key H5 test: Does 10d cap cut losses faster during April tariff shock?",
+    "Key H1 test: Does deployment floor over-deploy into deteriorating regime?",
+    "Key H4 test: Does momentum weighting capture NVDA/AI bull run in H2?",
+    "Compare final return to: 2024 v7 full year (run baseline_full_2024_v7).",
+    "max_api_calls raised to 5000 for full year (252 days x ~4 calls avg = ~1000 actual)."
+  ]
+}

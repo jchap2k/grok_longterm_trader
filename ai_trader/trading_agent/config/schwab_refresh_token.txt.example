@@ -1,0 +1,3 @@
+# Paste your Schwab Refresh Token here
+# Get it by running: python brokers/schwab_broker.py setup
+# Then rename this file to: schwab_refresh_token.txt

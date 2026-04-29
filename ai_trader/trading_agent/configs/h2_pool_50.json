@@ -1,0 +1,54 @@
+{
+  "_description": "H2: Expand weekly candidate pool from top 30 to top 50. Gives agent more high-quality options on low-deployment FULL days.",
+  "_hypothesis": "H2 from 16-agent analysis: fixed pool of 30 limited agent choices on 35+ FULL days where zero buy-stops were placed despite available candidates.",
+  "_usage": "python run_backtest.py --config configs/h2_pool_50.json [--run.run_id h2_jan_mar --run.start_date 2024-01-02 --run.end_date 2024-03-31]",
+  "_checkpoint_july": "Add: --run.run_id h2_jul_sep --run.start_date 2024-07-01 --run.end_date 2024-09-30 --checkpoint.load_from backtest_logs/v4_ckpts/state_2024-06-28.json",
+
+  "run": {
+    "run_id": "h2_pool50_full_2024",
+    "start_date": "2024-01-02",
+    "end_date": "2024-12-31",
+    "initial_equity": 50000,
+    "max_api_calls": 2000,
+    "api_call_delay_s": 0.0,
+    "fork": "swing",
+    "dry_run": false,
+    "hypothesis_id": "H2",
+    "hypothesis_text": "Expand weekly candidate pool from 30 to 50"
+  },
+
+  "universe": {
+    "min_price": 12.0,
+    "max_price": 500.0,
+    "min_volume": 500000,
+    "min_market_cap": 500000000,
+    "min_proximity_to_high": 0.85,
+    "min_momentum_3m": 0.0,
+    "top_n": 50
+  },
+
+  "entry": {
+    "max_open_positions": 0,
+    "max_fills_per_symbol": 0,
+    "deployment_floor_n": 0
+  },
+
+  "exit": {
+    "stop_pct": 0.04,
+    "max_hold_days": 7,
+    "pead_max_hold_days": 15
+  },
+
+  "regime": {
+    "vix_cash_threshold": 25.0,
+    "vix_defensive_threshold": 20.0,
+    "vix_standard_threshold": 15.0,
+    "regime_full_score": 4,
+    "regime_reduced_score": 2
+  },
+
+  "checkpoint": {
+    "load_from": null,
+    "load_date": null
+  }
+}

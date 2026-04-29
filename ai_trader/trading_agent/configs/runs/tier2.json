@@ -1,0 +1,39 @@
+{
+  "description": "Tier 2 hypothesis testing - H3/H4/H5 - Jan-Mar and Jul-Sep windows on baseline_v5 (H1 integrated). Compare results to h1_floor_jan_mar and h1_floor_jul_sep.",
+  "cwd": "s:/LLM_files/grok_swing_trader/ai_trader/trading_agent",
+  "runs": [
+    {
+      "name": "h3_prox_jan_mar",
+      "command": "python run_backtest.py --config configs/h3_proximity_80.json --run.run_id h3_prox_jan_mar --run.start_date 2024-01-02 --run.end_date 2024-03-31 --run.max_parallel 2"
+    },
+    {
+      "name": "h3_prox_jul_sep",
+      "command": "python run_backtest.py --config configs/h3_proximity_80.json --run.run_id h3_prox_jul_sep --run.start_date 2024-07-01 --run.end_date 2024-09-30 --checkpoint.load_from backtest_logs/v4_ckpts/state_2024-06-28.json --run.max_parallel 2"
+    },
+    {
+      "name": "h4_momentum_jan_mar",
+      "command": "python run_backtest.py --config configs/h4_momentum_reweight.json --run.run_id h4_momentum_jan_mar --run.start_date 2024-01-02 --run.end_date 2024-03-31 --run.max_parallel 2"
+    },
+    {
+      "name": "h4_momentum_jul_sep",
+      "command": "python run_backtest.py --config configs/h4_momentum_reweight.json --run.run_id h4_momentum_jul_sep --run.start_date 2024-07-01 --run.end_date 2024-09-30 --checkpoint.load_from backtest_logs/v4_ckpts/state_2024-06-28.json --run.max_parallel 2"
+    },
+    {
+      "name": "h5_timestop_jan_mar",
+      "command": "python run_backtest.py --config configs/h5_time_stop_10.json --run.run_id h5_timestop_jan_mar --run.start_date 2024-01-02 --run.end_date 2024-03-31 --run.max_parallel 2"
+    },
+    {
+      "name": "h5_timestop_jul_sep",
+      "command": "python run_backtest.py --config configs/h5_time_stop_10.json --run.run_id h5_timestop_jul_sep --run.start_date 2024-07-01 --run.end_date 2024-09-30 --checkpoint.load_from backtest_logs/v4_ckpts/state_2024-06-28.json --run.max_parallel 2"
+    }
+  ],
+  "_notes": [
+    "Baseline for comparison: backtest_logs/h1_floor_jan_mar/ and backtest_logs/h1_floor_jul_sep/",
+    "Jul-Sep runs use same v4 checkpoint as H1 Jul-Sep - keeps starting portfolio state identical for clean delta measurement.",
+    "H3: proximity filter relaxed 0.85 -> 0.80 (config only).",
+    "H4: scoring weights shifted proximity 0.60+momentum 0.40 -> proximity 0.45+momentum 0.55 (code change in weekly_stock_rotator.py wired through run_backtest.py).",
+    "H5: pead_max_hold_days shortened 15 -> 10 trading days (config only).",
+    "H3 may already be running in a separate terminal - tier2.json includes it for completeness.",
+    "Launch: python launch_runs.py configs/runs/tier2.json"
+  ]
+}

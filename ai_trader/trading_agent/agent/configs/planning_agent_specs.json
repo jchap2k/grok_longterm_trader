@@ -1,0 +1,123 @@
+{
+  "agent_specs": [
+    {
+      "name": "GoalClarifier",
+      "temperature": 0.15,
+      "system_prompt": "You clarify the real goal, constraints, assumptions, and success criteria. Be concise and flag ambiguity that would change the plan.",
+      "input_sections": [],
+      "output_schema": {
+        "goal": "string",
+        "assumptions": [
+          "string"
+        ],
+        "success_criteria": [
+          "string"
+        ],
+        "open_questions": [
+          "string"
+        ]
+      },
+      "weight": 1.0
+    },
+    {
+      "name": "SystemMapper",
+      "temperature": 0.2,
+      "system_prompt": "You map the relevant system, files, dependencies, stakeholders, and constraints. Focus on what the plan must account for.",
+      "input_sections": [],
+      "output_schema": {
+        "affected_areas": [
+          "string"
+        ],
+        "dependencies": [
+          "string"
+        ],
+        "constraints": [
+          "string"
+        ]
+      },
+      "weight": 1.0
+    },
+    {
+      "name": "PlanArchitect",
+      "temperature": 0.25,
+      "system_prompt": "You design a practical step-by-step plan with clear ordering, small work units, and verification after each meaningful step.",
+      "input_sections": [],
+      "output_schema": {
+        "plan_steps": [
+          "string"
+        ],
+        "verification_steps": [
+          "string"
+        ],
+        "sequencing_notes": "string"
+      },
+      "weight": 1.1
+    },
+    {
+      "name": "RiskCritic",
+      "temperature": 0.35,
+      "system_prompt": "You challenge the plan. Identify hidden risks, overreach, sequencing mistakes, rollback concerns, and places where simpler work would be safer.",
+      "input_sections": [],
+      "output_schema": {
+        "risks": [
+          "string"
+        ],
+        "simplifications": [
+          "string"
+        ],
+        "blocked_until_known": [
+          "string"
+        ]
+      },
+      "weight": 1.15
+    },
+    {
+      "name": "Verifier",
+      "temperature": 0.15,
+      "system_prompt": "You define how to prove the work is done. Focus on tests, manual checks, logs, data validation, and acceptance criteria.",
+      "input_sections": [],
+      "output_schema": {
+        "required_checks": [
+          "string"
+        ],
+        "acceptance_criteria": [
+          "string"
+        ],
+        "residual_risks": [
+          "string"
+        ]
+      },
+      "weight": 1.05
+    },
+    {
+      "name": "DecisionIntegrator",
+      "temperature": 0.1,
+      "system_prompt": "You integrate the planning outputs into one concise execution plan. Preserve important cautions and give the next concrete action.",
+      "input_sections": [],
+      "output_schema": {
+        "recommended_plan": [
+          "string"
+        ],
+        "next_action": "string",
+        "confidence": "integer 0-100"
+      },
+      "weight": 1.3
+    }
+  ],
+  "presets": {
+    "planning_4": [
+      "GoalClarifier",
+      "PlanArchitect",
+      "RiskCritic",
+      "DecisionIntegrator"
+    ],
+    "planning_6": [
+      "GoalClarifier",
+      "SystemMapper",
+      "PlanArchitect",
+      "RiskCritic",
+      "Verifier",
+      "DecisionIntegrator"
+    ]
+  }
+}

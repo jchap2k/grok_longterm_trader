@@ -1,0 +1,66 @@
+{
+  "_description": "2024-Jan to 2026-Mar run with H2 (regime_full_score=5) + ReasoningTracer. Extends 2024_2025_h2_baseline by 3 months to capture Mar 2026 high-VIX period (tariff shock). Primary purpose: generate conviction component JSONL traces for CGH prompt wiring. All params identical to 2024_2025_h2_baseline.",
+  "_parent_config": "2024_2025_h2_baseline.json - only change is end_date 2025-12-31 -> 2026-03-31 and run_id.",
+  "_tracer_note": "JSONL trace written to backtest_logs/h2_tracer_2024_mar2026/trace/. Records include sim_date and components for join with backtest_trade_journal.",
+  "_usage": "python run_backtest.py --config configs/h2_tracer_2024_mar2026.json",
+
+  "run": {
+    "run_id": "h2_tracer_2024_mar2026",
+    "start_date": "2024-01-02",
+    "end_date": "2026-03-31",
+    "initial_equity": 50000,
+    "max_api_calls": 10000,
+    "api_call_delay_s": 0.0,
+    "fork": "swing",
+    "dry_run": false,
+    "hypothesis_id": null,
+    "hypothesis_text": null
+  },
+
+  "universe": {
+    "min_price": 12.0,
+    "max_price": 500.0,
+    "min_volume": 500000,
+    "min_market_cap": 500000000,
+    "min_proximity_to_high": 0.85,
+    "min_momentum_3m": 0.0,
+    "top_n": 30,
+    "score_weight_proximity": 0.45,
+    "score_weight_momentum": 0.55
+  },
+
+  "entry": {
+    "max_open_positions": 0,
+    "max_fills_per_symbol": 0,
+    "deployment_floor_n": 2
+  },
+
+  "exit": {
+    "stop_pct": 0.04,
+    "max_hold_days": 7,
+    "pead_max_hold_days": 10
+  },
+
+  "regime": {
+    "vix_cash_threshold": 25.0,
+    "vix_defensive_threshold": 20.0,
+    "vix_standard_threshold": 15.0,
+    "regime_full_score": 5,
+    "regime_reduced_score": 2
+  },
+
+  "checkpoint": {
+    "load_from": null,
+    "load_date": null
+  },
+
+  "notes": [
+    "Extends h2 baseline (2024+2025) by 3 months to 2026-03-31.",
+    "Primary purpose: generate ReasoningTracer JSONL conviction records for future CGH prompt wiring.",
+    "Mar 2026 extension is intentional: high-VIX tariff shock period should produce mostly CASH regime.",
+    "Verifying the simulator correctly goes CASH in Mar 2026 validates the gate 5 breadth parity fix.",
+    "Do NOT use this run for hypothesis generation until CGH prompt wiring is implemented (planned next session).",
+    "Gate 5 fix (2026-04-03): _compute_regime() now uses breadth > 60% as gate 5 (was 1M SPY momentum).",
+    "All other parameters identical to 2024_2025_h2_baseline.json."
+  ]
+}

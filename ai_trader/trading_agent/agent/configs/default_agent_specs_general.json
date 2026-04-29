@@ -1,0 +1,164 @@
+{
+  "agent_specs": [
+    {
+      "name": "Researcher",
+      "temperature": 0.2,
+      "system_prompt": "You are the Researcher. Extract, verify, organize, and ground the most relevant facts, assumptions, and data gaps from the provided material.",
+      "input_sections": [],
+      "output_schema": {
+        "evidence_summary": "string",
+        "key_facts": [
+          "string"
+        ],
+        "assumptions": [
+          "string"
+        ],
+        "data_gaps": [
+          "string"
+        ]
+      },
+      "weight": 1.0
+    },
+    {
+      "name": "Analyst",
+      "temperature": 0.25,
+      "system_prompt": "You are the Analyst. Interpret the evidence, identify patterns, explain implications, and separate strong signals from weak ones.",
+      "input_sections": [],
+      "output_schema": {
+        "core_insights": [
+          "string"
+        ],
+        "implications": [
+          "string"
+        ],
+        "uncertainties": [
+          "string"
+        ]
+      },
+      "weight": 1.0
+    },
+    {
+      "name": "Planner",
+      "temperature": 0.3,
+      "system_prompt": "You are the Planner. Design a structured approach, sequence the work, and surface tradeoffs between reasonable options.",
+      "input_sections": [],
+      "output_schema": {
+        "recommended_plan": [
+          "string"
+        ],
+        "options": [
+          "string"
+        ],
+        "tradeoffs": [
+          "string"
+        ]
+      },
+      "weight": 0.95
+    },
+    {
+      "name": "Creator",
+      "temperature": 0.5,
+      "system_prompt": "You are the Creator. Generate practical ideas, variants, or solution directions that are original but still grounded in the task.",
+      "input_sections": [],
+      "output_schema": {
+        "ideas": [
+          "string"
+        ],
+        "most_promising_direction": "string"
+      },
+      "weight": 0.85
+    },
+    {
+      "name": "Critic",
+      "temperature": 0.35,
+      "system_prompt": "You are the Critic. Identify failure modes, contradictions, weak assumptions, edge cases, and reasons the current direction may be wrong.",
+      "input_sections": [],
+      "output_schema": {
+        "key_risks": [
+          "string"
+        ],
+        "failure_modes": [
+          "string"
+        ],
+        "counterarguments": [
+          "string"
+        ]
+      },
+      "weight": 1.1
+    },
+    {
+      "name": "Evaluator",
+      "temperature": 0.4,
+      "system_prompt": "You are the Evaluator. Score quality, feasibility, coherence, and alignment with the stated goal. Be decisive about weak spots.",
+      "input_sections": [],
+      "output_schema": {
+        "quality_score": "integer 0-100",
+        "strengths": [
+          "string"
+        ],
+        "weaknesses": [
+          "string"
+        ]
+      },
+      "weight": 0.95
+    },
+    {
+      "name": "DomainSpecialist",
+      "temperature": 0.25,
+      "system_prompt": "You are the Domain Specialist. Apply the most relevant subject-matter best practices, constraints, and pitfalls for the task domain.",
+      "input_sections": [],
+      "output_schema": {
+        "domain_nuances": [
+          "string"
+        ],
+        "best_practices": [
+          "string"
+        ],
+        "pitfalls": [
+          "string"
+        ]
+      },
+      "weight": 1.0
+    },
+    {
+      "name": "MasterIntegrator",
+      "temperature": 0.05,
+      "system_prompt": "You are the Master Integrator. Resolve conflicts, weigh the strongest evidence, preserve important objections, and deliver one final coherent answer.",
+      "input_sections": [],
+      "output_schema": {
+        "final_answer": "string",
+        "confidence": "integer 0-100",
+        "key_reasons": [
+          "string"
+        ]
+      },
+      "weight": 1.3
+    }
+  ],
+  "presets": {
+    "minimal_4": [
+      "Researcher",
+      "Analyst",
+      "Critic",
+      "MasterIntegrator"
+    ],
+    "balanced_6": [
+      "Researcher",
+      "Analyst",
+      "Planner",
+      "Critic",
+      "DomainSpecialist",
+      "MasterIntegrator"
+    ],
+    "default_8": [
+      "Researcher",
+      "Analyst",
+      "Planner",
+      "Creator",
+      "Critic",
+      "Evaluator",
+      "DomainSpecialist",
+      "MasterIntegrator"
+    ]
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "_description": "2024+2025 full 2-year run with H2 integrated (regime_full_score=5). Establishes new baseline covering both 2024 bull year and 2025 mixed/tariff year. Post-hypothesis-cycle new foundation for next CGH generation.",
+  "_h2_integrated": "H2: raise regime_full_score 4->5. PASS verdict (v5 revision). Superior December defense (+2.9% alpha) and balanced alpha across regimes. PREFERRED over H1 in risk-adjusted terms.",
+  "_prior_baseline": "baseline_v7.json covers 2024 only (score=4). 2025_full_year.json covers 2025 only (score=4). This merges both years with H2.",
+  "_usage": "python run_backtest.py --config configs/2024_2025_h2_baseline.json",
+
+  "run": {
+    "run_id": "baseline_h2_2024_2025",
+    "start_date": "2024-01-02",
+    "end_date": "2025-12-31",
+    "initial_equity": 50000,
+    "max_api_calls": 10000,
+    "api_call_delay_s": 0.0,
+    "fork": "swing",
+    "dry_run": false,
+    "hypothesis_id": null,
+    "hypothesis_text": null
+  },
+
+  "universe": {
+    "min_price": 12.0,
+    "max_price": 500.0,
+    "min_volume": 500000,
+    "min_market_cap": 500000000,
+    "min_proximity_to_high": 0.85,
+    "min_momentum_3m": 0.0,
+    "top_n": 30,
+    "score_weight_proximity": 0.45,
+    "score_weight_momentum": 0.55
+  },
+
+  "entry": {
+    "max_open_positions": 0,
+    "max_fills_per_symbol": 0,
+    "deployment_floor_n": 2
+  },
+
+  "exit": {
+    "stop_pct": 0.04,
+    "max_hold_days": 7,
+    "pead_max_hold_days": 10
+  },
+
+  "regime": {
+    "vix_cash_threshold": 25.0,
+    "vix_defensive_threshold": 20.0,
+    "vix_standard_threshold": 15.0,
+    "regime_full_score": 5,
+    "regime_reduced_score": 2
+  },
+
+  "checkpoint": {
+    "load_from": null,
+    "load_date": null
+  },
+
+  "notes": [
+    "H2 ONLY change from v7 baseline: regime.regime_full_score 4->5.",
+    "All other parameters identical to baseline_v7.json.",
+    "Purpose: 2-year new baseline for next CGH hypothesis generation cycle.",
+    "2024 regime: strong bull year, consistent FULL regime, AI momentum (original training year).",
+    "2025 regime calendar:",
+    "  Jan 27: DeepSeek shock - AI confidence hit",
+    "  Apr 2-9: Tariff announcement, near-bear market (-19% peak-to-trough)",
+    "  Apr 9: 90-day tariff pause - V-recovery begins",
+    "  May-Jun: Recovery rally back to pre-tariff levels",
+    "  Jul-Oct: New all-time highs weekly, NVDA $4T->$5T, strong momentum regime",
+    "  Dec: Choppy - H2 showed +2.9% alpha vs score=4 baseline in this period.",
+    "WARNING: Do NOT compare trade counts to old baseline_v7.json / 2025_full_year.json results.",
+    "Those runs used the MAX_HOLD bug (avg hold ~1 day, 80% of positions force-closed day 1).",
+    "Trade count, hold duration, and stop hit rates from old runs are meaningless vs this run.",
+    "Return comparison may also be unreliable - treat this as a clean-sheet 2-year result."
+  ]
+}

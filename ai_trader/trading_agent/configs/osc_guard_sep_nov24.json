@@ -1,0 +1,64 @@
+{
+  "_description": "Sep-Nov 2024 focused window to evaluate oscillation guard vs no-guard. Starts at end-of-August 2024 equity snapshot (~$75k) from the 2-year H2 baseline run, giving apples-to-apples comparison. Run once with oscillation_guard=false (baseline) and once with oscillation_guard=true.",
+  "_usage_baseline": "python run_backtest.py --config configs/osc_guard_sep_nov24.json --run.run_id osc_guard_OFF_sep_nov24",
+  "_usage_guard_on": "python run_backtest.py --config configs/osc_guard_sep_nov24.json --run.run_id osc_guard_ON_sep_nov24 --regime.oscillation_guard true",
+
+  "run": {
+    "run_id": "osc_guard_OFF_sep_nov24",
+    "start_date": "2024-09-03",
+    "end_date": "2024-11-29",
+    "initial_equity": 75087,
+    "max_api_calls": 10000,
+    "api_call_delay_s": 0.0,
+    "fork": "swing",
+    "dry_run": false,
+    "hypothesis_id": null,
+    "hypothesis_text": null
+  },
+
+  "universe": {
+    "min_price": 12.0,
+    "max_price": 500.0,
+    "min_volume": 500000,
+    "min_market_cap": 500000000,
+    "min_proximity_to_high": 0.85,
+    "min_momentum_3m": 0.0,
+    "top_n": 30,
+    "score_weight_proximity": 0.45,
+    "score_weight_momentum": 0.55
+  },
+
+  "entry": {
+    "max_open_positions": 0,
+    "max_fills_per_symbol": 0,
+    "deployment_floor_n": 2
+  },
+
+  "exit": {
+    "stop_pct": 0.04,
+    "max_hold_days": 7,
+    "pead_max_hold_days": 10
+  },
+
+  "regime": {
+    "vix_cash_threshold": 25.0,
+    "vix_defensive_threshold": 20.0,
+    "vix_standard_threshold": 15.0,
+    "regime_full_score": 5,
+    "regime_reduced_score": 2,
+    "oscillation_guard": false
+  },
+
+  "checkpoint": {
+    "load_from": null,
+    "load_date": null
+  },
+
+  "notes": [
+    "Sep 3 - Nov 29, 2024. Initial equity = $75,087 (end-of-Aug snapshot from 2-year H2 baseline).",
+    "Sep-Oct: choppy regime, multiple FULL->REDUCED->FULL oscillations.",
+    "Nov 5: US election day. Nov 6-11: post-election rally (+20% in ~1 week).",
+    "Compare osc_guard_OFF vs osc_guard_ON to measure guard cost/benefit on this window.",
+    "oscillation_guard defaults false - add --regime.oscillation_guard true for guard-on run."
+  ]
+}

@@ -1,0 +1,63 @@
+{
+  "_description": "2025 Q1 continuation from v7 Dec 31 state. Picks up exactly where 2024 ended - same equity, same open positions, same regime. More realistic than fresh start. Covers DeepSeek shock (Jan 27).",
+  "_usage": "python run_backtest.py --config configs/2025_q1_continuation.json",
+  "_note": "Requires v7 to be finished. load_from points to final v7 state file.",
+
+  "run": {
+    "run_id": "2025_q1_continuation_v7",
+    "start_date": "2025-01-02",
+    "end_date": "2025-03-31",
+    "initial_equity": 50000,
+    "max_api_calls": 2000,
+    "api_call_delay_s": 0.0,
+    "fork": "swing",
+    "dry_run": false,
+    "hypothesis_id": null,
+    "hypothesis_text": null
+  },
+
+  "universe": {
+    "min_price": 12.0,
+    "max_price": 500.0,
+    "min_volume": 500000,
+    "min_market_cap": 500000000,
+    "min_proximity_to_high": 0.85,
+    "min_momentum_3m": 0.0,
+    "top_n": 30,
+    "score_weight_proximity": 0.45,
+    "score_weight_momentum": 0.55
+  },
+
+  "entry": {
+    "max_open_positions": 0,
+    "max_fills_per_symbol": 0,
+    "deployment_floor_n": 2
+  },
+
+  "exit": {
+    "stop_pct": 0.04,
+    "max_hold_days": 7,
+    "pead_max_hold_days": 10
+  },
+
+  "regime": {
+    "vix_cash_threshold": 25.0,
+    "vix_defensive_threshold": 20.0,
+    "vix_standard_threshold": 15.0,
+    "regime_full_score": 4,
+    "regime_reduced_score": 2
+  },
+
+  "checkpoint": {
+    "load_from": "backtest_logs/baseline_full_2024_v7/state_2024-12-31.json",
+    "load_date": "2024-12-31"
+  },
+
+  "notes": [
+    "CONTINUATION run - loads Dec 31 2024 portfolio state from v7 (equity + open positions + pending orders).",
+    "initial_equity is ignored when checkpoint is loaded - actual equity comes from state file.",
+    "Key test: Do any Dec 31 open positions get exited cleanly in early Jan before DeepSeek shock?",
+    "DeepSeek shock Jan 27: sudden CASH/REDUCED day - tests regime filter speed.",
+    "Compare to 2025_q1_spot_check (fresh $50k) to see impact of carried-over positions."
+  ]
+}

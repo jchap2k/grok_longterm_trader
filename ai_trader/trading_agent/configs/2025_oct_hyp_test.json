@@ -1,0 +1,64 @@
+{
+  "_description": "October 2025 hypothesis test period. Loads Sep 30 state from h1_vix23_2025_full. Baseline: 22 trades, 36% WR, +0.2% sys vs SPY +2.0% (-1.8pp alpha).",
+  "_usage": "python run_backtest.py --config configs/2025_oct_hyp_test.json --run.run_id <id> [hypothesis overrides]",
+
+  "run": {
+    "run_id": "oct25_baseline",
+    "start_date": "2025-10-01",
+    "end_date": "2025-10-31",
+    "initial_equity": 50000,
+    "max_api_calls": 500,
+    "api_call_delay_s": 0.0,
+    "fork": "swing",
+    "dry_run": false,
+    "hypothesis_id": null,
+    "hypothesis_text": null
+  },
+
+  "universe": {
+    "min_price": 12.0,
+    "max_price": 500.0,
+    "min_volume": 500000,
+    "min_market_cap": 500000000,
+    "min_proximity_to_high": 0.85,
+    "min_momentum_3m": 0.0,
+    "top_n": 30,
+    "score_weight_proximity": 0.45,
+    "score_weight_momentum": 0.55
+  },
+
+  "entry": {
+    "max_open_positions": 0,
+    "max_fills_per_symbol": 0,
+    "deployment_floor_n": 2
+  },
+
+  "exit": {
+    "stop_pct": 0.04,
+    "max_hold_days": 7,
+    "pead_max_hold_days": 10
+  },
+
+  "regime": {
+    "vix_cash_threshold": 25.0,
+    "vix_defensive_threshold": 23.0,
+    "vix_standard_threshold": 15.0,
+    "regime_full_score": 4,
+    "regime_reduced_score": 2
+  },
+
+  "checkpoint": {
+    "load_from": "backtest_logs/h1_vix23_2025_full/2025-09-30.json",
+    "load_date": "2025-09-30"
+  },
+
+  "notes": [
+    "October 2025 hypothesis test window. VIX avg 17.7, all 22 trading days FULL regime.",
+    "Baseline (h1_vix23_2025_full): 22 trades, 36% WR, sys +0.2% vs SPY +2.0% = -1.8pp alpha.",
+    "H3 primary target (VIX 17.7 in range for vix_def=21.0 effect): --regime.vix_defensive_threshold 21.0",
+    "H5 primary target: --exit.max_hold_days 5",
+    "H1: --universe.min_proximity_to_high 0.92",
+    "H2: --regime.regime_full_score 5",
+    "H4: --exit.stop_pct 0.055"
+  ]
+}
