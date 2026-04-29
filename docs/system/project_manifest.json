@@ -24,6 +24,7 @@
     "ai_trader/trading_agent/longterm/next_actions.py"
   ],
   "agent_configs": [
+    "ai_trader/trading_agent/config/grok_project_config.json",
     "ai_trader/trading_agent/agent/configs/longterm_trading_agent_specs.json",
     "ai_trader/trading_agent/agent/configs/planning_agent_specs.json",
     "ai_trader/trading_agent/agent/configs/code_review_agent_specs.json"

@@ -25,9 +25,23 @@ Usage:
 import json
 import logging
 import re
+from pathlib import Path
 from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _load_default_trading_mode() -> str:
+    """Load default reviewer trading mode from repo-safe project config."""
+    config_path = Path(__file__).resolve().parent.parent / "config" / "grok_project_config.json"
+    try:
+        payload = json.loads(config_path.read_text(encoding="utf-8"))
+        mode = payload.get("default_trading_mode")
+        if mode:
+            return str(mode)
+    except Exception:
+        pass
+    return "swing"
 
 
 # --- Module-level helpers (pure functions, testable without Grok) ---
@@ -266,7 +280,7 @@ class GrokPlanReviewer:
         files_affected: Optional[list] = None,
         extra_context: Optional[str] = None,
         questions_callback: Optional[Any] = None,
-        trading_mode: str = "swing",
+        trading_mode: str = "auto",
     ) -> Dict[str, Any]:
         """
         Submit a plan to Grok for blind-spot and risk analysis.
@@ -290,10 +304,11 @@ class GrokPlanReviewer:
                 If provided and Grok asks questions, this callback is called with
                 Grok's full question text and its return value is sent as the answer.
                 If None, falls back to auto-fetching code snippets from mentioned files.
-            trading_mode: "swing" or "day" - tells Grok which system context applies.
+            trading_mode: "longterm", "swing", or "day" - tells Grok which system context applies.
+                "longterm" = quality-growth active sleeve, dry-run actions, FXAIX benchmark.
                 "swing" = 2-7 day holds, FORCESWING signal, buy stops, SwingExitEngine.
                 "day"   = intraday only, gap momentum, same-day forced close.
-                Defaults to "swing" (this repo is the swing trader fork).
+                Defaults to config/grok_project_config.json when available.
 
         Returns:
             Dictionary with keys:
@@ -302,6 +317,8 @@ class GrokPlanReviewer:
         """
         logger.info(f"[GrokPlanReview] Starting review: {feature_name}")
         print(f"[GrokReview] Starting review: {feature_name}", flush=True)
+        if trading_mode == "auto":
+            trading_mode = _load_default_trading_mode()
 
         # Auto-detect files and foundations if not provided
         if files_affected is None:
@@ -358,7 +375,20 @@ Be specific to THIS codebase - reference actual file names, method names, and
 component interactions (e.g. decision_journal, trade_id, learning.db, lessons)."""
 
         # Build trading mode context block for prompt 1
-        if trading_mode == "swing":
+        if trading_mode == "longterm":
+            mode_context = (
+                "## Trading System Context\n"
+                "This is the LONG-TERM TRADER project (grok_longterm_trader), not the day or swing trader.\n"
+                "Key characteristics:\n"
+                "- Strategy: research-first quality-growth active sleeve\n"
+                "- Protected benchmark/core holding: FXAIX, operationally untouchable\n"
+                "- Defensive parking symbol: SPY, separate from benchmark logic\n"
+                "- Execution state: research, journaling, reporting, alerts, and dry-run action planning only\n"
+                "- Decision committee: CGH decision_4 default, decision_6 for high-value/borderline portfolio decisions\n"
+                "- Planning safety: no broker orders, protected-symbol blocking, cash checks, benchmark guard versus FXAIX\n"
+                "- Current context docs: docs/system/README.md, ARCHITECTURE.md, OPERATIONS.md, SAFETY.md, project_manifest.json"
+            )
+        elif trading_mode == "swing":
             mode_context = (
                 "## Trading System Context\n"
                 "This is the SWING TRADER fork (grok_swing_trader), NOT the original day trader.\n"
@@ -415,7 +445,19 @@ Confirm you have read the plan and context by summarizing the plan in 2-3 senten
         # before the plan arrives. Without this, Grok may answer from stale context
         # or the wrong repo (day trader vs swing trader).
         # Each trading_mode has its own file list so Grok reads the correct review set.
-        if trading_mode == "swing":
+        if trading_mode == "longterm":
+            mode_label = "long-term trading"
+            review_files = (
+                "docs/system/README.md, "
+                "docs/system/ARCHITECTURE.md, "
+                "docs/system/OPERATIONS.md, "
+                "docs/system/SAFETY.md, "
+                "docs/system/project_manifest.json, "
+                "ai_trader/rules/active_rules.txt, "
+                "docs/plans/2026-04-28-longterm-trader-foundation-plan.md"
+            )
+            arch_doc = "docs/system/ARCHITECTURE.md"
+        elif trading_mode == "swing":
             mode_label = "swing trading"
             review_files = (
                 "GROK__SWING_REGIME_FILTER.md, "

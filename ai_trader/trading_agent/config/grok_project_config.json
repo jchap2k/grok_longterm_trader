@@ -1,0 +1,13 @@
+{
+  "default_project_url": "https://grok.com/project/e397a91c-e647-4c3b-868f-ff0d0ed6c175?tab=conversations",
+  "default_trading_mode": "longterm",
+  "project_docs": [
+    "docs/system/README.md",
+    "docs/system/ARCHITECTURE.md",
+    "docs/system/OPERATIONS.md",
+    "docs/system/SAFETY.md",
+    "docs/system/project_manifest.json",
+    "ai_trader/rules/active_rules.txt",
+    "docs/plans/2026-04-28-longterm-trader-foundation-plan.md"
+  ]
+}

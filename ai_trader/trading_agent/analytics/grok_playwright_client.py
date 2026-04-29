@@ -45,13 +45,30 @@ _instance: Optional["GrokPlaywrightClient"] = None
 
 
 def _load_project_url() -> str:
-    """Read grok_web.project_url from broker_config.json.
-    Falls back to generic grok.com if not set or null (default for new users)."""
+    """Load the Grok project URL from env, safe project config, or broker config."""
     import json  # noqa: PLC0415
     fallback = "https://grok.com"
+    env_url = os.environ.get("GROK_PROJECT_URL")
+    if env_url:
+        return env_url
+
+    config_path = Path(__file__).resolve().parent.parent / "config" / "grok_project_config.json"
     try:
-        config_path = Path(__file__).resolve().parent.parent.parent / "ai_trader_data" / "broker_config.json"
         with open(config_path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        url = cfg.get("default_project_url")
+        if url:
+            return url
+    except Exception:
+        pass
+
+    try:
+        broker_config_path = (
+            Path(__file__).resolve().parent.parent.parent
+            / "ai_trader_data"
+            / "broker_config.json"
+        )
+        with open(broker_config_path, "r", encoding="utf-8") as f:
             cfg = json.load(f)
         url = cfg.get("grok_web", {}).get("project_url")
         return url if url else fallback

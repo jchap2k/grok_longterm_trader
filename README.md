@@ -47,6 +47,7 @@ This repo is not a swing-trader clone. It is meant to evaluate fewer ideas more 
 - `docs/system/OPERATIONS.md` - command reference and sample JSON payloads
 - `docs/system/SAFETY.md` - dry-run and live-readiness safety model
 - `docs/system/project_manifest.json` - machine-readable project context manifest
+- `ai_trader/trading_agent/config/grok_project_config.json` - Grok project URL/default long-term review mode
 
 ## Domain Configs
 

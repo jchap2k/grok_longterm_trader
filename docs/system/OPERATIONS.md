@@ -41,6 +41,22 @@ python scripts/longterm_action_plan.py --symbol NVDA --portfolio-state path\to\p
 python scripts/longterm_next_actions.py --portfolio-state path\to\portfolio.json --limit 10
 ```
 
+## Grok Project Review
+
+The repo-safe project config is:
+
+```text
+ai_trader/trading_agent/config/grok_project_config.json
+```
+
+It points browser-based Grok review tooling at the long-term trader project:
+
+```text
+https://grok.com/project/e397a91c-e647-4c3b-868f-ff0d0ed6c175?tab=conversations
+```
+
+`GrokPlanReviewer.review(..., trading_mode="auto")` reads that config and uses the `longterm` context. You can still override the project URL for one run with `GROK_PROJECT_URL`.
+
 ## Minimal Portfolio Snapshot
 
 ```json
