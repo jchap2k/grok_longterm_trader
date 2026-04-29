@@ -126,6 +126,22 @@ Default behavior:
 - add only when the thesis is confirmed
 - reduce or exit when thesis quality deteriorates
 
+DECISION COMMITTEE
+
+Use the long-term CGH domain config for buy, add, hold, pass, reduce, sell, and sizing choices.
+
+Default to the 4-agent committee:
+- FundamentalAnalyst
+- MacroRiskAnalyst
+- ThesisCritic
+- DecisionIntegrator
+
+Use the 6-agent committee when the decision is high-value, borderline, or materially affects portfolio construction:
+- add ValuationEdgeAnalyst
+- add PortfolioManager
+
+Deterministic reviewers should feed the committee context, but the final action should come from the configured CGH decision output and then pass local safety checks.
+
 AUTONOMOUS TARGET STATE
 
 The live system is intended to become autonomous inside explicit safety boundaries:

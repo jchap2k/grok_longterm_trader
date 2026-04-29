@@ -99,13 +99,12 @@ def test_build_agent_prompt_uses_only_requested_sections_and_schema():
 
 def test_longterm_agent_config_file_loads_expected_four_roles():
     config_path = (
-        Path(__file__).resolve().parents[2]
-        / "longterm"
+        Path(__file__).resolve().parents[1]
         / "configs"
-        / "longterm_agent_specs_v1.json"
+        / "longterm_trading_agent_specs.json"
     )
 
-    specs = load_agent_specs_from_file(str(config_path))
+    specs = load_agent_specs_from_file(str(config_path), preset_name="decision_4")
 
     assert [spec["name"] for spec in specs] == [
         "FundamentalAnalyst",
@@ -114,6 +113,32 @@ def test_longterm_agent_config_file_loads_expected_four_roles():
         "DecisionIntegrator",
     ]
     assert "research_principles" in specs[0]["input_sections"]
+
+
+def test_longterm_agent_config_exposes_decision_presets():
+    config_path = (
+        Path(__file__).resolve().parents[1]
+        / "configs"
+        / "longterm_trading_agent_specs.json"
+    )
+
+    decision_4 = load_agent_specs_from_file(str(config_path), preset_name="decision_4")
+    decision_6 = load_agent_specs_from_file(str(config_path), preset_name="decision_6")
+
+    assert [spec["name"] for spec in decision_4] == [
+        "FundamentalAnalyst",
+        "MacroRiskAnalyst",
+        "ThesisCritic",
+        "DecisionIntegrator",
+    ]
+    assert [spec["name"] for spec in decision_6] == [
+        "FundamentalAnalyst",
+        "MacroRiskAnalyst",
+        "ValuationEdgeAnalyst",
+        "PortfolioManager",
+        "ThesisCritic",
+        "DecisionIntegrator",
+    ]
 
 
 def test_preferred_synthesis_schema_uses_highest_weight_agent_schema():

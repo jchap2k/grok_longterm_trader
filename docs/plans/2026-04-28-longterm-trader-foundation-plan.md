@@ -110,6 +110,16 @@ First reviewers to implement:
 - `BalanceSheetReviewer`
 - `QualityAtReasonablePriceReviewer`
 
+These deterministic reviewers should feed structured guardrail context into the long-term CGH decision call. They do not replace Grok; they make the Grok committee more grounded.
+
+Default CGH decision preset:
+- `decision_4`: FundamentalAnalyst, MacroRiskAnalyst, ThesisCritic, DecisionIntegrator
+
+Expanded CGH decision preset:
+- `decision_6`: adds ValuationEdgeAnalyst and PortfolioManager
+
+Use `decision_4` for V1 unless the decision is high-value, borderline, or portfolio-impacting enough to justify extra cost.
+
 Likely later reviewers:
 - `MoatReviewer`
 - `CapitalAllocationReviewer`
@@ -171,6 +181,7 @@ Cash should also be an available defensive state for the active sleeve:
 9. Protected symbol support for untouchable core holdings
 10. Separate benchmark symbol and defensive parking symbol support
 11. Extreme-volatility cash mode for the active sleeve
+12. Long-term CGH decision domain config with 4-agent default and 6-agent expansion
 
 ## Highly Desirable Early Features
 

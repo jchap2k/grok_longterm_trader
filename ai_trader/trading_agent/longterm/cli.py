@@ -13,8 +13,9 @@ from research.intake import create_research_packet_from_idea
 
 
 LONGTERM_DIR = Path(__file__).resolve().parent
+TRADING_AGENT_DIR = LONGTERM_DIR.parent
 DEFAULT_PROFILE_PATH = LONGTERM_DIR / "configs" / "roth_ira_profile.json"
-DEFAULT_AGENT_CONFIG_PATH = LONGTERM_DIR / "configs" / "longterm_agent_specs_v1.json"
+DEFAULT_AGENT_CONFIG_PATH = TRADING_AGENT_DIR / "agent" / "configs" / "longterm_trading_agent_specs.json"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -38,6 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--benchmark-price", type=float, default=None)
     parser.add_argument("--profile-config", default=str(DEFAULT_PROFILE_PATH))
     parser.add_argument("--agent-config", default=str(DEFAULT_AGENT_CONFIG_PATH))
+    parser.add_argument("--agent-preset", default="decision_4")
     parser.add_argument("--journal-db", default=None)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--quiet", action="store_true")
@@ -102,6 +104,7 @@ def run_cli(args: argparse.Namespace) -> int:
 
     runner = LongTermResearchRunner(
         config_path=args.agent_config,
+        agent_preset=args.agent_preset,
         verbose=not args.quiet,
     )
     decision_ids = [

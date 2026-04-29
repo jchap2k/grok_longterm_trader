@@ -1,0 +1,160 @@
+{
+  "agent_specs": [
+    {
+      "name": "FundamentalAnalyst",
+      "temperature": 0.15,
+      "system_prompt": "You are a veteran fundamental analyst focused on long-term investing. Focus on business quality, financial strength, management execution, competitive positioning, and multi-year thesis durability. Ignore short-term price noise.",
+      "input_sections": [
+        "company_research_packet",
+        "financial_metrics",
+        "business_summary",
+        "deterministic_reviews",
+        "research_principles"
+      ],
+      "output_schema": {
+        "thesis_strength": "High | Medium | Low",
+        "quality_score": "integer 0-100",
+        "growth_durability": "string",
+        "key_risks": [
+          "string"
+        ],
+        "supporting_evidence": "string"
+      },
+      "weight": 1.0
+    },
+    {
+      "name": "MacroRiskAnalyst",
+      "temperature": 0.2,
+      "system_prompt": "You are a macro and risk analyst for a long-term trading process. Focus on rates, inflation, policy, market regime, drawdown risk, sector sensitivity, and whether the active sleeve should stay offensive, go defensive, or hold cash.",
+      "input_sections": [
+        "macro_regime",
+        "portfolio_context",
+        "market_risk_context",
+        "review_cadence"
+      ],
+      "output_schema": {
+        "macro_tailwinds": [
+          "string"
+        ],
+        "macro_headwinds": [
+          "string"
+        ],
+        "drawdown_risk": "string",
+        "defensive_posture": "stay_offensive | move_to_defensive_parking | move_to_cash | hold_defensive | redeploy"
+      },
+      "weight": 1.1
+    },
+    {
+      "name": "ValuationEdgeAnalyst",
+      "temperature": 0.25,
+      "system_prompt": "You are the valuation and edge analyst. Judge whether the current price offers enough forward return for the business quality, and separate quality from valuation. Prefer margin of safety over excitement.",
+      "input_sections": [
+        "financial_metrics",
+        "business_summary",
+        "deterministic_reviews",
+        "benchmark_context",
+        "research_principles"
+      ],
+      "output_schema": {
+        "valuation_view": "attractive | fair | expensive | unclear",
+        "fair_value_range": "string",
+        "upside_downside_summary": "string",
+        "edge_vs_benchmark": "string",
+        "valuation_risks": [
+          "string"
+        ]
+      },
+      "weight": 1.05
+    },
+    {
+      "name": "PortfolioManager",
+      "temperature": 0.2,
+      "system_prompt": "You are the portfolio manager for a protected-core Roth IRA active sleeve. Recommend sizing, add/hold/reduce logic, and rebalancing only inside the permitted active sleeve. Never sell protected symbols.",
+      "input_sections": [
+        "portfolio_context",
+        "decision_constraints",
+        "benchmark_context",
+        "sizing_policy_context",
+        "market_risk_context"
+      ],
+      "output_schema": {
+        "portfolio_action": "BUY | ADD | HOLD | PASS | REDUCE | SELL",
+        "target_size_pct": "number",
+        "sizing_rationale": "string",
+        "rebalance_required": "boolean",
+        "capital_needed_note": "string"
+      },
+      "weight": 1.15
+    },
+    {
+      "name": "ThesisCritic",
+      "temperature": 0.3,
+      "system_prompt": "You are the thesis critic. Challenge the bull case, identify what could break, and surface contrarian evidence or weak assumptions. Focus on disconfirmation and kill criteria over persuasive writing.",
+      "input_sections": [
+        "bull_thesis",
+        "supporting_evidence",
+        "risk_flags",
+        "deterministic_reviews",
+        "research_principles"
+      ],
+      "output_schema": {
+        "failure_modes": [
+          "string"
+        ],
+        "invalidation_triggers": [
+          "string"
+        ],
+        "kill_criteria": [
+          "string"
+        ],
+        "contrarian_evidence": "string"
+      },
+      "weight": 1.1
+    },
+    {
+      "name": "DecisionIntegrator",
+      "temperature": 0.1,
+      "system_prompt": "You are the final decision integrator for a long-term trading process. Combine the strongest evidence, weigh risk heavily when conviction is borderline, and produce one strict JSON decision for buy/size/hold/reduce/sell. Respect protected holdings and benchmark discipline.",
+      "input_sections": [
+        "portfolio_context",
+        "decision_constraints",
+        "benchmark_context",
+        "deterministic_reviews",
+        "review_cadence",
+        "sizing_policy_context",
+        "research_principles"
+      ],
+      "output_schema": {
+        "recommendation": "BUY | ADD | HOLD | PASS | REDUCE | SELL",
+        "suggested_size_pct": "number",
+        "confidence": "integer 0-100",
+        "key_thesis": "string",
+        "monitoring_triggers": [
+          "string"
+        ],
+        "invalidation_conditions": [
+          "string"
+        ],
+        "rebalancing_notes": "string",
+        "capital_needed_note": "string"
+      },
+      "weight": 1.3
+    }
+  ],
+  "presets": {
+    "decision_4": [
+      "FundamentalAnalyst",
+      "MacroRiskAnalyst",
+      "ThesisCritic",
+      "DecisionIntegrator"
+    ],
+    "decision_6": [
+      "FundamentalAnalyst",
+      "MacroRiskAnalyst",
+      "ValuationEdgeAnalyst",
+      "PortfolioManager",
+      "ThesisCritic",
+      "DecisionIntegrator"
+    ]
+  }
+}

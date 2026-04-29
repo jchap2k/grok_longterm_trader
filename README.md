@@ -33,7 +33,7 @@ This repo is not a swing-trader clone. It is meant to evaluate fewer ideas more 
 - `ai_trader/trading_agent/longterm/capital_alert.py` - capital-needed alert payloads
 - `ai_trader/trading_agent/longterm/report_builder.py` - markdown reports and recommendation table
 - `ai_trader/trading_agent/longterm/configs/roth_ira_profile.json` - default Roth IRA profile
-- `ai_trader/trading_agent/longterm/configs/longterm_agent_specs_v1.json` - long-term agent domains
+- `ai_trader/trading_agent/agent/configs/longterm_trading_agent_specs.json` - long-term CGH agent domains
 - `ai_trader/trading_agent/agent/utils/cheap_grok_heavy.py` - config-driven multi-agent Grok helper
 - `docs/plans/2026-04-28-longterm-trader-foundation-plan.md` - foundation plan
 
@@ -42,11 +42,17 @@ This repo is not a swing-trader clone. It is meant to evaluate fewer ideas more 
 `cheap_grok_heavy.py` supports separate domain-set JSON files:
 
 - `ai_trader/trading_agent/longterm/configs/longterm_agent_specs_v1.json`
+- `ai_trader/trading_agent/agent/configs/longterm_trading_agent_specs.json`
 - `ai_trader/trading_agent/agent/configs/default_agent_specs_general.json`
 - `ai_trader/trading_agent/agent/configs/planning_agent_specs.json`
 - `ai_trader/trading_agent/agent/configs/code_review_agent_specs.json`
 
 Use named presets when a config provides them, rather than assuming the first N roles are the right team.
+
+For long-term trading decisions:
+
+- `decision_4` is the default and uses FundamentalAnalyst, MacroRiskAnalyst, ThesisCritic, and DecisionIntegrator.
+- `decision_6` adds ValuationEdgeAnalyst and PortfolioManager when we want deeper but more expensive decision review.
 
 ## Dry Run A Ticker
 
@@ -93,6 +99,12 @@ python scripts/run_longterm_research.py --symbol AAPL --company-name Apple --the
 ```
 
 The command prints the recorded `decision_id`.
+
+Use the 6-agent long-term committee when needed:
+
+```powershell
+python scripts/run_longterm_research.py --symbol AAPL --agent-preset decision_6
+```
 
 ## Journal Tools
 
