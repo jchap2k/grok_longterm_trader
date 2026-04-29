@@ -1,5 +1,6 @@
 import json
 import sys
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -155,8 +156,44 @@ def test_build_markdown_report_can_include_derived_review_status(tmp_path):
         },
     )
 
-    assert "| 1 | MSFT |" in report
+    assert "MSFT" in report
     assert "| True | healthy |" in report
+
+
+def test_build_markdown_report_can_auto_derive_review_status(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    journal.record_decision(
+        create_research_packet_from_idea(
+            {
+                "symbol": "MSFT",
+                "benchmark_symbol": "FXAIX",
+                "review_cadence": "monthly",
+            }
+        ),
+        decision={"recommendation": "BUY", "confidence": 82, "suggested_size_pct": 5},
+    )
+
+    report = build_markdown_report(
+        journal,
+        review_status_today=date(2026, 4, 29),
+        last_review_dates_by_symbol={"MSFT": date(2026, 3, 20)},
+    )
+
+    assert "MSFT" in report
+    assert "| True | healthy |" in report
+
+
+def test_build_markdown_report_includes_decision_id_for_traceability(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    decision_id = journal.record_decision(
+        create_research_packet_from_idea({"symbol": "NVDA", "benchmark_symbol": "FXAIX"}),
+        decision={"recommendation": "BUY", "confidence": 91, "suggested_size_pct": 8},
+    )
+
+    report = build_markdown_report(journal)
+
+    assert "Decision ID" in report
+    assert decision_id[:8] in report
 
 
 def test_recommendation_table_keeps_latest_ranked_candidates_with_links(tmp_path):

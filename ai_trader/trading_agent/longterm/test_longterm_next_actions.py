@@ -212,6 +212,24 @@ def test_next_actions_markdown_includes_table_and_benchmark_gate(tmp_path):
     assert "| Priority | Category | Symbol | Action | Reason |" in markdown
 
 
+def test_next_actions_markdown_can_auto_include_review_due_status(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    _record_decision(journal, "MSFT", confidence=83, size=5)
+    profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
+    state = PortfolioState(cash=5000, protected_symbols=["FXAIX"])
+
+    markdown = build_next_actions_markdown(
+        journal,
+        profile=profile,
+        portfolio_state=state,
+        review_status_today=date(2026, 4, 29),
+        last_review_dates_by_symbol={"MSFT": date(2026, 3, 20)},
+    )
+
+    assert "MSFT" in markdown
+    assert "Review due before committing new capital." in markdown
+
+
 def test_review_status_builder_marks_due_reviews_from_journal(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     _record_decision(journal, "MSFT", confidence=83)

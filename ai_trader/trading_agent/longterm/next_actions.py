@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
+from typing import Mapping
 
 from longterm.action_planner import ActionPlanner
 from longterm.benchmark_guard import BenchmarkGuard, BenchmarkGuardResult
 from longterm.decision_journal import LongTermDecisionJournal
 from longterm.portfolio_state import PortfolioState
 from longterm.report_builder import RecommendationEnricher, RecommendationTableBuilder
+from longterm.review_status import ReviewStatusBuilder
 from portfolio.portfolio_profile import PortfolioProfile
 from research.intake import create_research_packet_from_idea
 
@@ -124,11 +127,18 @@ def build_next_actions_markdown(
     profile: PortfolioProfile,
     portfolio_state: PortfolioState,
     benchmark_guard: BenchmarkGuard | None = None,
+    review_status_today: date | None = None,
+    last_review_dates_by_symbol: Mapping[str, date] | None = None,
     limit: int = 10,
 ) -> str:
     guard = benchmark_guard or BenchmarkGuard()
     guard_result = guard.evaluate(journal.summarize_benchmark_performance())
-    actions = NextActionsPlanner().plan(
+    review_status_by_symbol = ReviewStatusBuilder(
+        journal,
+        today=review_status_today,
+        last_review_dates_by_symbol=last_review_dates_by_symbol,
+    ).build(limit=limit)
+    actions = NextActionsPlanner(review_status_by_symbol=review_status_by_symbol).plan(
         journal,
         profile=profile,
         portfolio_state=portfolio_state,

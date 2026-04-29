@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from datetime import date
+from typing import Mapping, Protocol
 
 from longterm.decision_journal import LongTermDecisionJournal
+from longterm.review_status import ReviewStatusBuilder
 
 
 class RecommendationEnricher(Protocol):
@@ -53,16 +55,28 @@ def _fmt_price(value) -> str:
     return f"${float(value):,.2f}"
 
 
+def _short_id(value: str | None) -> str:
+    return (value or "")[:8]
+
+
 def build_markdown_report(
     journal: LongTermDecisionJournal,
     *,
     limit: int = 20,
     enricher: RecommendationEnricher | None = None,
     review_status_by_symbol: dict[str, dict] | None = None,
+    review_status_today: date | None = None,
+    last_review_dates_by_symbol: Mapping[str, date] | None = None,
 ) -> str:
     """Build a concise markdown report from the long-term decision journal."""
     summary = journal.summarize_benchmark_performance()
     rows = journal.list_recent_decisions(limit=limit)
+    if review_status_by_symbol is None:
+        review_status_by_symbol = ReviewStatusBuilder(
+            journal,
+            today=review_status_today,
+            last_review_dates_by_symbol=last_review_dates_by_symbol,
+        ).build(limit=limit)
 
     lines = [
         "# Long-Term Trader Decision Report",
@@ -75,8 +89,8 @@ def build_markdown_report(
         "",
         "## Recommendation Table",
         "",
-        "| Rank | Symbol | Company | Action | Service | Price | Change | Previous Rank | Market Cap | Type | 1Y Rev. Growth | Return Since Rec | Rec Date | Est. Return | Est. Max Drawdown | Review Due | Thesis State | Data As Of | Times Rec'd | Notes | Reason | Link |",
-        "|---:|---|---|---|---|---:|---:|---:|---:|---|---:|---:|---|---:|---:|---|---|---|---:|---:|---|---|",
+        "| Rank | Decision ID | Symbol | Company | Action | Service | Price | Change | Previous Rank | Market Cap | Type | 1Y Rev. Growth | Return Since Rec | Rec Date | Est. Return | Est. Max Drawdown | Review Due | Thesis State | Data As Of | Times Rec'd | Notes | Reason | Link |",
+        "|---:|---|---|---|---|---|---:|---:|---:|---:|---|---:|---:|---|---:|---:|---|---|---|---:|---:|---|---|",
     ]
 
     for row in RecommendationTableBuilder(
@@ -85,8 +99,9 @@ def build_markdown_report(
         review_status_by_symbol=review_status_by_symbol,
     ).build(limit=limit):
         lines.append(
-            "| {rank} | {symbol} | {company} | {action} | {service} | {price} | {change} | {previous_rank} | {market_cap} | {risk_type} | {growth} | {return_since_rec} | {rec_date} | {return_range} | {drawdown} | {review_due} | {thesis_state} | {data_as_of} | {times} | {notes} | {reason} | {link} |".format(
+            "| {rank} | {decision_id} | {symbol} | {company} | {action} | {service} | {price} | {change} | {previous_rank} | {market_cap} | {risk_type} | {growth} | {return_since_rec} | {rec_date} | {return_range} | {drawdown} | {review_due} | {thesis_state} | {data_as_of} | {times} | {notes} | {reason} | {link} |".format(
                 rank=row.get("rank", ""),
+                decision_id=_short_id(row.get("decision_id")),
                 symbol=row.get("symbol", ""),
                 company=row.get("company_name") or "",
                 action=row.get("action") or "",
