@@ -168,6 +168,19 @@ Before any future execution layer:
 
 The planner is allowed to say "not allowed" even when the CGH decision is bullish.
 
+NEXT ACTIONS AND BENCHMARK GATE
+
+Next-actions reports should combine:
+- the ranked recommendation table
+- current portfolio state
+- protected-symbol rules
+- available cash
+- benchmark performance versus `FXAIX`
+
+If the active sleeve is materially lagging `FXAIX` over enough evaluated decisions, pause new buys and prefer review/research until the active process proves itself again.
+
+Rebalance proposals may only source funds from non-protected active holdings. If rotating from a weaker holding into a stronger one, propose selling the weaker holding down toward its own target size, not touching protected core holdings.
+
 RECOMMENDATION TABLE
 
 Maintain a ranked recommendation table of liked stocks, newest thesis per symbol, ordered from strongest to weakest conviction.

@@ -33,6 +33,9 @@ This repo is not a swing-trader clone. It is meant to evaluate fewer ideas more 
 - `ai_trader/trading_agent/longterm/action_planner.py` - non-executing buy/sell intent planner
 - `ai_trader/trading_agent/longterm/portfolio_state.py` - read-only portfolio snapshot model
 - `ai_trader/trading_agent/longterm/thesis_monitor.py` - thesis review due/broken checks
+- `ai_trader/trading_agent/longterm/next_actions.py` - prioritized next-actions report
+- `ai_trader/trading_agent/longterm/benchmark_guard.py` - FXAIX active-sleeve benchmark gate
+- `ai_trader/trading_agent/longterm/rebalance_planner.py` - dry-run rebalance proposal helper
 - `ai_trader/trading_agent/longterm/capital_alert.py` - capital-needed alert payloads
 - `ai_trader/trading_agent/longterm/report_builder.py` - markdown reports and recommendation table
 - `ai_trader/trading_agent/longterm/configs/roth_ira_profile.json` - default Roth IRA profile
@@ -146,6 +149,16 @@ python scripts/longterm_action_plan.py --symbol NVDA --portfolio-state path\to\p
 ```
 
 This outputs `BUY`, `SELL`, or `NONE` intent plus target value, trade value, cash shortfall, and whether the action is allowed under protected-symbol and cash rules.
+
+## Next Actions Report
+
+Use the recommendation table, benchmark guard, and portfolio snapshot to render the next research/trade-review priorities:
+
+```powershell
+python scripts/longterm_next_actions.py --portfolio-state path\to\portfolio.json --limit 10
+```
+
+The report is still dry-run only. It may pause new buys when evaluated decisions are lagging `FXAIX`, and it may propose reviewing or rebalancing non-protected active holdings.
 
 ## Tests
 

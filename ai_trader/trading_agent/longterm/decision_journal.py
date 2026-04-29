@@ -262,6 +262,26 @@ class LongTermDecisionJournal:
             row["rank"] = index
         return ranked
 
+    def list_review_candidates(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Return recent decisions with full packet/decision JSON for thesis review."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                """
+                SELECT decision_id, timestamp, symbol, company_name, recommendation,
+                       confidence, key_thesis, packet_json, decision_json,
+                       outcome_updated_at
+                FROM longterm_decision_journal
+                ORDER BY timestamp DESC
+                LIMIT ?
+                """,
+                (int(limit),),
+            ).fetchall()
+        finally:
+            conn.close()
+        return [dict(row) for row in rows]
+
     def summarize_benchmark_performance(self) -> dict[str, Any]:
         """Summarize decisions that have both active and benchmark outcomes."""
         conn = sqlite3.connect(self.db_path)

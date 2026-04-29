@@ -159,6 +159,13 @@ Thesis monitoring should track:
 - whether supplied evidence matches invalidation conditions
 - whether the thesis appears healthy or broken
 
+Next-actions reporting should:
+- rank buy candidates from the recommendation table
+- surface held names that need review
+- apply an `FXAIX` benchmark gate before encouraging new buys
+- propose dry-run rebalances only from non-protected holdings
+- keep review/research/trade-intent priorities in one concise report
+
 ### 6. Account Strategy Modes
 
 Support account-aware behavior when it changes the right action:
@@ -237,6 +244,7 @@ Cash should also be an available defensive state for the active sleeve:
 - add portfolio and sizing rules
 - add basic backtest or replay path for long-horizon decisions
 - keep dry-run action planning separate from broker execution until explicitly enabled
+- add next-actions reports before any broker execution path
 
 ### Phase 4
 - widen research depth
