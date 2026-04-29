@@ -1,0 +1,37 @@
+{
+  "project_name": "grok_longterm_trader",
+  "purpose": "Research-first long-term quality-growth active-sleeve trader with dry-run action planning and benchmark discipline.",
+  "execution_state": "research_logging_reporting_dry_run_only",
+  "protected_symbol": "FXAIX",
+  "benchmark_symbol": "FXAIX",
+  "defensive_parking_symbol": "SPY",
+  "primary_docs": [
+    "README.md",
+    "ai_trader/rules/active_rules.txt",
+    "docs/plans/2026-04-28-longterm-trader-foundation-plan.md",
+    "docs/system/README.md",
+    "docs/system/ARCHITECTURE.md",
+    "docs/system/OPERATIONS.md",
+    "docs/system/SAFETY.md"
+  ],
+  "core_code": [
+    "ai_trader/trading_agent/research/research_packet.py",
+    "ai_trader/trading_agent/research/intake.py",
+    "ai_trader/trading_agent/portfolio/portfolio_profile.py",
+    "ai_trader/trading_agent/longterm/research_runner.py",
+    "ai_trader/trading_agent/longterm/decision_journal.py",
+    "ai_trader/trading_agent/longterm/action_planner.py",
+    "ai_trader/trading_agent/longterm/next_actions.py"
+  ],
+  "agent_configs": [
+    "ai_trader/trading_agent/agent/configs/longterm_trading_agent_specs.json",
+    "ai_trader/trading_agent/agent/configs/planning_agent_specs.json",
+    "ai_trader/trading_agent/agent/configs/code_review_agent_specs.json"
+  ],
+  "safety_rules": [
+    "No live trading without explicit approval.",
+    "Never sell, trim, rotate, or rebalance protected symbols.",
+    "Treat capital-needed alerts as informational only.",
+    "Compare active decisions against FXAIX before scaling autonomy."
+  ]
+}
