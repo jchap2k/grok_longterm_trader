@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from longterm.action_planner import ActionPlanner
-from longterm.benchmark_guard import BenchmarkGuard
+from longterm.benchmark_guard import BenchmarkGuard, BenchmarkGuardResult
 from longterm.decision_journal import LongTermDecisionJournal
 from longterm.portfolio_state import PortfolioState
 from longterm.report_builder import RecommendationEnricher, RecommendationTableBuilder
@@ -40,6 +40,7 @@ class NextActionsPlanner:
         *,
         profile: PortfolioProfile,
         portfolio_state: PortfolioState,
+        benchmark_guard_result: BenchmarkGuardResult | None = None,
         limit: int = 10,
     ) -> list[NextAction]:
         recommendations = RecommendationTableBuilder(
@@ -66,6 +67,31 @@ class NextActionsPlanner:
                 reason = planned.reason
                 if row.get("review_due"):
                     reason += " Review due before committing new capital."
+                if benchmark_guard_result and benchmark_guard_result.should_pause_new_buys:
+                    actions.append(
+                        NextAction(
+                            priority=len(actions) + 1,
+                            category="paused_buy_candidate",
+                            symbol=symbol,
+                            action="PAUSED",
+                            reason=benchmark_guard_result.reason,
+                        )
+                    )
+                    continue
+                if planned.capital_needed_alert:
+                    actions.append(
+                        NextAction(
+                            priority=len(actions) + 1,
+                            category="capital_needed",
+                            symbol=symbol,
+                            action="ALERT",
+                            reason=(
+                                f"Planned buy needs ${planned.cash_shortfall:,.2f} additional "
+                                "active-sleeve cash."
+                            ),
+                        )
+                    )
+                    continue
                 actions.append(
                     NextAction(
                         priority=len(actions) + 1,
@@ -106,6 +132,7 @@ def build_next_actions_markdown(
         journal,
         profile=profile,
         portfolio_state=portfolio_state,
+        benchmark_guard_result=guard_result,
         limit=limit,
     )
 

@@ -12,6 +12,7 @@ from longterm.review_cadence import ReviewCadencePolicy
 from longterm.reviewers import (
     BalanceSheetReviewer,
     BusinessStoryReviewer,
+    QualityDurabilityReviewer,
     QualityAtReasonablePriceReviewer,
     ReviewResult,
 )
@@ -48,6 +49,7 @@ class LongTermResearchRunner:
         return [
             BusinessStoryReviewer().review(packet),
             BalanceSheetReviewer().review(packet),
+            QualityDurabilityReviewer().review(packet),
             QualityAtReasonablePriceReviewer().review(packet),
         ]
 
@@ -77,7 +79,7 @@ class LongTermResearchRunner:
                 packet.symbol,
                 packet.company_category.value if packet.company_category else "",
                 packet.thesis_summary,
-                "business first quality valuation balance sheet thesis classification benchmark",
+                "business first quality durability pricing power recurring revenue moat valuation balance sheet thesis classification benchmark",
             ]
         )
         review_results = self._run_deterministic_reviews(packet)

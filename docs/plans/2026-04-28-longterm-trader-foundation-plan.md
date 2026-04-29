@@ -108,6 +108,7 @@ Every candidate should eventually have a structured research packet with:
 First reviewers to implement:
 - `BusinessStoryReviewer`
 - `BalanceSheetReviewer`
+- `QualityDurabilityReviewer`
 - `QualityAtReasonablePriceReviewer`
 
 These deterministic reviewers should feed structured guardrail context into the long-term CGH decision call. They do not replace Grok; they make the Grok committee more grounded.
@@ -121,8 +122,9 @@ Expanded CGH decision preset:
 Use `decision_4` for V1 unless the decision is high-value, borderline, or portfolio-impacting enough to justify extra cost.
 
 Likely later reviewers:
-- `MoatReviewer`
 - `CapitalAllocationReviewer`
+
+`Quality Investing` moves the moat work into V1 through `QualityDurabilityReviewer`. The reviewer should look for the main quality pattern behind the thesis, such as recurring revenue, pricing power, share gains, switching costs, stable oligopoly structure, brand strength, distribution advantage, or high cost to replicate. It should also force the downside case to name the most likely quality trap: cyclicality, disruption, dependency, customer preference shift, hidden leverage, or weak cash conversion.
 
 ### 5. Portfolio Layer
 

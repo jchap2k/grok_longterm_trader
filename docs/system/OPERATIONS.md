@@ -31,6 +31,8 @@ python scripts/longterm_journal.py update-outcome --decision-id <id> --candidate
 
 The recommendation table is derived from `DecisionJournal` rows through `RecommendationTableBuilder`. Volatile market/fundamental fields should be enriched at report time and cached daily; do not write transient enrichment directly into the journal unless it becomes part of a durable decision record.
 
+Review status can be layered onto the same table with `ReviewStatusBuilder`. It reads stored packet JSON from the journal, applies the configured review cadence through `ThesisMonitor`, and returns `review_due`, `days_since_review`, and `thesis_state` fields for reports.
+
 ## Dry-Run Action Plan
 
 ```powershell
@@ -42,6 +44,12 @@ python scripts/longterm_action_plan.py --symbol NVDA --portfolio-state path\to\p
 ```powershell
 python scripts/longterm_next_actions.py --portfolio-state path\to\portfolio.json --limit 10
 ```
+
+The next-actions report is still dry-run only. It evaluates the FXAIX benchmark gate before surfacing new buys:
+
+- If the active sleeve is not clearing the benchmark guard, new buy candidates are marked `paused_buy_candidate`.
+- If a buy is attractive but active-sleeve cash is short, it is marked `capital_needed` so an email or dashboard can later notify the user.
+- Protected symbols such as `FXAIX` remain excluded from sell, trim, rebalance, and rotation logic.
 
 ## Grok Project Review
 

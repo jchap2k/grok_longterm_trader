@@ -130,3 +130,69 @@ class QualityAtReasonablePriceReviewer:
             support=support,
             objections=objections,
         )
+
+
+class QualityDurabilityReviewer:
+    """Look for quality-investing patterns and common quality traps."""
+
+    QUALITY_PATTERNS = (
+        "recurring revenue",
+        "installed base",
+        "pricing power",
+        "market share",
+        "share gains",
+        "switching costs",
+        "stable oligopoly",
+        "rational competition",
+        "brand strength",
+        "distribution advantage",
+        "cost to replicate",
+        "strong free cash flow",
+    )
+    QUALITY_TRAPS = (
+        "cyclical",
+        "high leverage",
+        "dependency",
+        "one customer",
+        "technological disruption",
+        "customer preference",
+        "good-enough",
+        "price-war",
+        "weak cash conversion",
+        "fragmented",
+    )
+
+    def review(self, packet: ResearchPacket) -> ReviewResult:
+        text = " ".join(
+            [
+                packet.business_summary,
+                packet.thesis_summary,
+                packet.primary_growth_driver,
+                packet.industry_context,
+                packet.balance_sheet_assessment,
+            ]
+        )
+        score = 50.0
+        support: list[str] = []
+        objections: list[str] = []
+
+        for pattern in self.QUALITY_PATTERNS:
+            if pattern in text.lower():
+                score += 8
+                support.append(f"Quality pattern present: {pattern}.")
+
+        for trap in self.QUALITY_TRAPS:
+            if trap in text.lower():
+                score -= 10
+                objections.append(f"Quality trap risk present: {trap}.")
+
+        if not support:
+            objections.append("No durable quality pattern is clearly identified.")
+
+        return ReviewResult(
+            reviewer="QualityDurabilityReviewer",
+            score=max(0.0, min(score, 100.0)),
+            passed=score >= 70 and bool(support),
+            support=support,
+            objections=objections,
+        )

@@ -21,7 +21,7 @@ Defines the long-term CGH domain roles and presets:
 - `decision_6`: expanded valuation and portfolio committee.
 
 `longterm/reviewers.py`
-Deterministic business-story, balance-sheet, and quality-at-reasonable-price reviewers. These do not make final decisions; they ground the CGH context.
+Deterministic business-story, balance-sheet, quality-durability, and quality-at-reasonable-price reviewers. These do not make final decisions; they ground the CGH context. The quality-durability reviewer reflects the `Quality Investing` notes by naming durable quality patterns and common quality traps.
 
 `longterm/review_cadence.py`
 Assigns review cadence and expected holding horizon by company category and risk language.
@@ -35,6 +35,9 @@ Creates a markdown decision report with benchmark outcomes and a Motley-Fool-sty
 `longterm/recommendation_enrichment.py`
 Provides `CachedRecommendationEnricher`, a daily cache wrapper for recommendation-table enrichment such as current price, daily change, market cap, revenue growth, estimated return range, and max drawdown. This keeps external data calls out of core journal storage and avoids repeated fetches during report generation.
 
+`longterm/review_status.py`
+Builds per-symbol thesis review status from journal review candidates. It rehydrates the stored research packet, applies `ThesisMonitor`, and returns review-due/thesis-state fields for recommendation tables and next-action reports without mutating the journal.
+
 `longterm/action_planner.py`
 Converts a structured decision into a non-executing proposed `BUY`, `SELL`, or `NONE` intent.
 
@@ -42,20 +45,20 @@ Converts a structured decision into a non-executing proposed `BUY`, `SELL`, or `
 Loads read-only portfolio snapshots and separates active versus protected holdings.
 
 `longterm/next_actions.py`
-Combines recommendation table builder output, portfolio state, benchmark guard, and dry-run planner into a prioritized next-actions report.
+Combines recommendation table builder output, portfolio state, benchmark guard, and dry-run planner into a prioritized next-actions report. When the benchmark guard pauses new buys, buy candidates are shown as paused rather than actionable. If a high-conviction idea lacks active-sleeve cash, the report surfaces a `capital_needed` alert instead of pretending the buy can proceed.
 
 `longterm/benchmark_guard.py`
 Pauses new active buys when evaluated results lag `FXAIX` enough to question the active process.
 
 `longterm/rebalance_planner.py`
-Proposes dry-run rotations from weaker non-protected holdings into stronger candidates.
+Proposes dry-run rotations from weaker non-protected holdings into stronger candidates. It honors the benchmark guard before suggesting rotations into new buy candidates.
 
 `longterm/thesis_monitor.py`
 Checks review due dates and whether current evidence matches invalidation conditions.
 
 ## Decision Flow
 
-Raw idea -> `ResearchPacket` -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment -> dry-run action plan -> next-actions report.
+Raw idea -> `ResearchPacket` -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> benchmark guard -> dry-run action plan -> next-actions report.
 
 ## Data Flow Safety
 

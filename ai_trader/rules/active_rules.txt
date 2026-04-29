@@ -58,6 +58,8 @@ Every serious candidate should eventually have:
 - business summary
 - thesis summary
 - primary growth driver
+- primary quality pattern
+- primary quality trap risk
 - industry / category context
 - balance-sheet assessment
 - quality score
@@ -85,6 +87,28 @@ Quality is stronger when:
 - return on capital is strong
 - the company appears to have some durable advantage
 - the business is gaining share, strengthening category position, or scaling well
+- cash conversion supports reported earnings
+- growth comes from multiple sources rather than one fragile driver
+
+QUALITY DURABILITY RULES
+
+Before a buy or add, name the quality pattern that makes the business worth long-term ownership:
+- recurring revenue or installed-base economics
+- pricing power
+- market-share gains
+- stable oligopoly or niche mini-monopoly
+- high switching costs
+- brand strength that changes customer behavior
+- distribution, culture, or cost-to-replicate advantages
+
+Also name the most likely quality trap:
+- cyclicality
+- technological disruption
+- dependency on one customer, supplier, platform, policy, or unstable industry structure
+- customer preference shifts or good-enough cheaper alternatives
+- hidden leverage, lease leverage, weak cash conversion, or accounting quality
+
+If no durable quality pattern can be identified, default to PASS or require more research.
 
 VALUATION RULES
 

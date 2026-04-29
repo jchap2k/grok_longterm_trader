@@ -19,10 +19,14 @@
     "ai_trader/trading_agent/research/intake.py",
     "ai_trader/trading_agent/portfolio/portfolio_profile.py",
     "ai_trader/trading_agent/longterm/research_runner.py",
+    "ai_trader/trading_agent/longterm/reviewers.py",
     "ai_trader/trading_agent/longterm/decision_journal.py",
     "ai_trader/trading_agent/longterm/report_builder.py",
     "ai_trader/trading_agent/longterm/recommendation_enrichment.py",
+    "ai_trader/trading_agent/longterm/review_status.py",
     "ai_trader/trading_agent/longterm/action_planner.py",
+    "ai_trader/trading_agent/longterm/benchmark_guard.py",
+    "ai_trader/trading_agent/longterm/rebalance_planner.py",
     "ai_trader/trading_agent/longterm/next_actions.py"
   ],
   "agent_configs": [

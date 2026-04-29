@@ -57,6 +57,8 @@ def build_markdown_report(
     journal: LongTermDecisionJournal,
     *,
     limit: int = 20,
+    enricher: RecommendationEnricher | None = None,
+    review_status_by_symbol: dict[str, dict] | None = None,
 ) -> str:
     """Build a concise markdown report from the long-term decision journal."""
     summary = journal.summarize_benchmark_performance()
@@ -77,7 +79,11 @@ def build_markdown_report(
         "|---:|---|---|---|---|---:|---:|---:|---:|---|---:|---:|---|---:|---:|---|---|---|---:|---:|---|---|",
     ]
 
-    for row in RecommendationTableBuilder(journal).build(limit=limit):
+    for row in RecommendationTableBuilder(
+        journal,
+        enricher=enricher,
+        review_status_by_symbol=review_status_by_symbol,
+    ).build(limit=limit):
         lines.append(
             "| {rank} | {symbol} | {company} | {action} | {service} | {price} | {change} | {previous_rank} | {market_cap} | {risk_type} | {growth} | {return_since_rec} | {rec_date} | {return_range} | {drawdown} | {review_due} | {thesis_state} | {data_as_of} | {times} | {notes} | {reason} | {link} |".format(
                 rank=row.get("rank", ""),

@@ -24,13 +24,18 @@ def test_book_principles_provider_returns_relevant_lines_from_notes(tmp_path):
         "Separate business quality from valuation discipline.",
         encoding="utf-8",
     )
+    (notes_dir / "quality_investing_notes.md").write_text(
+        "Quality investing favors durable returns on capital, recurring revenue, and pricing power.",
+        encoding="utf-8",
+    )
 
     provider = BookPrinciplesProvider(notes_dir=notes_dir)
-    text = provider.recall("classification valuation balance sheet", max_lines=4)
+    text = provider.recall("classification valuation balance sheet pricing power", max_lines=5)
 
     assert "classify companies" in text
     assert "balance-sheet quality" in text
     assert "valuation discipline" in text
+    assert "pricing power" in text
 
 
 def test_book_principles_provider_has_safe_fallback_for_missing_notes(tmp_path):

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
+from longterm.benchmark_guard import BenchmarkGuardResult
 from longterm.portfolio_state import PortfolioState
 from portfolio.portfolio_profile import PortfolioProfile
 
@@ -27,6 +28,7 @@ class RebalancePlanner:
         *,
         profile: PortfolioProfile,
         portfolio_state: PortfolioState,
+        benchmark_guard_result: BenchmarkGuardResult | None = None,
         min_rank_gap: int = 3,
     ) -> RebalanceProposal:
         if not recommendations:
@@ -37,6 +39,8 @@ class RebalancePlanner:
         best_symbol = str(best.get("symbol", "")).upper()
         if portfolio_state.holding_value(best_symbol) > 0:
             return RebalanceProposal(False, "", best_symbol, 0.0, "Top idea is already held.")
+        if benchmark_guard_result and benchmark_guard_result.should_pause_new_buys:
+            return RebalanceProposal(False, "", best_symbol, 0.0, benchmark_guard_result.reason)
 
         weakest_symbol = ""
         weakest_rank = -1

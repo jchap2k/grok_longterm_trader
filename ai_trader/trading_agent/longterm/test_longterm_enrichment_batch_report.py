@@ -131,6 +131,34 @@ def test_build_markdown_report_includes_benchmark_summary(tmp_path):
     assert "| AAPL | BUY | 82 | 5.0% |" in report
 
 
+def test_build_markdown_report_can_include_derived_review_status(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    journal.record_decision(
+        create_research_packet_from_idea(
+            {
+                "symbol": "MSFT",
+                "benchmark_symbol": "FXAIX",
+                "review_cadence": "monthly",
+            }
+        ),
+        decision={"recommendation": "BUY", "confidence": 82, "suggested_size_pct": 5},
+    )
+
+    report = build_markdown_report(
+        journal,
+        review_status_by_symbol={
+            "MSFT": {
+                "review_due": True,
+                "thesis_state": "healthy",
+                "days_since_review": 40,
+            }
+        },
+    )
+
+    assert "| 1 | MSFT |" in report
+    assert "| True | healthy |" in report
+
+
 def test_recommendation_table_keeps_latest_ranked_candidates_with_links(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     journal.record_decision(

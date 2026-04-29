@@ -8,6 +8,7 @@ from longterm.review_cadence import ReviewCadencePolicy
 from longterm.reviewers import (
     BalanceSheetReviewer,
     BusinessStoryReviewer,
+    QualityDurabilityReviewer,
     QualityAtReasonablePriceReviewer,
 )
 from portfolio.portfolio_profile import PortfolioProfile
@@ -69,6 +70,38 @@ def test_quality_at_reasonable_price_requires_quality_and_valuation():
     assert attractive_result.passed is True
     assert expensive_result.score < attractive_result.score
     assert expensive_result.passed is False
+
+
+def test_quality_durability_reviewer_rewards_patterns_and_flags_quality_traps():
+    reviewer = QualityDurabilityReviewer()
+    durable = create_research_packet_from_idea(
+        {
+            "symbol": "MSFT",
+            "business_summary": "Cloud and software platform with recurring revenue and high switching costs.",
+            "thesis_summary": "Pricing power, installed base expansion, and market share gains can compound.",
+            "industry_context": "Stable oligopoly with durable enterprise demand and rational competition.",
+            "primary_growth_driver": "Recurring revenue and cloud share gains",
+            "balance_sheet_assessment": "Net cash and strong free cash flow.",
+        }
+    )
+    fragile = create_research_packet_from_idea(
+        {
+            "symbol": "XYZ",
+            "business_summary": "Cyclical hardware vendor with high leverage and dependency on one customer.",
+            "thesis_summary": "Management hopes demand recovers before cheaper good-enough substitutes arrive.",
+            "industry_context": "Fragmented price-war market exposed to technological disruption.",
+            "balance_sheet_assessment": "High leverage and weak cash conversion.",
+        }
+    )
+
+    durable_result = reviewer.review(durable)
+    fragile_result = reviewer.review(fragile)
+
+    assert durable_result.passed is True
+    assert any("pricing power" in item.lower() for item in durable_result.support)
+    assert fragile_result.passed is False
+    assert fragile_result.score < durable_result.score
+    assert any("dependency" in item.lower() for item in fragile_result.objections)
 
 
 def test_review_cadence_policy_varies_by_company_category_and_risk():

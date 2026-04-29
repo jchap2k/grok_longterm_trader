@@ -8,6 +8,7 @@ from pathlib import Path
 DEFAULT_NOTE_FILES = [
     "one_up_on_wall_street_notes.md",
     "the_little_book_that_still_beats_the_market_notes.md",
+    "quality_investing_notes.md",
     "longterm_trader_research_direction.md",
     "longterm_reframing_of_existing_swing_books.md",
 ]
