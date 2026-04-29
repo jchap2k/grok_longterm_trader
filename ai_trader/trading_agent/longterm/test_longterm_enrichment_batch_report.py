@@ -8,10 +8,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from longterm.batch_intake import load_idea_batch
 from longterm.cli import build_parser as build_research_parser, create_packets_from_args
 from longterm.decision_journal import LongTermDecisionJournal
+from longterm.email_sender import EmailSettings, SmtpEmailSender, load_email_settings
 from longterm.journal_cli import build_parser as build_journal_parser, run_cli as run_journal_cli
 from longterm.market_enrichment import enrich_prices
 from longterm.recommendation_enrichment import CachedRecommendationEnricher
-from longterm.capital_alert import build_capital_needed_alert
+from longterm.capital_alert import build_capital_needed_alert, build_capital_needed_email
 from longterm.report_builder import RecommendationTableBuilder, build_markdown_report
 from portfolio.portfolio_profile import PortfolioProfile
 from research.intake import create_research_packet_from_idea
@@ -40,6 +41,37 @@ class FakeRecommendationEnricher:
             "estimated_max_drawdown_pct": -42,
             "data_as_of": "2026-04-29",
         }
+
+
+class FakeSmtp:
+    instances = []
+
+    def __init__(self, host, port, timeout):
+        self.host = host
+        self.port = port
+        self.timeout = timeout
+        self.logged_in = None
+        self.sent = None
+        self.started_tls = False
+        FakeSmtp.instances.append(self)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def ehlo(self):
+        return None
+
+    def starttls(self):
+        self.started_tls = True
+
+    def login(self, username, password):
+        self.logged_in = (username, password)
+
+    def sendmail(self, from_addr, to_addrs, message):
+        self.sent = (from_addr, to_addrs, message)
 
 
 def test_enrich_prices_fetches_candidate_and_benchmark_prices():
@@ -348,6 +380,138 @@ def test_capital_needed_alert_uses_ranked_recommendation_table(tmp_path):
     assert alert.top_symbol == "NVDA"
     assert alert.estimated_capital_needed == 2220.0
     assert "https://example.com/nvda" in alert.markdown
+
+
+def test_capital_needed_email_payload_is_informational_and_traceable(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    decision_id = journal.record_decision(
+        create_research_packet_from_idea({"symbol": "NVDA", "benchmark_symbol": "FXAIX"}),
+        decision={
+            "recommendation": "BUY",
+            "confidence": 91,
+            "suggested_size_pct": 8,
+            "key_thesis": "AI infrastructure leader.",
+            "info_link": "https://example.com/nvda",
+        },
+    )
+
+    email = build_capital_needed_email(
+        journal,
+        active_sleeve_value=34000,
+        available_cash=500,
+        recipient_email="user@example.com",
+    )
+
+    assert email.should_send is True
+    assert email.recipient_email == "user@example.com"
+    assert "Capital needed" in email.subject
+    assert "NVDA" in email.subject
+    assert "informational" in email.text_body.lower()
+    assert "do not automatically deposit" in email.text_body.lower()
+    assert decision_id[:8] in email.html_body
+    assert "https://example.com/nvda" in email.html_body
+    assert email.metadata["top_symbol"] == "NVDA"
+    assert email.metadata["estimated_capital_needed"] == 2220.0
+
+
+def test_smtp_email_sender_skips_when_disabled():
+    sender = SmtpEmailSender(smtp_factory=FakeSmtp)
+    email = build_capital_needed_email(
+        LongTermDecisionJournal(),
+        active_sleeve_value=34000,
+        available_cash=5000,
+        recipient_email="user@example.com",
+    )
+
+    result = sender.send(
+        email,
+        EmailSettings(
+            enabled=False,
+            email_to="user@example.com",
+            email_from="bot@example.com",
+            username="smtp-user",
+            password="smtp-pass",
+        ),
+    )
+
+    assert result.sent is False
+    assert result.reason == "Email notifications disabled."
+
+
+def test_smtp_email_sender_uses_brevo_tls_settings(tmp_path):
+    FakeSmtp.instances = []
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    journal.record_decision(
+        create_research_packet_from_idea({"symbol": "NVDA", "benchmark_symbol": "FXAIX"}),
+        decision={"recommendation": "BUY", "confidence": 91, "suggested_size_pct": 8},
+    )
+    email = build_capital_needed_email(
+        journal,
+        active_sleeve_value=34000,
+        available_cash=500,
+        recipient_email="user@example.com",
+    )
+
+    result = SmtpEmailSender(smtp_factory=FakeSmtp).send(
+        email,
+        EmailSettings(
+            enabled=True,
+            email_to="user@example.com",
+            email_from="bot@example.com",
+            username="abc123@smtp-brevo.com",
+            password="xsmtpsib-example",
+            smtp_host="smtp-relay.brevo.com",
+            smtp_port=587,
+        ),
+    )
+
+    smtp = FakeSmtp.instances[0]
+    assert result.sent is True
+    assert smtp.host == "smtp-relay.brevo.com"
+    assert smtp.port == 587
+    assert smtp.started_tls is True
+    assert smtp.logged_in == ("abc123@smtp-brevo.com", "xsmtpsib-example")
+    assert smtp.sent[0] == "bot@example.com"
+    assert smtp.sent[1] == ["user@example.com"]
+    assert "Capital needed" in smtp.sent[2]
+    assert "text/html" in smtp.sent[2]
+
+
+def test_load_email_settings_uses_simple_bot_brevo_keys(tmp_path):
+    path = tmp_path / "email_notifications.json"
+    path.write_text(
+        json.dumps(
+            {
+                "email_notifications": True,
+                "email_to": "user@example.com",
+                "email_from": "bot@example.com",
+                "email_username": "abc123@smtp-brevo.com",
+                "email_password": "xsmtpsib-example",
+                "email_smtp_host": "smtp-relay.brevo.com",
+                "email_smtp_port": 587,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_email_settings(path)
+
+    assert settings.enabled is True
+    assert settings.email_to == "user@example.com"
+    assert settings.email_from == "bot@example.com"
+    assert settings.username == "abc123@smtp-brevo.com"
+    assert settings.password == "xsmtpsib-example"
+    assert settings.smtp_host == "smtp-relay.brevo.com"
+    assert settings.smtp_port == 587
+
+
+def test_load_email_settings_defaults_to_trading_agent_config():
+    settings = load_email_settings()
+
+    assert settings.email_to == "jchap2k.swingtrader@gmail.com"
+    assert settings.email_from == "jchap2k.swingtrader@gmail.com"
+    assert settings.smtp_host == "smtp-relay.brevo.com"
+    assert settings.smtp_port == 587
 
 
 def test_journal_cli_report_outputs_markdown(tmp_path, capsys):

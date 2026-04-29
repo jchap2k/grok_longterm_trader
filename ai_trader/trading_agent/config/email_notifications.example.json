@@ -1,0 +1,14 @@
+{
+  "email_notifications": false,
+  "_comment_email": "Send informational capital-needed alerts. Keep false until explicitly enabled.",
+  "email_to": "jchap2k.swingtrader@gmail.com",
+  "_comment_email_to": "Recipient for long-term trader alerts. Reusing the swing-trader alert inbox is okay.",
+  "email_from": "jchap2k.swingtrader@gmail.com",
+  "_comment_email_from": "Verified Brevo From address. This can match email_to.",
+  "email_username": "",
+  "_comment_email_username": "Brevo SMTP login, for example abc123@smtp-brevo.com. Do not commit real credentials.",
+  "email_password": "",
+  "_comment_email_password": "Brevo SMTP key, starts with xsmtpsib-. Do not commit real credentials.",
+  "email_smtp_host": "smtp-relay.brevo.com",
+  "email_smtp_port": 587
+}

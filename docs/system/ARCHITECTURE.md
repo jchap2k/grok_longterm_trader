@@ -35,6 +35,12 @@ Creates a markdown decision report with benchmark outcomes and a Motley-Fool-sty
 `longterm/recommendation_enrichment.py`
 Provides `CachedRecommendationEnricher`, a daily cache wrapper for recommendation-table enrichment such as current price, daily change, market cap, revenue growth, estimated return range, and max drawdown. This keeps external data calls out of core journal storage and avoids repeated fetches during report generation.
 
+`longterm/capital_alert.py`
+Builds informational capital-needed alerts and provider-agnostic email payloads when high-conviction ideas exceed available active-sleeve cash. These payloads are not instructions to deposit funds and do not execute trades.
+
+`longterm/email_sender.py`
+Provides a Brevo-compatible SMTP sender and config loader. It reads `ai_trader/trading_agent/config/email_notifications.json` by default, is disabled unless the local ignored config enables it, and can reuse the swing-trader alert email address.
+
 `longterm/review_status.py`
 Builds per-symbol thesis review status from journal review candidates. It rehydrates the stored research packet, applies `ThesisMonitor`, and returns review-due/thesis-state fields for recommendation tables, markdown reports, and next-action reports without mutating the journal.
 

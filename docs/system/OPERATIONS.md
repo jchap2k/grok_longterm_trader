@@ -51,6 +51,18 @@ The next-actions report is still dry-run only. It evaluates the FXAIX benchmark 
 - If a buy is attractive but active-sleeve cash is short, it is marked `capital_needed` so an email or dashboard can later notify the user.
 - Protected symbols such as `FXAIX` remain excluded from sell, trim, rebalance, and rotation logic.
 
+## Capital-Needed Email Payloads
+
+Capital-needed emails are informational only. The long-term trader can build provider-agnostic email payloads and send them through a Brevo-compatible SMTP sender, but email sending should remain off until explicitly enabled in a local ignored config file.
+
+Use this template:
+
+```text
+ai_trader/trading_agent/config/email_notifications.example.json
+```
+
+Copy it locally to `ai_trader/trading_agent/config/email_notifications.json` and fill in the Brevo SMTP login/key if you want delivery. It is fine to reuse `jchap2k.swingtrader@gmail.com` as both recipient and verified sender.
+
 ## Grok Project Review
 
 The repo-safe project config is:

@@ -15,6 +15,16 @@ class CapitalNeededAlert:
     markdown: str
 
 
+@dataclass(frozen=True)
+class CapitalNeededEmail:
+    should_send: bool
+    recipient_email: str
+    subject: str
+    text_body: str
+    html_body: str
+    metadata: dict
+
+
 def build_capital_needed_alert(
     journal: LongTermDecisionJournal,
     *,
@@ -64,3 +74,96 @@ def build_capital_needed_alert(
         )
 
     return CapitalNeededAlert(True, top["symbol"], needed, "\n".join(lines) + "\n")
+
+
+def build_capital_needed_email(
+    journal: LongTermDecisionJournal,
+    *,
+    active_sleeve_value: float,
+    available_cash: float,
+    recipient_email: str,
+    min_confidence: int = 85,
+    limit: int = 5,
+) -> CapitalNeededEmail:
+    """Build a provider-agnostic email payload for later Brevo delivery."""
+    alert = build_capital_needed_alert(
+        journal,
+        active_sleeve_value=active_sleeve_value,
+        available_cash=available_cash,
+        min_confidence=min_confidence,
+        limit=limit,
+    )
+    if not alert.should_alert:
+        return CapitalNeededEmail(False, recipient_email, "", "", "", {})
+
+    rows = [
+        row
+        for row in journal.list_recommendation_table(limit=limit)
+        if int(row.get("confidence") or 0) >= min_confidence
+    ]
+    subject = (
+        f"Capital needed: {alert.top_symbol} "
+        f"needs ${alert.estimated_capital_needed:,.2f} active-sleeve cash"
+    )
+    disclaimer = (
+        "This alert is informational only. It is not an instruction to deposit funds, "
+        "and the system must not automatically deposit money. Do not automatically deposit "
+        "funds or sell protected holdings."
+    )
+    text_body = "\n".join([disclaimer, "", alert.markdown])
+    html_rows = "\n".join(
+        "<tr>"
+        f"<td>{row.get('rank', '')}</td>"
+        f"<td>{_short_id(row.get('decision_id'))}</td>"
+        f"<td>{row.get('symbol', '')}</td>"
+        f"<td>{row.get('confidence', '')}</td>"
+        f"<td>{row.get('suggested_size_pct') or ''}%</td>"
+        f"<td>{_escape_html(row.get('reason') or '')}</td>"
+        f"<td>{_format_link(row.get('info_link') or '')}</td>"
+        "</tr>"
+        for row in rows
+    )
+    html_body = (
+        "<html><body>"
+        f"<p>{_escape_html(disclaimer)}</p>"
+        f"<p><strong>Estimated additional active-sleeve cash needed:</strong> "
+        f"${alert.estimated_capital_needed:,.2f}</p>"
+        "<table>"
+        "<thead><tr><th>Rank</th><th>Decision ID</th><th>Symbol</th>"
+        "<th>Confidence</th><th>Target Size</th><th>Reason</th><th>Link</th></tr></thead>"
+        f"<tbody>{html_rows}</tbody>"
+        "</table>"
+        "</body></html>"
+    )
+    return CapitalNeededEmail(
+        True,
+        recipient_email,
+        subject,
+        text_body,
+        html_body,
+        {
+            "top_symbol": alert.top_symbol,
+            "estimated_capital_needed": alert.estimated_capital_needed,
+            "candidate_count": len(rows),
+        },
+    )
+
+
+def _short_id(value: str | None) -> str:
+    return (value or "")[:8]
+
+
+def _escape_html(value: str) -> str:
+    return (
+        value.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def _format_link(value: str) -> str:
+    if not value:
+        return ""
+    escaped = _escape_html(value)
+    return f'<a href="{escaped}">{escaped}</a>'
