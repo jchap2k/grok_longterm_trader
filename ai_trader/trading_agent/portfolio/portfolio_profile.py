@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List
 
 
@@ -37,3 +39,8 @@ class PortfolioProfile:
         payload = asdict(self)
         payload["protected_capital"] = self.protected_capital
         return payload
+
+    @classmethod
+    def from_file(cls, path: str | Path) -> "PortfolioProfile":
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        return cls(**payload)

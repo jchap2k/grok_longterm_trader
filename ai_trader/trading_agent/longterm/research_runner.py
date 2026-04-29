@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from agent.utils.cheap_grok_heavy import CheapGrokHeavy
 from longterm.book_principles import BookPrinciplesProvider
 from longterm.decision_journal import LongTermDecisionJournal
+from longterm.decision_parser import parse_decision_response
 from research.research_packet import ResearchPacket
 
 
@@ -131,7 +131,7 @@ class LongTermResearchRunner:
             supporting_evidence=supporting_evidence,
             risk_flags=risk_flags,
         )
-        decision = json.loads(raw_response)
+        decision = parse_decision_response(raw_response)
         self.decision_journal = LongTermDecisionJournal(journal_db_path)
         return self.decision_journal.record_decision(
             packet,

@@ -1,0 +1,11 @@
+{
+  "account_strategy_mode": "roth_ira",
+  "total_account_value": 68000,
+  "tradable_capital": 34000,
+  "protected_symbols": [
+    "FXAIX"
+  ],
+  "benchmark_symbol": "FXAIX",
+  "defensive_parking_symbol": "SPY",
+  "cash_symbol": "CASH"
+}

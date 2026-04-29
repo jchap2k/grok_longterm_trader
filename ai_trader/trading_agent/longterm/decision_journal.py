@@ -169,3 +169,41 @@ class LongTermDecisionJournal:
         if row is None:
             raise KeyError(f"Decision not found: {decision_id}")
         return dict(row)
+
+    def summarize_benchmark_performance(self) -> dict[str, Any]:
+        """Summarize decisions that have both active and benchmark outcomes."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                """
+                SELECT candidate_return_pct, benchmark_return_pct, excess_return_pct
+                FROM longterm_decision_journal
+                WHERE candidate_return_pct IS NOT NULL
+                  AND benchmark_return_pct IS NOT NULL
+                  AND excess_return_pct IS NOT NULL
+                """
+            ).fetchall()
+        finally:
+            conn.close()
+
+        if not rows:
+            return {
+                "evaluated_decisions": 0,
+                "average_candidate_return_pct": 0.0,
+                "average_benchmark_return_pct": 0.0,
+                "average_excess_return_pct": 0.0,
+                "decisions_beating_benchmark": 0,
+            }
+
+        count = len(rows)
+        candidate_returns = [float(row["candidate_return_pct"]) for row in rows]
+        benchmark_returns = [float(row["benchmark_return_pct"]) for row in rows]
+        excess_returns = [float(row["excess_return_pct"]) for row in rows]
+        return {
+            "evaluated_decisions": count,
+            "average_candidate_return_pct": round(sum(candidate_returns) / count, 4),
+            "average_benchmark_return_pct": round(sum(benchmark_returns) / count, 4),
+            "average_excess_return_pct": round(sum(excess_returns) / count, 4),
+            "decisions_beating_benchmark": sum(1 for value in excess_returns if value > 0),
+        }
