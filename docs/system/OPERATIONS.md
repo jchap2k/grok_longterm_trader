@@ -177,6 +177,12 @@ Cycle result JSON includes operator artifacts:
 - `capital_alert_markdown` and `capital_alert_generated`
 - `rebalance_markdown` and `rebalance_generated`
 
+Rebalance markdown is an explanatory dry-run artifact. It includes the funding
+source, target, proposed sell value, source and target ranks, rank gap, source
+current value, source target value, suggested target size, decision IDs when
+available, and the benchmark gate reason. Protected holdings remain excluded as
+funding sources.
+
 Current limitations of this first cycle:
 - still dry-run only
 - recommendation, next-actions, and capital-alert outputs are returned as markdown strings in the cycle result JSON

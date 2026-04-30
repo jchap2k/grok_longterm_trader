@@ -61,6 +61,7 @@ Additional continuation work completed on 2026-04-30:
 - added a dry-run long-term scheduler wrapper that repeatedly calls the one-cycle orchestration while reloading profile/config/portfolio state each run
 - added richer operator artifacts: idea provenance, packet completeness warnings, decision refs, generated-output flags, dry-run capital-alert markdown, and scheduler summary JSON output
 - added dry-run rebalance proposal markdown into cycle and scheduler artifacts
+- refined rebalance proposals with auditable explanation fields: source/target ranks, rank gap, source current/target value, suggested target size, decision IDs, and benchmark gate reason
 
 What those changes accomplished:
 
@@ -184,7 +185,7 @@ What those changes accomplished:
   - `rebalance_markdown`
   - `rebalance_generated`
 - Capital-alert markdown is dry-run only and uses the existing capital alert suppression logic.
-- Rebalance markdown is dry-run only and uses the existing `RebalancePlanner`; protected holdings remain excluded.
+- Rebalance markdown is dry-run only and uses the existing `RebalancePlanner`; protected holdings remain excluded. It now includes source/target rank context, sell-down sizing details, decision IDs when recommendation rows provide them, and the benchmark gate reason.
 - Scheduler can write the structured JSON summary to disk:
   - `python scripts/run_longterm_scheduler.py --run-once --summary-output path\to\scheduler_summary.json ...`
 
@@ -402,7 +403,7 @@ What is already done in Phase 1:
 - scheduler summary output can now be written to disk
 
 What is not done yet in Phase 1:
-- fuller ranking/reporting maturity and rebalance scoring refinements
+- fuller ranking/reporting maturity and review-status-aware rebalance scoring refinements
 
 Likely implementation seams:
 - add a long-term scheduler entrypoint or orchestration module under `ai_trader/trading_agent/longterm/`
@@ -667,5 +668,5 @@ Once the scheduler/orchestration layer is built and validated, the next likely b
 1. Improve recommendation-table ranking/reporting maturity.
 2. Strengthen thesis-monitor and review workflow.
 3. Refine next-actions / rebalance decision quality.
-4. Refine rebalance scoring and operator explanations.
+4. Add review-status-aware rebalance scoring and operator explanations.
 5. Only then start a true live-readiness design review.

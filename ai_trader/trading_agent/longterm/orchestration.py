@@ -259,10 +259,26 @@ def _packet_completeness_warnings(packet) -> list[str]:
 def _rebalance_markdown(proposal) -> str:
     if not proposal.should_rebalance:
         return ""
+    rows = [
+        ("Source current value", f"${proposal.source_current_value:,.2f}"),
+        ("Source target value", f"${proposal.source_target_value:,.2f}"),
+        ("Source rank", str(proposal.source_rank)),
+        ("Target rank", str(proposal.target_rank)),
+        ("Rank gap", str(proposal.rank_gap)),
+        ("Target suggested size", f"{proposal.target_suggested_size_pct:.1f}%"),
+        ("Source decision ID", proposal.source_decision_id or "n/a"),
+        ("Target decision ID", proposal.target_decision_id or "n/a"),
+        ("Benchmark gate", proposal.benchmark_guard_reason or "n/a"),
+    ]
+    details = "\n".join(f"| {label} | {value} |" for label, value in rows)
     return (
         "# Dry-Run Rebalance Proposal\n\n"
         f"Fund from: {proposal.fund_from_symbol}\n\n"
         f"Target: {proposal.target_symbol}\n\n"
         f"Proposed sell value: ${proposal.proposed_sell_value:,.2f}\n\n"
-        f"Reason: {proposal.reason}\n"
+        f"Reason: {proposal.reason}\n\n"
+        "## Details\n\n"
+        "| Field | Value |\n"
+        "|---|---:|\n"
+        f"{details}\n"
     )

@@ -403,6 +403,9 @@ def test_cycle_can_build_rebalance_markdown(tmp_path):
     assert "# Dry-Run Rebalance Proposal" in result.rebalance_markdown
     assert "AAPL" in result.rebalance_markdown
     assert "NVDA" in result.rebalance_markdown
+    assert "| Source current value | $5,000.00 |" in result.rebalance_markdown
+    assert "| Source target value | $1,400.00 |" in result.rebalance_markdown
+    assert "| Rank gap | 7 |" in result.rebalance_markdown
 
 
 def test_orchestration_cli_loads_idea_file_and_prints_summary(tmp_path, capsys):

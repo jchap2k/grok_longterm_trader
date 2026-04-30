@@ -64,12 +64,93 @@ def test_rebalance_planner_prefers_better_ranked_candidate_over_weaker_holding()
         recommendations,
         profile=profile,
         portfolio_state=state,
+        benchmark_guard_result=BenchmarkGuard().evaluate(
+            {
+                "evaluated_decisions": 5,
+                "average_excess_return_pct": 2.0,
+                "decisions_beating_benchmark": 4,
+            }
+        ),
     )
 
     assert proposal.should_rebalance is True
     assert proposal.fund_from_symbol == "AAPL"
     assert proposal.target_symbol == "NVDA"
     assert proposal.proposed_sell_value == 3640.0
+    assert proposal.source_current_value == 5000.0
+    assert proposal.source_target_value == 1360.0
+    assert proposal.source_rank == 8
+    assert proposal.target_rank == 1
+    assert proposal.rank_gap == 7
+    assert proposal.target_suggested_size_pct == 8.0
+    assert proposal.source_decision_id == ""
+    assert proposal.target_decision_id == ""
+    assert "Active sleeve is clearing" in proposal.benchmark_guard_reason
+
+
+def test_rebalance_planner_exposes_decision_traceability():
+    profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
+    state = PortfolioState(
+        cash=250,
+        holdings=[
+            {"symbol": "AAPL", "market_value": 5000},
+            {"symbol": "FXAIX", "market_value": 34000},
+        ],
+        protected_symbols=["FXAIX"],
+    )
+    recommendations = [
+        {
+            "decision_id": "decision-nvda-full",
+            "symbol": "NVDA",
+            "rank": 1,
+            "confidence": 92,
+            "suggested_size_pct": 8,
+        },
+        {
+            "decision_id": "decision-aapl-full",
+            "symbol": "AAPL",
+            "rank": 8,
+            "confidence": 65,
+            "suggested_size_pct": 4,
+        },
+    ]
+
+    proposal = RebalancePlanner().propose(
+        recommendations,
+        profile=profile,
+        portfolio_state=state,
+    )
+
+    assert proposal.source_decision_id == "decision-aapl-full"
+    assert proposal.target_decision_id == "decision-nvda-full"
+
+
+def test_rebalance_planner_never_sources_protected_holdings():
+    profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
+    state = PortfolioState(
+        cash=250,
+        holdings=[
+            {"symbol": "AAPL", "market_value": 5000},
+            {"symbol": "FXAIX", "market_value": 34000},
+        ],
+        protected_symbols=["FXAIX"],
+    )
+    recommendations = [
+        {"symbol": "NVDA", "rank": 1, "confidence": 92, "suggested_size_pct": 8},
+        {"symbol": "FXAIX", "rank": 99, "confidence": 10, "suggested_size_pct": 0},
+        {"symbol": "AAPL", "rank": 2, "confidence": 80, "suggested_size_pct": 4},
+    ]
+
+    proposal = RebalancePlanner().propose(
+        recommendations,
+        profile=profile,
+        portfolio_state=state,
+        min_rank_gap=3,
+    )
+
+    assert proposal.should_rebalance is False
+    assert proposal.fund_from_symbol == "AAPL"
+    assert proposal.fund_from_symbol != "FXAIX"
 
 
 def test_rebalance_planner_blocks_new_rotation_when_benchmark_gate_pauses():

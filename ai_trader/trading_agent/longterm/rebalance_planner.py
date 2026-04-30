@@ -17,6 +17,15 @@ class RebalanceProposal:
     target_symbol: str
     proposed_sell_value: float
     reason: str
+    source_current_value: float = 0.0
+    source_target_value: float = 0.0
+    source_rank: int = 0
+    target_rank: int = 0
+    rank_gap: int = 0
+    target_suggested_size_pct: float = 0.0
+    source_decision_id: str = ""
+    target_decision_id: str = ""
+    benchmark_guard_reason: str = ""
 
 
 class RebalancePlanner:
@@ -37,17 +46,45 @@ class RebalancePlanner:
         by_symbol = {row["symbol"]: row for row in recommendations}
         best = recommendations[0]
         best_symbol = str(best.get("symbol", "")).upper()
+        best_rank = int(best.get("rank") or 999)
+        target_suggested_size_pct = float(best.get("suggested_size_pct") or 0.0)
+        target_decision_id = str(best.get("decision_id") or "")
+        benchmark_guard_reason = (
+            benchmark_guard_result.reason if benchmark_guard_result else "Benchmark guard was not evaluated."
+        )
         if portfolio_state.holding_value(best_symbol) > 0:
-            return RebalanceProposal(False, "", best_symbol, 0.0, "Top idea is already held.")
+            return RebalanceProposal(
+                False,
+                "",
+                best_symbol,
+                0.0,
+                "Top idea is already held.",
+                target_rank=best_rank,
+                target_suggested_size_pct=target_suggested_size_pct,
+                target_decision_id=target_decision_id,
+                benchmark_guard_reason=benchmark_guard_reason,
+            )
         if benchmark_guard_result and benchmark_guard_result.should_pause_new_buys:
-            return RebalanceProposal(False, "", best_symbol, 0.0, benchmark_guard_result.reason)
+            return RebalanceProposal(
+                False,
+                "",
+                best_symbol,
+                0.0,
+                benchmark_guard_result.reason,
+                target_rank=best_rank,
+                target_suggested_size_pct=target_suggested_size_pct,
+                target_decision_id=target_decision_id,
+                benchmark_guard_reason=benchmark_guard_reason,
+            )
 
+        protected_symbols = set(profile.protected_symbols) | set(portfolio_state.protected_symbols)
         weakest_symbol = ""
         weakest_rank = -1
         weakest_value = 0.0
         weakest_target_value = 0.0
+        weakest_decision_id = ""
         for holding in portfolio_state.holdings:
-            if holding.symbol in profile.protected_symbols:
+            if holding.symbol in protected_symbols:
                 continue
             row = by_symbol.get(holding.symbol)
             rank = int(row.get("rank") or 999) if row else 999
@@ -55,15 +92,31 @@ class RebalancePlanner:
                 weakest_symbol = holding.symbol
                 weakest_rank = rank
                 weakest_value = holding.market_value
+                weakest_decision_id = str(row.get("decision_id") or "") if row else ""
                 weakest_target_value = (
                     profile.tradable_capital * (float(row.get("suggested_size_pct") or 0.0) / 100.0)
                     if row
                     else 0.0
                 )
 
-        best_rank = int(best.get("rank") or 999)
-        if not weakest_symbol or weakest_rank - best_rank < min_rank_gap:
-            return RebalanceProposal(False, weakest_symbol, best_symbol, 0.0, "No material rank upgrade found.")
+        rank_gap = max(0, weakest_rank - best_rank)
+        if not weakest_symbol or rank_gap < min_rank_gap:
+            return RebalanceProposal(
+                False,
+                weakest_symbol,
+                best_symbol,
+                0.0,
+                "No material rank upgrade found.",
+                source_current_value=weakest_value,
+                source_target_value=weakest_target_value,
+                source_rank=weakest_rank if weakest_symbol else 0,
+                target_rank=best_rank,
+                rank_gap=rank_gap,
+                target_suggested_size_pct=target_suggested_size_pct,
+                source_decision_id=weakest_decision_id,
+                target_decision_id=target_decision_id,
+                benchmark_guard_reason=benchmark_guard_reason,
+            )
 
         proposed_sell = round(max(0.0, weakest_value - weakest_target_value), 2)
         return RebalanceProposal(
@@ -72,4 +125,13 @@ class RebalancePlanner:
             target_symbol=best_symbol,
             proposed_sell_value=proposed_sell,
             reason=f"{best_symbol} is materially higher ranked than {weakest_symbol}.",
+            source_current_value=weakest_value,
+            source_target_value=weakest_target_value,
+            source_rank=weakest_rank,
+            target_rank=best_rank,
+            rank_gap=rank_gap,
+            target_suggested_size_pct=target_suggested_size_pct,
+            source_decision_id=weakest_decision_id,
+            target_decision_id=target_decision_id,
+            benchmark_guard_reason=benchmark_guard_reason,
         )
