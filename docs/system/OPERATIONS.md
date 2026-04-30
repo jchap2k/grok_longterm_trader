@@ -75,6 +75,30 @@ Send through the local Brevo-compatible config only when explicitly intended:
 python scripts/longterm_capital_alert.py --active-sleeve-value 34000 --available-cash 500 --portfolio-state path\to\portfolio.json --send
 ```
 
+## Motley Fool Idea Capture
+
+Motley Fool premium tables are treated as a high-quality idea source, not a buy authority. Captured rows become investigation ideas that still require independent long-term research, valuation review, thesis critique, and portfolio-fit checks.
+
+Capture the full recommendation/ranking sources:
+
+```powershell
+python scripts/longterm_motley_fool_capture.py
+```
+
+Capture one source:
+
+```powershell
+python scripts/longterm_motley_fool_capture.py --source new_recommendations
+python scripts/longterm_motley_fool_capture.py --source analyst_rankings
+python scripts/longterm_motley_fool_capture.py --source quant_rankings
+python scripts/longterm_motley_fool_capture.py --source dashboard
+```
+
+The capture uses the logged-in Chrome profile at `~/.grok3api_chrome_profile`.
+Use one capture process at a time for that profile. The default full capture runs
+the pages sequentially so the profile is not opened by multiple Playwright
+sessions at once.
+
 ## Grok Project Review
 
 The repo-safe project config is:

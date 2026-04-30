@@ -9,6 +9,8 @@ from longterm.capital_alert_cli import build_parser as build_capital_alert_parse
 from longterm.capital_alert_cli import run_cli as run_capital_alert_cli
 from longterm.email_sender import EmailSendResult
 from longterm.journal_cli import build_parser, run_cli
+from longterm.motley_fool_capture_cli import build_parser as build_motley_parser
+from longterm.motley_fool_capture_cli import run_cli as run_motley_cli
 from research.intake import create_research_packet_from_idea
 
 
@@ -233,3 +235,25 @@ def test_capital_alert_cli_can_send_with_injected_sender(tmp_path, capsys):
     assert sender.email.should_send is True
     assert sender.email.recipient_email == "user@example.com"
     assert sender.settings.enabled is True
+
+
+def test_motley_fool_capture_cli_outputs_investigation_ideas(capsys):
+    def fake_capture(source_key, *, profile_dir=None, url=None):
+        return [
+            {
+                "symbol": "MOGA",
+                "company_name": "Moog",
+                "idea_source": "motley_fool_dashboard",
+                "source_notes": ["Motley Fool candidate."],
+            }
+        ]
+
+    parser = build_motley_parser()
+    args = parser.parse_args(["--source", "dashboard"])
+
+    exit_code = run_motley_cli(args, capture_func=fake_capture)
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload[0]["symbol"] == "MOGA"
+    assert payload[0]["idea_source"] == "motley_fool_dashboard"

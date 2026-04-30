@@ -93,6 +93,16 @@
     <required_field>review cadence</required_field>
 </research_packet_requirements>
 
+<idea_sources>
+    <motley_fool>
+        <classification>High-quality idea source and priority investigation feed.</classification>
+        <rule>Motley Fool recommendations and rankings may seed research packets and watchlist investigation.</rule>
+        <rule>Do not auto-buy, add, sell, or rebalance solely because Motley Fool recommends, ranks, or rates a stock.</rule>
+        <rule>Every Motley Fool sourced idea still requires independent long-term research, quality durability review, valuation discipline, thesis critique, and portfolio fit checks.</rule>
+        <rule>Track Motley Fool sourced ideas separately so their contribution can be compared against FXAIX and the rest of the active sleeve over time.</rule>
+    </motley_fool>
+</idea_sources>
+
 <thesis_rules>
     <must_answer>Why is this business attractive?</must_answer>
     <must_answer>What is supposed to improve or persist?</must_answer>

@@ -44,6 +44,15 @@ Provides a dry-run-first command surface for rendering capital-needed markdown o
 `longterm/email_sender.py`
 Provides a Brevo-compatible SMTP sender and config loader. It reads `ai_trader/trading_agent/config/email_notifications.json` by default, is disabled unless the local ignored config enables it, and can reuse the swing-trader alert email address.
 
+`longterm/motley_fool_intake.py`
+Normalizes Motley Fool premium table rows into investigation ideas. Motley Fool is treated as a high-quality idea source, not an automatic trading authority.
+
+`longterm/motley_fool_capture.py`
+Uses the logged-in Playwright/Chrome profile to capture Motley Fool premium table payloads from full new-recommendation, analyst-ranking, AI-ranking, or dashboard pages.
+
+`longterm/motley_fool_capture_cli.py`
+Provides a command surface for exporting captured Motley Fool ideas as JSON. The default source set captures the full new recommendations, analyst rankings, and AI rankings pages; dashboard capture is available as a smoke test.
+
 `longterm/review_status.py`
 Builds per-symbol thesis review status from journal review candidates. It rehydrates the stored research packet, applies `ThesisMonitor`, and returns review-due/thesis-state fields for recommendation tables, markdown reports, and next-action reports without mutating the journal.
 

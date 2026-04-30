@@ -11,6 +11,14 @@ from longterm.decision_journal import LongTermDecisionJournal
 from longterm.email_sender import EmailSettings, SmtpEmailSender, load_email_settings
 from longterm.journal_cli import build_parser as build_journal_parser, run_cli as run_journal_cli
 from longterm.market_enrichment import enrich_prices
+from longterm.motley_fool_intake import (
+    MotleyFoolDashboardRow,
+    default_motley_fool_sources,
+    motley_rows_to_ideas,
+    motley_table_payloads_to_ideas,
+    normalize_motley_fool_dashboard,
+    rows_from_table_payloads,
+)
 from longterm.recommendation_enrichment import CachedRecommendationEnricher
 from longterm.capital_alert import build_capital_needed_alert, build_capital_needed_email
 from longterm.portfolio_state import PortfolioState
@@ -73,6 +81,264 @@ class FakeSmtp:
 
     def sendmail(self, from_addr, to_addrs, message):
         self.sent = (from_addr, to_addrs, message)
+
+
+def test_normalize_motley_fool_dashboard_merges_recommendations_and_rankings():
+    candidates = normalize_motley_fool_dashboard(
+        new_recommendations=[
+            MotleyFoolDashboardRow(
+                source_table="new_recommendations",
+                symbol="AMZN",
+                action="Buy",
+                rec_date="03/19/26",
+                risk_type="C",
+                service="SA",
+                discussion_count=37,
+            )
+        ],
+        rankings=[
+            MotleyFoolDashboardRow(
+                source_table="stock_advisor_rankings",
+                rank=5,
+                symbol="AMZN",
+                company="Amazon",
+                price="$263.04",
+                risk_type="C",
+                discussion_count=37,
+            )
+        ],
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].symbol == "AMZN"
+    assert candidates[0].company == "Amazon"
+    assert candidates[0].action == "Buy"
+    assert candidates[0].rank == 5
+    assert candidates[0].price == "$263.04"
+    assert candidates[0].source_tables == ["new_recommendations", "stock_advisor_rankings"]
+
+
+def test_motley_fool_rows_convert_to_investigation_ideas_not_buy_orders():
+    candidates = normalize_motley_fool_dashboard(
+        new_recommendations=[
+            MotleyFoolDashboardRow(
+                source_table="new_recommendations",
+                symbol="MOGA",
+                action="Buy",
+                rec_date="04/16/26",
+                risk_type="C",
+                service="SA",
+                discussion_count=6,
+            )
+        ],
+        rankings=[
+            MotleyFoolDashboardRow(
+                source_table="stock_advisor_rankings",
+                rank=2,
+                symbol="MOGA",
+                company="Moog",
+                price="$302.02",
+                risk_type="C",
+                discussion_count=6,
+            )
+        ],
+    )
+
+    ideas = motley_rows_to_ideas(candidates)
+
+    assert ideas == [
+        {
+            "symbol": "MOGA",
+            "company_name": "Moog",
+            "idea_source": "motley_fool_dashboard",
+            "source_notes": [
+                "Motley Fool candidate; requires independent long-term research before any action.",
+                "New recommendation action: Buy.",
+                "Recommendation date: 04/16/26.",
+                "Stock Advisor rank: 2.",
+                "Motley Fool type/risk label: C.",
+                "Reported price: $302.02.",
+                "Discussion count: 6.",
+            ],
+        }
+    ]
+
+
+def test_default_motley_fool_sources_include_dashboard_new_recs_and_rankings():
+    sources = default_motley_fool_sources()
+
+    assert sources["dashboard"].url == "https://www.fool.com/premium?watchSymbols=NASDAQ%3ACRWD"
+    assert sources["new_recommendations"].url == "https://www.fool.com/premium/new-recs"
+    assert sources["analyst_rankings"].url == "https://www.fool.com/premium/rankings?type=ANALYST"
+    assert sources["quant_rankings"].url == "https://www.fool.com/premium/rankings?type=QUANT"
+    assert sources["quant_rankings"].label == "AI rankings"
+
+
+def test_rows_from_table_payloads_extracts_dashboard_tables():
+    new_recs, rankings = rows_from_table_payloads(
+        [
+            {
+                "title": "New Recommendations",
+                "headers": ["Symbol", "Action", "Rec Date", "Type", "Service", ""],
+                "rows": [
+                    ["MOGA", "Buy", "04/16/26", "C", "SA", "6"],
+                    ["MKC", "Hold", "04/08/26", "C", "SA", "9"],
+                ],
+            },
+            {
+                "title": "Stock Advisor Rankings",
+                "headers": ["#", "Symbol", "Company", "Price", "Type", ""],
+                "rows": [
+                    ["1.", "TSLA", "Tesla", "$372.86", "A", "99"],
+                    ["2.", "MOGA", "Moog", "$302.02", "C", "6"],
+                ],
+            },
+        ],
+        ranking_source_table="stock_advisor_rankings",
+    )
+
+    assert new_recs[0].symbol == "MOGA"
+    assert new_recs[0].action == "Buy"
+    assert new_recs[0].discussion_count == 6
+    assert rankings[0].rank == 1
+    assert rankings[0].company == "Tesla"
+    assert rankings[0].source_table == "stock_advisor_rankings"
+
+
+def test_rows_from_table_payloads_cleans_expand_current_row_prefix():
+    new_recs, _rankings = rows_from_table_payloads(
+        [
+            {
+                "title": "New Recommendations",
+                "headers": ["Symbol", "Action", "Rec Date", "Type", "Service", ""],
+                "rows": [["EXPAND CURRENT ROW\nAMZN", "Buy", "03/19/26", "C", "SA", "37"]],
+            }
+        ],
+        ranking_source_table="stock_advisor_rankings",
+    )
+
+    assert new_recs[0].symbol == "AMZN"
+
+
+def test_rows_from_table_payloads_keeps_full_recommendation_company():
+    new_recs, _rankings = rows_from_table_payloads(
+        [
+            {
+                "title": "",
+                "headers": [
+                    "Symbol",
+                    "Company",
+                    "Action",
+                    "Service",
+                    "Return",
+                    "Rec Date",
+                    "Type",
+                    "Est. Return",
+                    "Est. Max Drawdown",
+                    "Market Cap",
+                    "",
+                ],
+                "rows": [
+                    [
+                        "EXPAND CURRENT ROW\nMOGA",
+                        "Moog",
+                        "Buy",
+                        "SA",
+                        "-2%",
+                        "04/16/26",
+                        "Cautious",
+                        "-2%\nto\n14%",
+                        "-34%",
+                        "$9.58B",
+                        "6",
+                    ]
+                ],
+            }
+        ],
+        ranking_source_table="stock_advisor_rankings",
+    )
+
+    assert new_recs[0].symbol == "MOGA"
+    assert new_recs[0].company == "Moog"
+
+
+def test_rows_from_table_payloads_skips_zero_width_placeholder_rows():
+    new_recs, _rankings = rows_from_table_payloads(
+        [
+            {
+                "title": "",
+                "headers": ["Symbol", "Company", "Action", "Service", "Rec Date"],
+                "rows": [["\u200c", "\u200c", "\u200c", "\u200c", "\u200c"]],
+            }
+        ],
+        ranking_source_table="stock_advisor_rankings",
+    )
+
+    assert new_recs == []
+
+
+def test_motley_table_payloads_to_ideas_labels_quant_rankings():
+    ideas = motley_table_payloads_to_ideas(
+        "quant_rankings",
+        [
+            {
+                "title": "Stock Advisor Rankings",
+                "headers": ["#", "Symbol", "Company", "Price", "Type", ""],
+                "rows": [["1.", "TSLA", "Tesla", "$372.86", "A", "99"]],
+            }
+        ],
+    )
+
+    assert ideas[0]["symbol"] == "TSLA"
+    assert ideas[0]["idea_source"] == "motley_fool_quant_rankings"
+    assert "Motley Fool source: AI rankings." in ideas[0]["source_notes"]
+    assert "Stock Advisor rank: 1." in ideas[0]["source_notes"]
+
+
+def test_motley_table_payloads_to_ideas_accepts_full_ranking_without_company():
+    ideas = motley_table_payloads_to_ideas(
+        "analyst_rankings",
+        [
+            {
+                "title": "",
+                "headers": [
+                    "#",
+                    "Symbol",
+                    "Price",
+                    "Change %",
+                    "Previous Rank",
+                    "Market Cap",
+                    "Type",
+                    "1Y Rev. Growth",
+                    "Est. Return",
+                    "Est. Max Drawdown",
+                    "Times Rec'd",
+                    "",
+                ],
+                "rows": [
+                    [
+                        "2.",
+                        "MOGA",
+                        "$302.02",
+                        "-1.40%",
+                        "-",
+                        "$9.58B",
+                        "Cautious",
+                        "13.79%",
+                        "-2%\nto\n14%",
+                        "-34%",
+                        "1",
+                        "",
+                    ]
+                ],
+            }
+        ],
+    )
+
+    assert ideas[0]["symbol"] == "MOGA"
+    assert ideas[0]["company_name"] == "MOGA"
+    assert "Stock Advisor rank: 2." in ideas[0]["source_notes"]
+    assert "Discussion count: 1." in ideas[0]["source_notes"]
 
 
 def test_enrich_prices_fetches_candidate_and_benchmark_prices():

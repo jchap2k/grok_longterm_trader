@@ -30,6 +30,7 @@ ai_trader_data/alerts/
 ai_trader_data/charts/
 ai_trader_data/portfolio_exports/
 ai_trader_data/agent_state.json
+ai_trader/ai_trader_data/*.db
 *.log
 
 # Polygon/other API storage (sensitive keys)
