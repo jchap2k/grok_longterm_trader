@@ -125,6 +125,37 @@ def test_rebalance_planner_exposes_decision_traceability():
     assert proposal.target_decision_id == "decision-nvda-full"
 
 
+def test_rebalance_planner_exposes_review_status_context():
+    profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
+    state = PortfolioState(
+        cash=250,
+        holdings=[
+            {"symbol": "AAPL", "market_value": 5000},
+            {"symbol": "FXAIX", "market_value": 34000},
+        ],
+        protected_symbols=["FXAIX"],
+    )
+    recommendations = [
+        {"symbol": "NVDA", "rank": 1, "confidence": 92, "suggested_size_pct": 8},
+        {"symbol": "AAPL", "rank": 8, "confidence": 65, "suggested_size_pct": 4},
+    ]
+
+    proposal = RebalancePlanner().propose(
+        recommendations,
+        profile=profile,
+        portfolio_state=state,
+        review_status_by_symbol={
+            "NVDA": {"review_due": False, "thesis_state": "healthy"},
+            "AAPL": {"review_due": True, "thesis_state": "stale"},
+        },
+    )
+
+    assert proposal.source_review_due is True
+    assert proposal.source_thesis_state == "stale"
+    assert proposal.target_review_due is False
+    assert proposal.target_thesis_state == "healthy"
+
+
 def test_rebalance_planner_never_sources_protected_holdings():
     profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
     state = PortfolioState(

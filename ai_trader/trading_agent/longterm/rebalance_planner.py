@@ -26,6 +26,10 @@ class RebalanceProposal:
     source_decision_id: str = ""
     target_decision_id: str = ""
     benchmark_guard_reason: str = ""
+    source_review_due: bool | None = None
+    target_review_due: bool | None = None
+    source_thesis_state: str = ""
+    target_thesis_state: str = ""
 
 
 class RebalancePlanner:
@@ -38,6 +42,7 @@ class RebalancePlanner:
         profile: PortfolioProfile,
         portfolio_state: PortfolioState,
         benchmark_guard_result: BenchmarkGuardResult | None = None,
+        review_status_by_symbol: Mapping[str, Mapping[str, Any]] | None = None,
         min_rank_gap: int = 3,
     ) -> RebalanceProposal:
         if not recommendations:
@@ -52,6 +57,8 @@ class RebalancePlanner:
         benchmark_guard_reason = (
             benchmark_guard_result.reason if benchmark_guard_result else "Benchmark guard was not evaluated."
         )
+        review_status_by_symbol = review_status_by_symbol or {}
+        target_review_status = _review_status_for(review_status_by_symbol, best_symbol)
         if portfolio_state.holding_value(best_symbol) > 0:
             return RebalanceProposal(
                 False,
@@ -63,6 +70,8 @@ class RebalancePlanner:
                 target_suggested_size_pct=target_suggested_size_pct,
                 target_decision_id=target_decision_id,
                 benchmark_guard_reason=benchmark_guard_reason,
+                target_review_due=_review_due(target_review_status),
+                target_thesis_state=_thesis_state(target_review_status),
             )
         if benchmark_guard_result and benchmark_guard_result.should_pause_new_buys:
             return RebalanceProposal(
@@ -75,6 +84,8 @@ class RebalancePlanner:
                 target_suggested_size_pct=target_suggested_size_pct,
                 target_decision_id=target_decision_id,
                 benchmark_guard_reason=benchmark_guard_reason,
+                target_review_due=_review_due(target_review_status),
+                target_thesis_state=_thesis_state(target_review_status),
             )
 
         protected_symbols = set(profile.protected_symbols) | set(portfolio_state.protected_symbols)
@@ -83,16 +94,21 @@ class RebalancePlanner:
         weakest_value = 0.0
         weakest_target_value = 0.0
         weakest_decision_id = ""
+        weakest_review_due: bool | None = None
+        weakest_thesis_state = ""
         for holding in portfolio_state.holdings:
             if holding.symbol in protected_symbols:
                 continue
             row = by_symbol.get(holding.symbol)
             rank = int(row.get("rank") or 999) if row else 999
             if rank > weakest_rank:
+                review_status = _review_status_for(review_status_by_symbol, holding.symbol)
                 weakest_symbol = holding.symbol
                 weakest_rank = rank
                 weakest_value = holding.market_value
                 weakest_decision_id = str(row.get("decision_id") or "") if row else ""
+                weakest_review_due = _review_due(review_status)
+                weakest_thesis_state = _thesis_state(review_status)
                 weakest_target_value = (
                     profile.tradable_capital * (float(row.get("suggested_size_pct") or 0.0) / 100.0)
                     if row
@@ -116,6 +132,10 @@ class RebalancePlanner:
                 source_decision_id=weakest_decision_id,
                 target_decision_id=target_decision_id,
                 benchmark_guard_reason=benchmark_guard_reason,
+                source_review_due=weakest_review_due,
+                target_review_due=_review_due(target_review_status),
+                source_thesis_state=weakest_thesis_state,
+                target_thesis_state=_thesis_state(target_review_status),
             )
 
         proposed_sell = round(max(0.0, weakest_value - weakest_target_value), 2)
@@ -134,4 +154,25 @@ class RebalancePlanner:
             source_decision_id=weakest_decision_id,
             target_decision_id=target_decision_id,
             benchmark_guard_reason=benchmark_guard_reason,
+            source_review_due=weakest_review_due,
+            target_review_due=_review_due(target_review_status),
+            source_thesis_state=weakest_thesis_state,
+            target_thesis_state=_thesis_state(target_review_status),
         )
+
+
+def _review_status_for(
+    statuses: Mapping[str, Mapping[str, Any]],
+    symbol: str,
+) -> Mapping[str, Any]:
+    return statuses.get(symbol.upper()) or statuses.get(symbol.lower()) or {}
+
+
+def _review_due(status: Mapping[str, Any]) -> bool | None:
+    if "review_due" not in status:
+        return None
+    return bool(status.get("review_due"))
+
+
+def _thesis_state(status: Mapping[str, Any]) -> str:
+    return str(status.get("thesis_state") or "")

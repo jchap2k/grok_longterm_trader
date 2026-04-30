@@ -268,6 +268,10 @@ def _rebalance_markdown(proposal) -> str:
         ("Target suggested size", f"{proposal.target_suggested_size_pct:.1f}%"),
         ("Source decision ID", proposal.source_decision_id or "n/a"),
         ("Target decision ID", proposal.target_decision_id or "n/a"),
+        ("Source review due", _format_optional_bool(proposal.source_review_due)),
+        ("Target review due", _format_optional_bool(proposal.target_review_due)),
+        ("Source thesis state", proposal.source_thesis_state or "n/a"),
+        ("Target thesis state", proposal.target_thesis_state or "n/a"),
         ("Benchmark gate", proposal.benchmark_guard_reason or "n/a"),
     ]
     details = "\n".join(f"| {label} | {value} |" for label, value in rows)
@@ -282,3 +286,9 @@ def _rebalance_markdown(proposal) -> str:
         "|---|---:|\n"
         f"{details}\n"
     )
+
+
+def _format_optional_bool(value: bool | None) -> str:
+    if value is None:
+        return "n/a"
+    return "yes" if value else "no"

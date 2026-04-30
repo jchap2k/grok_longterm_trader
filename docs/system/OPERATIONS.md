@@ -180,8 +180,8 @@ Cycle result JSON includes operator artifacts:
 Rebalance markdown is an explanatory dry-run artifact. It includes the funding
 source, target, proposed sell value, source and target ranks, rank gap, source
 current value, source target value, suggested target size, decision IDs when
-available, and the benchmark gate reason. Protected holdings remain excluded as
-funding sources.
+available, review/thesis status context when supplied, and the benchmark gate
+reason. Protected holdings remain excluded as funding sources.
 
 Current limitations of this first cycle:
 - still dry-run only
