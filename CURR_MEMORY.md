@@ -63,6 +63,7 @@ Additional continuation work completed on 2026-04-30:
 - added dry-run rebalance proposal markdown into cycle and scheduler artifacts
 - refined rebalance proposals with auditable explanation fields: source/target ranks, rank gap, source current/target value, suggested target size, decision IDs, and benchmark gate reason
 - added optional review/thesis status context to rebalance proposals so future review-aware scoring can explain stale or healthy source/target names
+- made review/thesis status influence dry-run rebalance source selection through an auditable rebalance-score adjustment
 
 What those changes accomplished:
 
@@ -96,6 +97,7 @@ What those changes accomplished:
 - Protected holdings are separated from active holdings.
 - The benchmark guard can pause new buys if active results lag `FXAIX`.
 - The rebalance planner can propose rotations from weaker active holdings into stronger candidates without touching protected holdings.
+- Rebalance source selection now considers review risk as well as raw rank: review-due, stale, deteriorating, broken, or invalidated source holdings can receive a small score adjustment, and the score/gap are rendered in dry-run markdown.
 
 ### Capital alerting
 - Capital-needed alerts exist but are informational only.
@@ -404,7 +406,7 @@ What is already done in Phase 1:
 - scheduler summary output can now be written to disk
 
 What is not done yet in Phase 1:
-- fuller ranking/reporting maturity and using review status as an actual rebalance scoring input
+- fuller ranking/reporting maturity and backtesting/tuning the rebalance scoring weights against real journal outcomes
 
 Likely implementation seams:
 - add a long-term scheduler entrypoint or orchestration module under `ai_trader/trading_agent/longterm/`
@@ -669,5 +671,5 @@ Once the scheduler/orchestration layer is built and validated, the next likely b
 1. Improve recommendation-table ranking/reporting maturity.
 2. Strengthen thesis-monitor and review workflow.
 3. Refine next-actions / rebalance decision quality.
-4. Make review status influence rebalance scoring, not just explanations.
+4. Tune review-aware rebalance scoring weights with actual journal outcomes.
 5. Only then start a true live-readiness design review.

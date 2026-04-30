@@ -272,6 +272,9 @@ def _rebalance_markdown(proposal) -> str:
         ("Target review due", _format_optional_bool(proposal.target_review_due)),
         ("Source thesis state", proposal.source_thesis_state or "n/a"),
         ("Target thesis state", proposal.target_thesis_state or "n/a"),
+        ("Source review adjustment", str(proposal.source_review_adjustment)),
+        ("Source rebalance score", str(proposal.source_rebalance_score)),
+        ("Rebalance score gap", str(proposal.rebalance_score_gap)),
         ("Benchmark gate", proposal.benchmark_guard_reason or "n/a"),
     ]
     details = "\n".join(f"| {label} | {value} |" for label, value in rows)

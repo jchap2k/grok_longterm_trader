@@ -156,6 +156,42 @@ def test_rebalance_planner_exposes_review_status_context():
     assert proposal.target_thesis_state == "healthy"
 
 
+def test_rebalance_planner_prefers_review_risk_source_over_raw_weakest_rank():
+    profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
+    state = PortfolioState(
+        cash=250,
+        holdings=[
+            {"symbol": "AAPL", "market_value": 5000},
+            {"symbol": "MSFT", "market_value": 5000},
+            {"symbol": "FXAIX", "market_value": 34000},
+        ],
+        protected_symbols=["FXAIX"],
+    )
+    recommendations = [
+        {"symbol": "NVDA", "rank": 1, "confidence": 92, "suggested_size_pct": 8},
+        {"symbol": "MSFT", "rank": 6, "confidence": 70, "suggested_size_pct": 4},
+        {"symbol": "AAPL", "rank": 8, "confidence": 65, "suggested_size_pct": 4},
+    ]
+
+    proposal = RebalancePlanner().propose(
+        recommendations,
+        profile=profile,
+        portfolio_state=state,
+        review_status_by_symbol={
+            "MSFT": {"review_due": True, "thesis_state": "stale"},
+            "AAPL": {"review_due": False, "thesis_state": "healthy"},
+        },
+    )
+
+    assert proposal.should_rebalance is True
+    assert proposal.fund_from_symbol == "MSFT"
+    assert proposal.source_rank == 6
+    assert proposal.source_review_adjustment == 3
+    assert proposal.source_rebalance_score == 9
+    assert proposal.rebalance_score_gap == 8
+    assert "review risk" in proposal.reason.lower()
+
+
 def test_rebalance_planner_never_sources_protected_holdings():
     profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
     state = PortfolioState(

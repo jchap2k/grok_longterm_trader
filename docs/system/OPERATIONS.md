@@ -182,6 +182,10 @@ source, target, proposed sell value, source and target ranks, rank gap, source
 current value, source target value, suggested target size, decision IDs when
 available, review/thesis status context when supplied, and the benchmark gate
 reason. Protected holdings remain excluded as funding sources.
+When review context is available, stale, deteriorating, broken, or review-due
+source holdings receive a small dry-run rebalance-score adjustment so the
+proposal can favor rotating from names with higher thesis-review risk. This is
+still advisory only and does not place orders.
 
 Current limitations of this first cycle:
 - still dry-run only

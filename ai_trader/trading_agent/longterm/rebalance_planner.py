@@ -30,6 +30,9 @@ class RebalanceProposal:
     target_review_due: bool | None = None
     source_thesis_state: str = ""
     target_thesis_state: str = ""
+    source_review_adjustment: int = 0
+    source_rebalance_score: int = 0
+    rebalance_score_gap: int = 0
 
 
 class RebalancePlanner:
@@ -96,19 +99,25 @@ class RebalancePlanner:
         weakest_decision_id = ""
         weakest_review_due: bool | None = None
         weakest_thesis_state = ""
+        weakest_review_adjustment = 0
+        weakest_rebalance_score = -1
         for holding in portfolio_state.holdings:
             if holding.symbol in protected_symbols:
                 continue
             row = by_symbol.get(holding.symbol)
             rank = int(row.get("rank") or 999) if row else 999
-            if rank > weakest_rank:
-                review_status = _review_status_for(review_status_by_symbol, holding.symbol)
+            review_status = _review_status_for(review_status_by_symbol, holding.symbol)
+            review_adjustment = _review_risk_adjustment(review_status)
+            rebalance_score = rank + review_adjustment
+            if rebalance_score > weakest_rebalance_score:
                 weakest_symbol = holding.symbol
                 weakest_rank = rank
                 weakest_value = holding.market_value
                 weakest_decision_id = str(row.get("decision_id") or "") if row else ""
                 weakest_review_due = _review_due(review_status)
                 weakest_thesis_state = _thesis_state(review_status)
+                weakest_review_adjustment = review_adjustment
+                weakest_rebalance_score = rebalance_score
                 weakest_target_value = (
                     profile.tradable_capital * (float(row.get("suggested_size_pct") or 0.0) / 100.0)
                     if row
@@ -116,7 +125,8 @@ class RebalancePlanner:
                 )
 
         rank_gap = max(0, weakest_rank - best_rank)
-        if not weakest_symbol or rank_gap < min_rank_gap:
+        rebalance_score_gap = max(0, weakest_rebalance_score - best_rank)
+        if not weakest_symbol or rebalance_score_gap < min_rank_gap:
             return RebalanceProposal(
                 False,
                 weakest_symbol,
@@ -136,15 +146,21 @@ class RebalancePlanner:
                 target_review_due=_review_due(target_review_status),
                 source_thesis_state=weakest_thesis_state,
                 target_thesis_state=_thesis_state(target_review_status),
+                source_review_adjustment=weakest_review_adjustment,
+                source_rebalance_score=max(0, weakest_rebalance_score),
+                rebalance_score_gap=rebalance_score_gap,
             )
 
         proposed_sell = round(max(0.0, weakest_value - weakest_target_value), 2)
+        reason = f"{best_symbol} is materially higher ranked than {weakest_symbol}."
+        if weakest_review_adjustment > 0:
+            reason += " Source holding has additional review risk."
         return RebalanceProposal(
             should_rebalance=proposed_sell > 0,
             fund_from_symbol=weakest_symbol,
             target_symbol=best_symbol,
             proposed_sell_value=proposed_sell,
-            reason=f"{best_symbol} is materially higher ranked than {weakest_symbol}.",
+            reason=reason,
             source_current_value=weakest_value,
             source_target_value=weakest_target_value,
             source_rank=weakest_rank,
@@ -158,6 +174,9 @@ class RebalancePlanner:
             target_review_due=_review_due(target_review_status),
             source_thesis_state=weakest_thesis_state,
             target_thesis_state=_thesis_state(target_review_status),
+            source_review_adjustment=weakest_review_adjustment,
+            source_rebalance_score=max(0, weakest_rebalance_score),
+            rebalance_score_gap=rebalance_score_gap,
         )
 
 
@@ -176,3 +195,13 @@ def _review_due(status: Mapping[str, Any]) -> bool | None:
 
 def _thesis_state(status: Mapping[str, Any]) -> str:
     return str(status.get("thesis_state") or "")
+
+
+def _review_risk_adjustment(status: Mapping[str, Any]) -> int:
+    adjustment = 1 if _review_due(status) else 0
+    thesis_state = _thesis_state(status).lower()
+    if thesis_state in {"broken", "invalidated"}:
+        adjustment += 4
+    elif thesis_state in {"stale", "deteriorating", "weakening", "at_risk"}:
+        adjustment += 2
+    return adjustment
