@@ -176,6 +176,13 @@ Cycle result JSON includes operator artifacts:
 - `next_actions_generated`
 - `capital_alert_markdown` and `capital_alert_generated`
 - `rebalance_markdown` and `rebalance_generated`
+- `account_action_plan` and `account_action_plan_generated`
+
+`account_action_plan` is the structured dry-run contract for the future
+autonomous account manager. It includes a schema version, plan id, dry-run mode,
+benchmark gate reason, blocked reasons, and machine-readable intents such as
+`BUY`, `REBALANCE`, `REVIEW`, `CAPITAL_NEEDED`, and `BLOCKED`. It is not an
+order ticket and does not place broker orders.
 
 Recommendation table ranks are action-aware. The journal emits a `ranking_score`
 and `rank_reason` for each row so actionable `BUY` / `ADD` candidates with
@@ -230,9 +237,9 @@ python scripts/run_longterm_scheduler.py --run-once --launch-login-if-needed --j
 The scheduler summary JSON includes per-run status, capture/setup status,
 decision IDs, idea provenance summary, packet completeness warnings,
 recommendation markdown, next-actions markdown, capital-alert markdown,
-rebalance markdown, and any error message. Use `--continue-on-error` only for
-supervised dry-run testing where a later cycle should still run after a failed
-cycle.
+rebalance markdown, account action plan, and any error message. Use
+`--continue-on-error` only for supervised dry-run testing where a later cycle
+should still run after a failed cycle.
 
 ## Calendar-Flow Concept Research
 

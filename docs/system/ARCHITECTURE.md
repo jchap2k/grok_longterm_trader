@@ -72,6 +72,9 @@ Builds per-symbol thesis review status from journal review candidates. It rehydr
 `longterm/action_planner.py`
 Converts a structured decision into a non-executing proposed `BUY`, `SELL`, or `NONE` intent.
 
+`longterm/account_action_plan.py`
+Builds the structured dry-run account action contract that future paper/live execution should consume. It aggregates recommendation-table rows, portfolio state, benchmark gating, capital-shortfall suppression, review status, and rebalance proposals into JSON-compatible intents (`BUY`, `REBALANCE`, `REVIEW`, `CAPITAL_NEEDED`, or `BLOCKED`). It does not place orders.
+
 `longterm/portfolio_state.py`
 Loads read-only portfolio snapshots and separates active versus protected holdings.
 
@@ -89,7 +92,7 @@ Checks review due dates and whether current evidence matches invalidation condit
 
 ## Decision Flow
 
-Raw idea -> `ResearchPacket` -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> benchmark guard -> dry-run action plan -> next-actions report.
+Raw idea -> `ResearchPacket` -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> benchmark guard -> dry-run account action plan -> next-actions/report artifacts.
 
 ## Data Flow Safety
 

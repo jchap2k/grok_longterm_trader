@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from longterm.account_action_plan import AccountActionPlanBuilder
 from longterm.capital_alert import build_capital_needed_alert
 from longterm.decision_journal import LongTermDecisionJournal
 from longterm.benchmark_guard import BenchmarkGuard
@@ -48,8 +49,10 @@ class LongTermCycleResult:
     next_actions_markdown: str = ""
     capital_alert_markdown: str = ""
     rebalance_markdown: str = ""
+    account_action_plan: dict[str, Any] = field(default_factory=dict)
     capital_alert_generated: bool = False
     rebalance_generated: bool = False
+    account_action_plan_generated: bool = False
     report_generated: bool = False
     next_actions_generated: bool = False
     idea_provenance_summary: dict[str, int] = field(default_factory=dict)
@@ -73,6 +76,7 @@ def run_longterm_cycle(
     capital_alert_builder_func: Callable[..., Any] = build_capital_needed_alert,
     rebalance_planner: RebalancePlanner | None = None,
     benchmark_guard: BenchmarkGuard | None = None,
+    account_action_plan_builder: AccountActionPlanBuilder | None = None,
     journal_factory: Callable[[str | Path | None], LongTermDecisionJournal] = LongTermDecisionJournal,
     active_sleeve_value: float | None = None,
     available_cash: float | None = None,
@@ -153,8 +157,10 @@ def run_longterm_cycle(
     next_actions_markdown = ""
     capital_alert_markdown = ""
     rebalance_markdown = ""
+    account_action_plan: dict[str, Any] = {}
     capital_alert_generated = False
     rebalance_generated = False
+    account_action_plan_generated = False
     report_generated = False
     next_actions_generated = False
     if journal_db_path:
@@ -193,6 +199,14 @@ def run_longterm_cycle(
             )
             rebalance_markdown = _rebalance_markdown(proposal)
             rebalance_generated = proposal.should_rebalance
+            plan = (account_action_plan_builder or AccountActionPlanBuilder()).build(
+                journal,
+                profile=profile,
+                portfolio_state=portfolio_state,
+                limit=report_limit,
+            )
+            account_action_plan = plan.to_dict()
+            account_action_plan_generated = bool(account_action_plan)
 
     return LongTermCycleResult(
         status=status,
@@ -209,8 +223,10 @@ def run_longterm_cycle(
         next_actions_markdown=next_actions_markdown,
         capital_alert_markdown=capital_alert_markdown,
         rebalance_markdown=rebalance_markdown,
+        account_action_plan=account_action_plan,
         capital_alert_generated=capital_alert_generated,
         rebalance_generated=rebalance_generated,
+        account_action_plan_generated=account_action_plan_generated,
         report_generated=report_generated,
         next_actions_generated=next_actions_generated,
         idea_provenance_summary=_idea_provenance_summary(all_ideas),

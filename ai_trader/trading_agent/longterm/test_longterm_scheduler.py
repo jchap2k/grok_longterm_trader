@@ -61,6 +61,7 @@ def test_scheduler_run_once_records_explicit_outputs(tmp_path):
             "next_actions_markdown": "# actions\n",
             "capital_alert_markdown": "# capital\n",
             "rebalance_markdown": "# rebalance\n",
+            "account_action_plan": {"mode": "dry_run", "intents": [{"symbol": "NVDA"}]},
             "idea_provenance_summary": {"manual": 1},
             "packet_completeness_warnings": [],
         }
@@ -81,6 +82,7 @@ def test_scheduler_run_once_records_explicit_outputs(tmp_path):
     assert summary.runs[0].next_actions_markdown == "# actions\n"
     assert summary.runs[0].capital_alert_markdown == "# capital\n"
     assert summary.runs[0].rebalance_markdown == "# rebalance\n"
+    assert summary.runs[0].account_action_plan["mode"] == "dry_run"
     assert summary.runs[0].idea_provenance_summary == {"manual": 1}
     assert calls[0]["profile"].protected_symbols == ["FXAIX"]
 

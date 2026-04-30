@@ -409,6 +409,57 @@ def test_cycle_can_build_rebalance_markdown(tmp_path):
     assert "| Source review due | n/a |" in result.rebalance_markdown
 
 
+def test_cycle_can_build_account_action_plan(tmp_path):
+    class FakeRunner:
+        def run_and_record(self, packet, **kwargs):
+            return f"decision-{packet.symbol}"
+
+    class FakeJournal:
+        db_path = tmp_path / "journal.db"
+
+        def list_recommendation_table(self, limit=10):
+            return []
+
+        def summarize_benchmark_performance(self):
+            return {
+                "evaluated_decisions": 0,
+                "average_excess_return_pct": 0.0,
+                "decisions_beating_benchmark": 0,
+            }
+
+    class FakeAccountActionPlanBuilder:
+        def build(self, journal, *, profile, portfolio_state, limit=10):
+            return type(
+                "Plan",
+                (),
+                {
+                    "to_dict": lambda self: {
+                        "schema_version": 1,
+                        "mode": "dry_run",
+                        "status": "ready",
+                        "intents": [{"symbol": "NVDA", "intent_type": "BUY"}],
+                    }
+                },
+            )()
+
+    result = run_longterm_cycle(
+        profile=_build_profile(),
+        manual_ideas=[],
+        motley_fool_settings=MotleyFoolCaptureSettings(enabled=False, cookie_ready=False),
+        runner=FakeRunner(),
+        journal_db_path=tmp_path / "journal.db",
+        portfolio_state=PortfolioState(cash=5000, holdings=[]),
+        journal_factory=lambda path: FakeJournal(),
+        report_builder_func=lambda journal, *, limit: "",
+        next_actions_builder_func=lambda journal, *, profile, portfolio_state, limit: "",
+        account_action_plan_builder=FakeAccountActionPlanBuilder(),
+    )
+
+    assert result.account_action_plan_generated is True
+    assert result.account_action_plan["mode"] == "dry_run"
+    assert result.account_action_plan["intents"][0]["symbol"] == "NVDA"
+
+
 def test_orchestration_cli_loads_idea_file_and_prints_summary(tmp_path, capsys):
     idea_path = tmp_path / "idea.json"
     idea_path.write_text('{"symbol":"aapl","company_name":"Apple"}', encoding="utf-8")

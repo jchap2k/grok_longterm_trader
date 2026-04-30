@@ -66,6 +66,7 @@ Additional continuation work completed on 2026-04-30:
 - made review/thesis status influence dry-run rebalance source selection through an auditable rebalance-score adjustment
 - made recommendation-table ranking action-aware with a visible `ranking_score` / `rank_reason` so actionable `BUY` and `ADD` rows can outrank passive `HOLD` rows
 - exposed recommendation `Rank Score` and `Rank Reason` in the markdown report so the operator can audit table ordering
+- added a structured dry-run `account_action_plan` contract for the future autonomous account manager and wired it through cycle and scheduler artifacts
 
 What those changes accomplished:
 
@@ -96,6 +97,7 @@ What those changes accomplished:
 
 ### Next-actions / portfolio-aware planning
 - A dry-run action planner can translate a structured decision into a proposed `BUY`, `SELL`, or `NONE`.
+- A structured account action plan now aggregates recommendation rows, portfolio state, benchmark gate, capital-shortfall suppression, review status, and rebalance proposals into JSON-compatible dry-run intents.
 - Portfolio state can be loaded as read-only context.
 - Protected holdings are separated from active holdings.
 - The benchmark guard can pause new buys if active results lag `FXAIX`.
@@ -190,8 +192,11 @@ What those changes accomplished:
   - `capital_alert_generated`
   - `rebalance_markdown`
   - `rebalance_generated`
+  - `account_action_plan`
+  - `account_action_plan_generated`
 - Capital-alert markdown is dry-run only and uses the existing capital alert suppression logic.
 - Rebalance markdown is dry-run only and uses the existing `RebalancePlanner`; protected holdings remain excluded. It now includes source/target rank context, sell-down sizing details, decision IDs when recommendation rows provide them, optional review/thesis context, and the benchmark gate reason.
+- Account action plans are dry-run only and are the future paper/live execution contract, not broker orders.
 - Scheduler can write the structured JSON summary to disk:
   - `python scripts/run_longterm_scheduler.py --run-once --summary-output path\to\scheduler_summary.json ...`
 
