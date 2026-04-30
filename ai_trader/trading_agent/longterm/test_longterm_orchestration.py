@@ -3,6 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from longterm.motley_fool_setup import MotleyFoolSetupResult
 from longterm.motley_fool_settings import MotleyFoolCaptureSettings
 from longterm.orchestration_cli import build_parser, run_cli
 from longterm.orchestration import run_longterm_cycle
@@ -86,6 +87,72 @@ def test_cycle_reports_login_required_when_enabled_but_cookie_missing(tmp_path):
     assert result.profile_dir == settings.profile_dir
     assert result.decision_ids == ["decision-MSFT"]
     assert runner.symbols == ["MSFT"]
+
+
+def test_cycle_can_launch_motley_fool_setup_then_capture(tmp_path):
+    captured_calls = []
+    setup_calls = []
+
+    def fake_capture(source_key, *, profile_dir=None, url=None):
+        captured_calls.append((source_key, profile_dir, url))
+        return [{"symbol": "NVDA", "company_name": "Nvidia", "idea_source": "motley_fool_new_recommendations"}]
+
+    def fake_setup(settings, **kwargs):
+        setup_calls.append((settings.profile_dir, settings.login_url))
+        return MotleyFoolSetupResult(
+            status="verified",
+            settings=MotleyFoolCaptureSettings(
+                enabled=True,
+                cookie_ready=True,
+                profile_dir=settings.profile_dir,
+                login_url=settings.login_url,
+                sources=["new_recommendations"],
+                config_path=settings.config_path,
+            ),
+            message="verified",
+            verification_source="dashboard",
+            config_updated=True,
+        )
+
+    class FakeRunner:
+        def __init__(self):
+            self.symbols = []
+
+        def run_and_record(self, packet, **kwargs):
+            self.symbols.append(packet.symbol)
+            return f"decision-{packet.symbol}"
+
+    settings = MotleyFoolCaptureSettings(
+        enabled=True,
+        cookie_ready=False,
+        profile_dir=tmp_path / "profile",
+        login_url="https://example.test/login",
+        sources=["new_recommendations"],
+        config_path=tmp_path / "motley_fool_capture.json",
+    )
+    runner = FakeRunner()
+
+    result = run_longterm_cycle(
+        profile=_build_profile(),
+        manual_ideas=[{"symbol": "MSFT", "company_name": "Microsoft"}],
+        motley_fool_settings=settings,
+        capture_func=fake_capture,
+        setup_func=fake_setup,
+        launch_login_if_needed=True,
+        runner=runner,
+        journal_db_path=tmp_path / "journal.db",
+    )
+
+    assert result.status == "completed"
+    assert result.capture_status == "captured"
+    assert result.setup_status == "verified"
+    assert result.capture_sources_run == ["new_recommendations"]
+    assert result.captured_idea_count == 1
+    assert result.total_idea_count == 2
+    assert result.decision_ids == ["decision-MSFT", "decision-NVDA"]
+    assert runner.symbols == ["MSFT", "NVDA"]
+    assert setup_calls == [(settings.profile_dir, settings.login_url)]
+    assert captured_calls == [("new_recommendations", settings.profile_dir, None)]
 
 
 def test_cycle_captures_configured_sources_and_records_all_ideas(tmp_path):
@@ -297,3 +364,36 @@ def test_orchestration_cli_loads_portfolio_state_when_provided(tmp_path, capsys)
     captured = capsys.readouterr()
     assert exit_code == 0
     assert '"next_actions_markdown": "# actions\\n"' in captured.out
+
+
+def test_orchestration_cli_passes_launch_login_flag(tmp_path, capsys):
+    profile_path = tmp_path / "profile.json"
+    profile_path.write_text(
+        '{"account_strategy_mode":"roth_ira","tradable_capital":35000,"protected_symbols":["FXAIX"],"benchmark_symbol":"FXAIX","defensive_parking_symbol":"SPY"}',
+        encoding="utf-8",
+    )
+
+    def fake_cycle(**kwargs):
+        assert kwargs["launch_login_if_needed"] is True
+        return {
+            "status": "completed",
+            "decision_ids": [],
+            "total_idea_count": 0,
+            "capture_status": "disabled",
+            "setup_status": "not_requested",
+        }
+
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--profile-config",
+            str(profile_path),
+            "--launch-login-if-needed",
+        ]
+    )
+
+    exit_code = run_cli(args, cycle_func=fake_cycle)
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"setup_status": "not_requested"' in captured.out

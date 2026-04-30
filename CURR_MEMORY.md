@@ -55,6 +55,7 @@ Additional continuation work completed on 2026-04-30:
 - extended the cycle so it can also build a recommendation markdown report
 - extended the cycle so it can also build a next-actions markdown report when portfolio state is provided
 - added a research-only pure-Python calendar-flow backtest module and CLI for evaluating the TLT monthly timing concept from the X thread
+- added interactive Motley Fool login/setup flow that can open the configured Chrome profile, verify premium capture access, and persist `cookie_ready=true`
 
 What those changes accomplished:
 
@@ -123,6 +124,7 @@ What those changes accomplished:
 - Current behavior:
   - if Motley Fool is disabled, the cycle skips Fool intake cleanly
   - if Motley Fool is enabled but cookies are not ready, the cycle reports `login_required` instead of failing
+  - if run with `--launch-login-if-needed`, the cycle can launch interactive setup first and then continue into capture after verification
   - if Motley Fool is enabled and cookies are ready, the cycle captures the configured premium sources and feeds them into research intake
   - manual idea input can still be processed in all cases
   - when `journal_db_path` is supplied, the cycle can now also build a recommendation markdown report
@@ -130,8 +132,22 @@ What those changes accomplished:
 - Current scope is intentionally narrow:
   - research orchestration and decision logging only
   - no broker execution
-  - no automatic browser launch yet
   - no full recurring scheduler loop yet
+
+### Motley Fool login/setup command
+- Added:
+  - `ai_trader/trading_agent/longterm/motley_fool_setup.py`
+  - `ai_trader/trading_agent/longterm/motley_fool_setup_cli.py`
+  - `ai_trader/trading_agent/scripts/longterm_motley_fool_setup.py`
+- Behavior:
+  - opens Chrome using the configured `profile_dir`
+  - waits for the user to finish Fool login
+  - verifies access by capturing a known Fool source (`dashboard` by default)
+  - writes `cookie_ready=true` into the local ignored Motley Fool config after verification
+- It can be run directly:
+  - `python scripts/longterm_motley_fool_setup.py`
+- Or via the one-cycle orchestration:
+  - `python scripts/run_longterm_cycle.py --launch-login-if-needed`
 
 ### Research-only calendar-flow concept test
 - Added:
@@ -185,7 +201,7 @@ Additional automated validation completed on 2026-04-30:
 - `python -m pytest ai_trader/trading_agent/longterm/test_longterm_orchestration.py -q`
   - passed with `7 passed`
 - `python -m pytest longterm -q`
-  - now passes with `105 passed`
+  - now passes with `109 passed`
 - `python scripts/run_longterm_cycle.py --motley-fool-config <missing path> --portfolio-state <temp portfolio json> --journal-db <temp db> --quiet`
   - works
   - confirmed the cycle can emit recommendation markdown and next-actions markdown even with zero ideas / zero decisions
@@ -195,6 +211,11 @@ Additional automated validation completed on 2026-04-30:
 - `python scripts/run_tlt_calendar_flow_research.py --symbol TLT --start 2004-01-01 --end 2024-12-01 --round-trip-cost-bps 10`
   - works
   - confirms the concept still remains positive after a small per-trade cost
+- `python -m pytest longterm/test_longterm_orchestration.py longterm/test_motley_fool_setup.py -q`
+  - passed with `11 passed`
+- `python scripts/longterm_motley_fool_setup.py --config <missing path>`
+  - works
+  - confirmed clean disabled-config path with no browser launch
 
 ## 4. Critical Guardrails
 
@@ -316,11 +337,11 @@ What is already done in Phase 1:
   - disabled
   - login required
   - capture enabled
+- interactive Motley Fool setup is now implemented and tested for `cookie_ready=false`
 - the cycle can now emit recommendation markdown
 - the cycle can now emit next-actions markdown when given portfolio state
 
 What is not done yet in Phase 1:
-- actual browser-open/login flow when `cookie_ready=false`
 - explicit batch summaries for captured/manual idea provenance
 - recurring scheduled invocation
 - richer structured end-of-cycle summaries beyond raw markdown strings
@@ -339,7 +360,7 @@ Likely implementation seams:
 Suggested work chunks:
 1. Add orchestration module and pure functions for one full cycle.
 2. Add optional Motley Fool intake gate behavior.
-3. Add scheduler-safe login/setup behavior for `cookie_ready=false`.
+3. Add scheduler-safe login/setup behavior for `cookie_ready=false`. DONE.
 4. Add research-run batching over captured/manual ideas.
 5. Add end-of-cycle summary/report output.
 6. Add tests around disabled vs enabled vs setup-needed Fool states.
@@ -525,7 +546,7 @@ This first deliverable is now partially complete:
 - CLI/script entrypoint exists
 - packet normalization + decision logging path exists
 - recommendation / next-actions output integration now exists in a first markdown-returning form
-- login/setup automation is the next best orchestration sub-step
+- login/setup automation now exists behind `--launch-login-if-needed`
 
 ## 8. Practical Notes For Another Codex
 
@@ -536,13 +557,19 @@ From `ai_trader/trading_agent`:
 - `python scripts/longterm_journal.py report --limit 10`
 - `python scripts/longterm_next_actions.py --portfolio-state path\\to\\portfolio.json --limit 10`
 - `python scripts/longterm_motley_fool_capture.py --source dashboard`
+- `python scripts/longterm_motley_fool_setup.py`
 - `python scripts/run_longterm_cycle.py --motley-fool-config <missing_or_optional_config_path> --quiet`
+- `python scripts/run_longterm_cycle.py --launch-login-if-needed`
 
 New files added on 2026-04-30:
 - `ai_trader/trading_agent/longterm/orchestration.py`
 - `ai_trader/trading_agent/longterm/orchestration_cli.py`
 - `ai_trader/trading_agent/longterm/test_longterm_orchestration.py`
 - `ai_trader/trading_agent/scripts/run_longterm_cycle.py`
+- `ai_trader/trading_agent/longterm/motley_fool_setup.py`
+- `ai_trader/trading_agent/longterm/motley_fool_setup_cli.py`
+- `ai_trader/trading_agent/longterm/test_motley_fool_setup.py`
+- `ai_trader/trading_agent/scripts/longterm_motley_fool_setup.py`
 
 ### Local machine state worth knowing
 - local email config exists in `ai_trader/trading_agent/config/email_notifications.json`
@@ -574,7 +601,7 @@ For this repo, trust these first:
 
 Once the scheduler/orchestration layer is built and validated, the next likely best sequence is:
 
-1. Add the real interactive login/setup behavior for `cookie_ready=false`.
+1. Add recurring scheduled invocation around the one-cycle orchestration.
 2. Harden packet completeness and source provenance.
 3. Improve recommendation-table ranking/reporting maturity.
 4. Strengthen thesis-monitor and review workflow.

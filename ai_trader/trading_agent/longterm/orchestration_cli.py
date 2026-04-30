@@ -28,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--portfolio-state", default="")
     parser.add_argument("--agent-config", default=None)
     parser.add_argument("--agent-preset", default="decision_4")
+    parser.add_argument("--launch-login-if-needed", action="store_true")
     parser.add_argument("--quiet", action="store_true")
     return parser
 
@@ -53,6 +54,7 @@ def run_cli(
         "journal_db_path": args.journal_db,
         "portfolio_state": portfolio_state,
         "agent_preset": args.agent_preset,
+        "launch_login_if_needed": args.launch_login_if_needed,
         "verbose": not args.quiet,
     }
     if args.agent_config:

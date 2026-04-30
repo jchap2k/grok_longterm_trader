@@ -11,6 +11,7 @@ from longterm.motley_fool_settings import (
     MotleyFoolCaptureSettings,
     load_motley_fool_capture_settings,
 )
+from longterm.motley_fool_setup import complete_motley_fool_setup
 from longterm.next_actions import build_next_actions_markdown
 from longterm.portfolio_state import PortfolioState
 from longterm.report_builder import build_markdown_report
@@ -32,6 +33,7 @@ DEFAULT_AGENT_CONFIG_PATH = (
 class LongTermCycleResult:
     status: str
     capture_status: str
+    setup_status: str
     manual_idea_count: int
     captured_idea_count: int
     total_idea_count: int
@@ -49,6 +51,8 @@ def run_longterm_cycle(
     manual_ideas: list[Mapping[str, Any]] | None = None,
     motley_fool_settings: MotleyFoolCaptureSettings | None = None,
     capture_func: Callable[..., list[dict[str, Any]]] = capture_motley_fool_ideas,
+    setup_func: Callable[..., Any] = complete_motley_fool_setup,
+    launch_login_if_needed: bool = False,
     runner: LongTermResearchRunner | Any | None = None,
     journal_db_path: str | Path | None = None,
     portfolio_state: PortfolioState | None = None,
@@ -70,7 +74,13 @@ def run_longterm_cycle(
     captured_ideas: list[dict[str, Any]] = []
     capture_sources_run: list[str] = []
     capture_status = "disabled"
+    setup_status = "not_requested"
     status = "completed"
+
+    if settings.should_open_login and launch_login_if_needed:
+        setup_result = setup_func(settings=settings)
+        setup_status = setup_result.status
+        settings = setup_result.settings
 
     if settings.can_capture:
         for source_key in settings.sources:
@@ -86,6 +96,7 @@ def run_longterm_cycle(
     elif settings.should_open_login:
         capture_status = "login_required"
         status = "login_required"
+        setup_status = "login_required" if setup_status == "not_requested" else setup_status
 
     all_ideas = [*base_ideas, *captured_ideas]
 
@@ -129,6 +140,7 @@ def run_longterm_cycle(
     return LongTermCycleResult(
         status=status,
         capture_status=capture_status,
+        setup_status=setup_status,
         manual_idea_count=len(base_ideas),
         captured_idea_count=len(captured_ideas),
         total_idea_count=len(all_ideas),

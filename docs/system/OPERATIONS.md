@@ -107,7 +107,7 @@ ai_trader/trading_agent/config/motley_fool_capture.json
 
 Use the committed `.example.json` as the safe template. The local config is
 ignored because it records whether this machine has a subscribed/logged-in Fool
-profile available. Future scheduler behavior should be:
+profile available. Current scheduler-facing behavior is:
 
 - If `enabled` is `false`, skip Motley Fool intake without warning or failure.
 - If `enabled` is `true` and `cookie_ready` is `false`, open the configured
@@ -115,6 +115,17 @@ profile available. Future scheduler behavior should be:
   `cookie_ready` once verified.
 - If `enabled` and `cookie_ready` are both `true`, call the capture API/scripts
   directly and continue treating Fool rows as research ideas, not trade orders.
+
+Run interactive setup when a subscribed profile needs fresh cookies:
+
+```powershell
+python scripts/longterm_motley_fool_setup.py
+```
+
+This opens Chrome with the configured `profile_dir`, waits for you to complete
+login, verifies access by capturing the configured verification source
+(`dashboard` by default), then persists `cookie_ready=true` into the local
+ignored config file.
 
 ## One-Cycle Long-Term Orchestration
 
@@ -132,6 +143,13 @@ Minimal smoke with Motley Fool disabled or config-missing:
 python scripts/run_longterm_cycle.py --motley-fool-config path\to\missing_or_optional.json --quiet
 ```
 
+Allow a one-cycle run to launch setup if Fool is enabled but cookies are not
+ready:
+
+```powershell
+python scripts/run_longterm_cycle.py --launch-login-if-needed --journal-db path\to\journal.db
+```
+
 Run one cycle from a single idea file:
 
 ```powershell
@@ -147,7 +165,6 @@ python scripts/run_longterm_cycle.py --idea-batch path\to\ideas.json --portfolio
 Current limitations of this first cycle:
 - still dry-run only
 - no recurring scheduler loop yet
-- no automatic browser launch for Motley Fool login/setup yet
 - recommendation and next-actions outputs are returned as markdown strings in the cycle result JSON
 
 ## Calendar-Flow Concept Research
