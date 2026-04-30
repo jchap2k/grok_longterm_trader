@@ -4,7 +4,7 @@ Last updated: 2026-04-30
 Repo: `S:\LLM_files\grok_longterm_trader`
 Remote: `https://github.com/jchap2k/grok_longterm_trader.git`
 Branch: `main`
-Latest feature commit: `faa253d Add dry-run long-term scheduler`
+Latest feature commit: `a614710 Add long-term operator artifacts`
 
 This file is a temporary handoff document for another Codex instance. It is meant to explain:
 - what this project is
