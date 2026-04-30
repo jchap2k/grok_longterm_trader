@@ -175,6 +175,7 @@ Cycle result JSON includes operator artifacts:
 - `report_generated`
 - `next_actions_generated`
 - `capital_alert_markdown` and `capital_alert_generated`
+- `rebalance_markdown` and `rebalance_generated`
 
 Current limitations of this first cycle:
 - still dry-run only
@@ -213,9 +214,10 @@ python scripts/run_longterm_scheduler.py --run-once --launch-login-if-needed --j
 
 The scheduler summary JSON includes per-run status, capture/setup status,
 decision IDs, idea provenance summary, packet completeness warnings,
-recommendation markdown, next-actions markdown, capital-alert markdown, and any
-error message. Use `--continue-on-error` only for supervised dry-run testing
-where a later cycle should still run after a failed cycle.
+recommendation markdown, next-actions markdown, capital-alert markdown,
+rebalance markdown, and any error message. Use `--continue-on-error` only for
+supervised dry-run testing where a later cycle should still run after a failed
+cycle.
 
 ## Calendar-Flow Concept Research
 

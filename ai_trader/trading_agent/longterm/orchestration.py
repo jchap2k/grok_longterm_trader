@@ -8,6 +8,7 @@ from typing import Any, Callable, Mapping
 
 from longterm.capital_alert import build_capital_needed_alert
 from longterm.decision_journal import LongTermDecisionJournal
+from longterm.benchmark_guard import BenchmarkGuard
 from longterm.motley_fool_capture import capture_motley_fool_ideas
 from longterm.motley_fool_settings import (
     MotleyFoolCaptureSettings,
@@ -16,6 +17,7 @@ from longterm.motley_fool_settings import (
 from longterm.motley_fool_setup import complete_motley_fool_setup
 from longterm.next_actions import build_next_actions_markdown
 from longterm.portfolio_state import PortfolioState
+from longterm.rebalance_planner import RebalancePlanner
 from longterm.report_builder import build_markdown_report
 from longterm.research_runner import LongTermResearchRunner
 from portfolio.portfolio_profile import PortfolioProfile
@@ -45,7 +47,9 @@ class LongTermCycleResult:
     recommendation_report_markdown: str = ""
     next_actions_markdown: str = ""
     capital_alert_markdown: str = ""
+    rebalance_markdown: str = ""
     capital_alert_generated: bool = False
+    rebalance_generated: bool = False
     report_generated: bool = False
     next_actions_generated: bool = False
     idea_provenance_summary: dict[str, int] = field(default_factory=dict)
@@ -67,6 +71,8 @@ def run_longterm_cycle(
     report_builder_func: Callable[..., str] = build_markdown_report,
     next_actions_builder_func: Callable[..., str] = build_next_actions_markdown,
     capital_alert_builder_func: Callable[..., Any] = build_capital_needed_alert,
+    rebalance_planner: RebalancePlanner | None = None,
+    benchmark_guard: BenchmarkGuard | None = None,
     journal_factory: Callable[[str | Path | None], LongTermDecisionJournal] = LongTermDecisionJournal,
     active_sleeve_value: float | None = None,
     available_cash: float | None = None,
@@ -146,7 +152,9 @@ def run_longterm_cycle(
     recommendation_report_markdown = ""
     next_actions_markdown = ""
     capital_alert_markdown = ""
+    rebalance_markdown = ""
     capital_alert_generated = False
+    rebalance_generated = False
     report_generated = False
     next_actions_generated = False
     if journal_db_path:
@@ -174,6 +182,17 @@ def run_longterm_cycle(
             )
             capital_alert_markdown = getattr(alert, "markdown", "") or ""
             capital_alert_generated = bool(getattr(alert, "should_alert", False))
+        if portfolio_state is not None:
+            guard = benchmark_guard or BenchmarkGuard()
+            guard_result = guard.evaluate(journal.summarize_benchmark_performance())
+            proposal = (rebalance_planner or RebalancePlanner()).propose(
+                journal.list_recommendation_table(limit=report_limit),
+                profile=profile,
+                portfolio_state=portfolio_state,
+                benchmark_guard_result=guard_result,
+            )
+            rebalance_markdown = _rebalance_markdown(proposal)
+            rebalance_generated = proposal.should_rebalance
 
     return LongTermCycleResult(
         status=status,
@@ -189,7 +208,9 @@ def run_longterm_cycle(
         recommendation_report_markdown=recommendation_report_markdown,
         next_actions_markdown=next_actions_markdown,
         capital_alert_markdown=capital_alert_markdown,
+        rebalance_markdown=rebalance_markdown,
         capital_alert_generated=capital_alert_generated,
+        rebalance_generated=rebalance_generated,
         report_generated=report_generated,
         next_actions_generated=next_actions_generated,
         idea_provenance_summary=_idea_provenance_summary(all_ideas),
@@ -233,3 +254,15 @@ def _packet_completeness_warnings(packet) -> list[str]:
     if not packet.thesis_summary and not packet.business_summary:
         warnings.append(f"{symbol}: missing thesis_summary or business_summary")
     return warnings
+
+
+def _rebalance_markdown(proposal) -> str:
+    if not proposal.should_rebalance:
+        return ""
+    return (
+        "# Dry-Run Rebalance Proposal\n\n"
+        f"Fund from: {proposal.fund_from_symbol}\n\n"
+        f"Target: {proposal.target_symbol}\n\n"
+        f"Proposed sell value: ${proposal.proposed_sell_value:,.2f}\n\n"
+        f"Reason: {proposal.reason}\n"
+    )

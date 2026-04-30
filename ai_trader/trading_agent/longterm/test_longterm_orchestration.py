@@ -306,6 +306,16 @@ def test_cycle_can_build_capital_alert_markdown(tmp_path):
     class FakeJournal:
         db_path = tmp_path / "journal.db"
 
+        def summarize_benchmark_performance(self):
+            return {
+                "evaluated_decisions": 0,
+                "average_excess_return_pct": 0.0,
+                "decisions_beating_benchmark": 0,
+            }
+
+        def list_recommendation_table(self, limit=10):
+            return []
+
     capital_alert_calls = []
 
     def fake_capital_alert_builder(journal, **kwargs):
@@ -333,12 +343,66 @@ def test_cycle_can_build_capital_alert_markdown(tmp_path):
         capital_alert_builder_func=fake_capital_alert_builder,
         report_builder_func=lambda journal, *, limit: "",
         next_actions_builder_func=lambda journal, *, profile, portfolio_state, limit: "",
+        rebalance_planner=type(
+            "Planner",
+            (),
+            {
+                "propose": lambda self, recommendations, **kwargs: type(
+                    "Proposal",
+                    (),
+                    {"should_rebalance": False},
+                )()
+            },
+        )(),
     )
 
     assert result.capital_alert_markdown == "# Capital Needed Alert\n"
     assert result.capital_alert_generated is True
     assert capital_alert_calls[0][1]["active_sleeve_value"] == 35000
     assert capital_alert_calls[0][1]["available_cash"] == 500
+
+
+def test_cycle_can_build_rebalance_markdown(tmp_path):
+    class FakeRunner:
+        def run_and_record(self, packet, **kwargs):
+            return f"decision-{packet.symbol}"
+
+    class FakeJournal:
+        db_path = tmp_path / "journal.db"
+
+        def list_recommendation_table(self, limit=10):
+            return [
+                {"symbol": "NVDA", "rank": 1, "confidence": 92, "suggested_size_pct": 8},
+                {"symbol": "AAPL", "rank": 8, "confidence": 65, "suggested_size_pct": 4},
+            ]
+
+        def summarize_benchmark_performance(self):
+            return {
+                "evaluated_decisions": 0,
+                "average_excess_return_pct": 0.0,
+                "decisions_beating_benchmark": 0,
+            }
+
+    result = run_longterm_cycle(
+        profile=_build_profile(),
+        manual_ideas=[],
+        motley_fool_settings=MotleyFoolCaptureSettings(enabled=False, cookie_ready=False),
+        runner=FakeRunner(),
+        journal_db_path=tmp_path / "journal.db",
+        portfolio_state=PortfolioState(
+            cash=500,
+            holdings=[{"symbol": "AAPL", "market_value": 5000}],
+            protected_symbols=["FXAIX"],
+        ),
+        journal_factory=lambda path: FakeJournal(),
+        report_builder_func=lambda journal, *, limit: "",
+        next_actions_builder_func=lambda journal, *, profile, portfolio_state, limit: "",
+    )
+
+    assert result.rebalance_generated is True
+    assert "# Dry-Run Rebalance Proposal" in result.rebalance_markdown
+    assert "AAPL" in result.rebalance_markdown
+    assert "NVDA" in result.rebalance_markdown
 
 
 def test_orchestration_cli_loads_idea_file_and_prints_summary(tmp_path, capsys):

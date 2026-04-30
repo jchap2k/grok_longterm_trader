@@ -52,6 +52,7 @@ class LongTermSchedulerRunRecord:
     recommendation_report_markdown: str = ""
     next_actions_markdown: str = ""
     capital_alert_markdown: str = ""
+    rebalance_markdown: str = ""
     idea_provenance_summary: dict[str, int] = field(default_factory=dict)
     packet_completeness_warnings: list[str] = field(default_factory=list)
     error: str = ""
@@ -155,6 +156,7 @@ def _record_from_result(
         recommendation_report_markdown=str(payload.get("recommendation_report_markdown") or ""),
         next_actions_markdown=str(payload.get("next_actions_markdown") or ""),
         capital_alert_markdown=str(payload.get("capital_alert_markdown") or ""),
+        rebalance_markdown=str(payload.get("rebalance_markdown") or ""),
         idea_provenance_summary=dict(payload.get("idea_provenance_summary") or {}),
         packet_completeness_warnings=list(payload.get("packet_completeness_warnings") or []),
     )
