@@ -48,6 +48,11 @@ Recent commits in that foundation batch:
 - `15f2e41` Add quality durability guardrails
 - `65c1f15` Add recommendation table builder enrichment
 
+Additional continuation work completed on 2026-04-30:
+- added a first dry-run orchestration module for one long-term cycle
+- added a CLI module and script wrapper for that cycle
+- added tests for disabled / login-required / capture-enabled Motley Fool orchestration states
+
 What those changes accomplished:
 
 ### Strategy / rules foundation
@@ -108,6 +113,21 @@ What those changes accomplished:
   - `enabled=true` + `cookie_ready=true` -> capture can run
   - `enabled=true` + `cookie_ready=false` -> scheduler can open login/setup flow
 
+### First orchestration entrypoint
+- `ai_trader/trading_agent/longterm/orchestration.py` now provides a first dry-run-safe `run_longterm_cycle(...)` helper.
+- `ai_trader/trading_agent/longterm/orchestration_cli.py` now provides a thin CLI around that helper.
+- `ai_trader/trading_agent/scripts/run_longterm_cycle.py` is the script wrapper.
+- Current behavior:
+  - if Motley Fool is disabled, the cycle skips Fool intake cleanly
+  - if Motley Fool is enabled but cookies are not ready, the cycle reports `login_required` instead of failing
+  - if Motley Fool is enabled and cookies are ready, the cycle captures the configured premium sources and feeds them into research intake
+  - manual idea input can still be processed in all cases
+- Current scope is intentionally narrow:
+  - research orchestration and decision logging only
+  - no broker execution
+  - no automatic browser launch yet
+  - no full recurring scheduler loop yet
+
 ## 3. Validation Already Completed
 
 Validated command baseline:
@@ -124,6 +144,15 @@ From `S:\LLM_files\grok_longterm_trader\ai_trader\trading_agent`:
   - works
 - `python scripts/longterm_motley_fool_capture.py --source quant_rankings`
   - works
+- `python scripts/run_longterm_cycle.py --motley-fool-config S:\LLM_files\grok_longterm_trader\ai_trader\trading_agent\config\this_file_should_not_exist.json --quiet`
+  - works
+  - confirmed clean disabled-config path with zero ideas and zero decisions
+
+Additional automated validation completed on 2026-04-30:
+- `python -m pytest ai_trader/trading_agent/longterm/test_longterm_orchestration.py -q`
+  - passed with `5 passed`
+- `python -m pytest longterm -q`
+  - passed with `98 passed`
 
 ## 4. Critical Guardrails
 
@@ -217,7 +246,7 @@ Keep these local and ignored:
 The roadmap below is ordered by importance and dependency, not by effort alone.
 
 ### Phase 1 - Build long-term scheduler orchestration
-Status: not started
+Status: started
 Priority: highest
 
 Goal:
@@ -237,6 +266,21 @@ Required behavior:
 - update recommendation-table/report flows
 - run benchmark, protected-holding, rebalance, and capital-needed guardrails
 - keep order execution dry-run only
+
+What is already done in Phase 1:
+- a first single-cycle orchestration seam exists
+- a CLI/script entrypoint exists
+- optional Motley Fool states are already modeled and tested:
+  - disabled
+  - login required
+  - capture enabled
+
+What is not done yet in Phase 1:
+- actual browser-open/login flow when `cookie_ready=false`
+- richer end-of-cycle outputs like recommendation-table and next-actions artifacts
+- explicit batch summaries for captured/manual idea provenance
+- recurring scheduled invocation
+- integration with next-actions / rebalance / capital-alert outputs in the same cycle result
 
 Likely implementation seams:
 - add a long-term scheduler entrypoint or orchestration module under `ai_trader/trading_agent/longterm/`
@@ -432,6 +476,12 @@ Best small first deliverable:
   - journal persistence
   - next-actions / recommendation output
 
+This first deliverable is now partially complete:
+- orchestration function exists
+- CLI/script entrypoint exists
+- packet normalization + decision logging path exists
+- next-actions / recommendation output integration is still the next best sub-step
+
 ## 8. Practical Notes For Another Codex
 
 ### Commands that already work
@@ -441,6 +491,13 @@ From `ai_trader/trading_agent`:
 - `python scripts/longterm_journal.py report --limit 10`
 - `python scripts/longterm_next_actions.py --portfolio-state path\\to\\portfolio.json --limit 10`
 - `python scripts/longterm_motley_fool_capture.py --source dashboard`
+- `python scripts/run_longterm_cycle.py --motley-fool-config <missing_or_optional_config_path> --quiet`
+
+New files added on 2026-04-30:
+- `ai_trader/trading_agent/longterm/orchestration.py`
+- `ai_trader/trading_agent/longterm/orchestration_cli.py`
+- `ai_trader/trading_agent/longterm/test_longterm_orchestration.py`
+- `ai_trader/trading_agent/scripts/run_longterm_cycle.py`
 
 ### Local machine state worth knowing
 - local email config exists in `ai_trader/trading_agent/config/email_notifications.json`
@@ -472,9 +529,10 @@ For this repo, trust these first:
 
 Once the scheduler/orchestration layer is built and validated, the next likely best sequence is:
 
-1. Harden packet completeness and source provenance.
-2. Improve recommendation-table ranking/reporting maturity.
-3. Strengthen thesis-monitor and review workflow.
-4. Refine next-actions / rebalance decision quality.
-5. Only then start a true live-readiness design review.
-
+1. Extend the new orchestration cycle so it also returns or emits recommendation-table and next-actions outputs.
+2. Add the real interactive login/setup behavior for `cookie_ready=false`.
+3. Harden packet completeness and source provenance.
+4. Improve recommendation-table ranking/reporting maturity.
+5. Strengthen thesis-monitor and review workflow.
+6. Refine next-actions / rebalance decision quality.
+7. Only then start a true live-readiness design review.
