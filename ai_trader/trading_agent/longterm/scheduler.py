@@ -1,0 +1,170 @@
+"""Dry-run recurring scheduler for long-term research cycles."""
+
+from __future__ import annotations
+
+import time
+from dataclasses import asdict, dataclass, field, is_dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, Callable
+
+from longterm.motley_fool_settings import load_motley_fool_capture_settings
+from longterm.orchestration import run_longterm_cycle
+from longterm.orchestration_cli import _load_manual_ideas
+from longterm.portfolio_state import PortfolioState
+from portfolio.portfolio_profile import PortfolioProfile
+
+
+@dataclass(frozen=True)
+class LongTermSchedulerInputs:
+    profile_config: str | Path
+    idea_file: str | Path | None = None
+    idea_batch: str | Path | None = None
+    motley_fool_config: str | Path | None = None
+    journal_db: str | Path | None = None
+    portfolio_state: str | Path | None = None
+    agent_config: str | Path | None = None
+    agent_preset: str = "decision_4"
+    launch_login_if_needed: bool = False
+    quiet: bool = False
+
+
+@dataclass(frozen=True)
+class LongTermSchedulerConfig:
+    max_runs: int = 1
+    interval_seconds: int = 3600
+    stop_on_error: bool = True
+
+
+@dataclass(frozen=True)
+class LongTermSchedulerRunRecord:
+    run_number: int
+    started_at: str
+    finished_at: str
+    status: str
+    capture_status: str = ""
+    setup_status: str = ""
+    total_idea_count: int = 0
+    decision_ids: list[str] = field(default_factory=list)
+    recommendation_report_markdown: str = ""
+    next_actions_markdown: str = ""
+    error: str = ""
+
+
+@dataclass(frozen=True)
+class LongTermSchedulerSummary:
+    status: str
+    run_count: int
+    success_count: int
+    error_count: int
+    runs: list[LongTermSchedulerRunRecord] = field(default_factory=list)
+
+
+def build_cycle_kwargs(inputs: LongTermSchedulerInputs) -> dict[str, Any]:
+    """Build fresh one-cycle kwargs so portfolio/config files reload each run."""
+    profile = PortfolioProfile.from_file(inputs.profile_config)
+    manual_ideas = _load_manual_ideas(
+        str(inputs.idea_file or ""),
+        str(inputs.idea_batch or ""),
+    )
+    settings = load_motley_fool_capture_settings(inputs.motley_fool_config)
+    portfolio_state = (
+        PortfolioState.from_file(inputs.portfolio_state, profile=profile)
+        if inputs.portfolio_state
+        else None
+    )
+    kwargs: dict[str, Any] = {
+        "profile": profile,
+        "manual_ideas": manual_ideas,
+        "motley_fool_settings": settings,
+        "journal_db_path": inputs.journal_db,
+        "portfolio_state": portfolio_state,
+        "agent_preset": inputs.agent_preset,
+        "launch_login_if_needed": inputs.launch_login_if_needed,
+        "verbose": not inputs.quiet,
+    }
+    if inputs.agent_config:
+        kwargs["agent_config_path"] = inputs.agent_config
+    return kwargs
+
+
+def run_longterm_scheduler(
+    *,
+    inputs: LongTermSchedulerInputs,
+    config: LongTermSchedulerConfig,
+    cycle_func: Callable[..., Any] = run_longterm_cycle,
+    sleep_func: Callable[[int], Any] = time.sleep,
+) -> LongTermSchedulerSummary:
+    """Run recurring dry-run long-term cycles with bounded, testable control."""
+    records: list[LongTermSchedulerRunRecord] = []
+    max_runs = max(1, int(config.max_runs or 1))
+
+    for run_number in range(1, max_runs + 1):
+        started_at = _now_iso()
+        try:
+            result = cycle_func(**build_cycle_kwargs(inputs))
+            record = _record_from_result(run_number, started_at, result)
+        except Exception as exc:
+            record = LongTermSchedulerRunRecord(
+                run_number=run_number,
+                started_at=started_at,
+                finished_at=_now_iso(),
+                status="error",
+                error=str(exc),
+            )
+            records.append(record)
+            if config.stop_on_error:
+                return _summary_from_records(records, stopped_on_error=True)
+        else:
+            records.append(record)
+
+        if run_number < max_runs:
+            sleep_func(max(0, int(config.interval_seconds or 0)))
+
+    return _summary_from_records(records, stopped_on_error=False)
+
+
+def _record_from_result(
+    run_number: int,
+    started_at: str,
+    result: Any,
+) -> LongTermSchedulerRunRecord:
+    payload = asdict(result) if is_dataclass(result) else dict(result)
+    return LongTermSchedulerRunRecord(
+        run_number=run_number,
+        started_at=started_at,
+        finished_at=_now_iso(),
+        status=str(payload.get("status") or "completed"),
+        capture_status=str(payload.get("capture_status") or ""),
+        setup_status=str(payload.get("setup_status") or ""),
+        total_idea_count=int(payload.get("total_idea_count") or 0),
+        decision_ids=list(payload.get("decision_ids") or []),
+        recommendation_report_markdown=str(payload.get("recommendation_report_markdown") or ""),
+        next_actions_markdown=str(payload.get("next_actions_markdown") or ""),
+    )
+
+
+def _summary_from_records(
+    records: list[LongTermSchedulerRunRecord],
+    *,
+    stopped_on_error: bool,
+) -> LongTermSchedulerSummary:
+    success_count = sum(1 for record in records if record.status != "error")
+    error_count = sum(1 for record in records if record.status == "error")
+    if stopped_on_error and error_count:
+        status = "stopped_on_error"
+    elif error_count:
+        status = "completed_with_errors"
+    else:
+        status = "completed"
+    return LongTermSchedulerSummary(
+        status=status,
+        run_count=len(records),
+        success_count=success_count,
+        error_count=error_count,
+        runs=records,
+    )
+
+
+def _now_iso() -> str:
+    return datetime.now(UTC).replace(microsecond=0).isoformat()

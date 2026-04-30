@@ -167,6 +167,36 @@ Current limitations of this first cycle:
 - no recurring scheduler loop yet
 - recommendation and next-actions outputs are returned as markdown strings in the cycle result JSON
 
+## Dry-Run Long-Term Scheduler
+
+The dry-run scheduler repeatedly calls the same one-cycle orchestration path.
+It does not place orders. Each cycle reloads profile, Motley Fool settings, idea
+input, and portfolio state from disk so cash/holding changes are not frozen in
+memory during a longer run.
+
+Run exactly one scheduled cycle:
+
+```powershell
+python scripts/run_longterm_scheduler.py --run-once --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --quiet
+```
+
+Run a bounded recurring dry-run:
+
+```powershell
+python scripts/run_longterm_scheduler.py --max-runs 3 --interval-seconds 3600 --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --quiet
+```
+
+Allow setup if Motley Fool is enabled but cookies are stale:
+
+```powershell
+python scripts/run_longterm_scheduler.py --run-once --launch-login-if-needed --journal-db path\to\journal.db
+```
+
+The scheduler summary JSON includes per-run status, capture/setup status,
+decision IDs, recommendation markdown, next-actions markdown, and any error
+message. Use `--continue-on-error` only for supervised dry-run testing where a
+later cycle should still run after a failed cycle.
+
 ## Calendar-Flow Concept Research
 
 There is now a research-only tool for evaluating the monthly `TLT` calendar-flow

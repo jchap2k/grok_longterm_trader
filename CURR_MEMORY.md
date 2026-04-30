@@ -58,6 +58,7 @@ Additional continuation work completed on 2026-04-30:
 - added a research-only pure-Python calendar-flow backtest module and CLI for evaluating the TLT monthly timing concept from the X thread
 - added interactive Motley Fool login/setup flow that can open the configured Chrome profile, verify premium capture access, and persist `cookie_ready=true`
 - fixed the Grok/LLM-collab Playwright launcher so it prefers installed Chrome for the reused persistent profile instead of crashing immediately with bundled Chromium
+- added a dry-run long-term scheduler wrapper that repeatedly calls the one-cycle orchestration while reloading profile/config/portfolio state each run
 
 What those changes accomplished:
 
@@ -151,6 +152,24 @@ What those changes accomplished:
 - Or via the one-cycle orchestration:
   - `python scripts/run_longterm_cycle.py --launch-login-if-needed`
 
+### Dry-run scheduler wrapper
+- Added:
+  - `ai_trader/trading_agent/longterm/scheduler.py`
+  - `ai_trader/trading_agent/longterm/scheduler_cli.py`
+  - `ai_trader/trading_agent/scripts/run_longterm_scheduler.py`
+  - `ai_trader/trading_agent/longterm/test_longterm_scheduler.py`
+- Behavior:
+  - repeatedly calls `run_longterm_cycle(...)`
+  - reloads profile, Motley Fool settings, manual ideas, and portfolio state before every run
+  - returns per-run status, capture/setup status, decision IDs, recommendation markdown, next-actions markdown, and errors
+  - remains dry-run only and does not invoke broker execution
+- Grok-reviewed before implementation:
+  - initial timer-only plan received `revise_first` at 85% confidence
+  - implementation adjusted to keep per-cycle context reloads and explicit output observability
+- Commands:
+  - `python scripts/run_longterm_scheduler.py --run-once --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --quiet`
+  - `python scripts/run_longterm_scheduler.py --max-runs 3 --interval-seconds 3600 --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --quiet`
+
 ### Research-only calendar-flow concept test
 - Added:
   - `ai_trader/trading_agent/longterm/calendar_flow_research.py`
@@ -224,6 +243,13 @@ Additional automated validation completed on 2026-04-30:
 - Grok plan-review smoke for the dry-run scheduler wrapper
   - launched successfully
   - returned `revise_first` with 85% confidence, mainly asking for fuller reporting/safety handling before scheduler implementation
+- `python -m pytest longterm/test_longterm_scheduler.py longterm/test_longterm_orchestration.py longterm/test_motley_fool_setup.py -q`
+  - passed with `17 passed`
+- `python -m pytest longterm -q`
+  - now passes with `115 passed`
+- `python scripts/run_longterm_scheduler.py --run-once --profile-config <temp profile> --portfolio-state <temp portfolio> --motley-fool-config <missing path> --journal-db <temp db> --quiet`
+  - works
+  - confirmed disabled Fool capture, zero decisions, recommendation markdown, and next-actions markdown in scheduler summary
 
 ## 4. Critical Guardrails
 
@@ -341,6 +367,7 @@ Required behavior:
 What is already done in Phase 1:
 - a first single-cycle orchestration seam exists
 - a CLI/script entrypoint exists
+- a bounded dry-run scheduler wrapper exists and reloads per-cycle context
 - optional Motley Fool states are already modeled and tested:
   - disabled
   - login required
@@ -351,7 +378,6 @@ What is already done in Phase 1:
 
 What is not done yet in Phase 1:
 - explicit batch summaries for captured/manual idea provenance
-- recurring scheduled invocation
 - richer structured end-of-cycle summaries beyond raw markdown strings
 - fuller integration of rebalance / capital-alert outputs in the same cycle result
 
@@ -555,6 +581,7 @@ This first deliverable is now partially complete:
 - packet normalization + decision logging path exists
 - recommendation / next-actions output integration now exists in a first markdown-returning form
 - login/setup automation now exists behind `--launch-login-if-needed`
+- bounded recurring dry-run scheduler wrapper now exists and reloads per-cycle context
 
 ## 8. Practical Notes For Another Codex
 
@@ -568,6 +595,7 @@ From `ai_trader/trading_agent`:
 - `python scripts/longterm_motley_fool_setup.py`
 - `python scripts/run_longterm_cycle.py --motley-fool-config <missing_or_optional_config_path> --quiet`
 - `python scripts/run_longterm_cycle.py --launch-login-if-needed`
+- `python scripts/run_longterm_scheduler.py --run-once --journal-db path\\to\\journal.db --portfolio-state path\\to\\portfolio.json --quiet`
 
 New files added on 2026-04-30:
 - `ai_trader/trading_agent/longterm/orchestration.py`
@@ -578,6 +606,10 @@ New files added on 2026-04-30:
 - `ai_trader/trading_agent/longterm/motley_fool_setup_cli.py`
 - `ai_trader/trading_agent/longterm/test_motley_fool_setup.py`
 - `ai_trader/trading_agent/scripts/longterm_motley_fool_setup.py`
+- `ai_trader/trading_agent/longterm/scheduler.py`
+- `ai_trader/trading_agent/longterm/scheduler_cli.py`
+- `ai_trader/trading_agent/longterm/test_longterm_scheduler.py`
+- `ai_trader/trading_agent/scripts/run_longterm_scheduler.py`
 
 ### Local machine state worth knowing
 - local email config exists in `ai_trader/trading_agent/config/email_notifications.json`
@@ -609,10 +641,9 @@ For this repo, trust these first:
 
 Once the scheduler/orchestration layer is built and validated, the next likely best sequence is:
 
-1. Add recurring scheduled invocation around the one-cycle orchestration.
-2. Harden packet completeness and source provenance.
-3. Improve recommendation-table ranking/reporting maturity.
-4. Strengthen thesis-monitor and review workflow.
-5. Refine next-actions / rebalance decision quality.
-6. Expand orchestration outputs from markdown-only strings toward more structured operator/scheduler artifacts.
-7. Only then start a true live-readiness design review.
+1. Harden packet completeness and source provenance.
+2. Improve recommendation-table ranking/reporting maturity.
+3. Strengthen thesis-monitor and review workflow.
+4. Refine next-actions / rebalance decision quality.
+5. Expand orchestration outputs from markdown-only strings toward more structured operator/scheduler artifacts.
+6. Only then start a true live-readiness design review.
