@@ -52,6 +52,8 @@ Additional continuation work completed on 2026-04-30:
 - added a first dry-run orchestration module for one long-term cycle
 - added a CLI module and script wrapper for that cycle
 - added tests for disabled / login-required / capture-enabled Motley Fool orchestration states
+- extended the cycle so it can also build a recommendation markdown report
+- extended the cycle so it can also build a next-actions markdown report when portfolio state is provided
 
 What those changes accomplished:
 
@@ -122,6 +124,8 @@ What those changes accomplished:
   - if Motley Fool is enabled but cookies are not ready, the cycle reports `login_required` instead of failing
   - if Motley Fool is enabled and cookies are ready, the cycle captures the configured premium sources and feeds them into research intake
   - manual idea input can still be processed in all cases
+  - when `journal_db_path` is supplied, the cycle can now also build a recommendation markdown report
+  - when `portfolio_state` is supplied, the cycle can now also build a next-actions markdown report from the same run
 - Current scope is intentionally narrow:
   - research orchestration and decision logging only
   - no broker execution
@@ -150,9 +154,12 @@ From `S:\LLM_files\grok_longterm_trader\ai_trader\trading_agent`:
 
 Additional automated validation completed on 2026-04-30:
 - `python -m pytest ai_trader/trading_agent/longterm/test_longterm_orchestration.py -q`
-  - passed with `5 passed`
+  - passed with `7 passed`
 - `python -m pytest longterm -q`
-  - passed with `98 passed`
+  - now passes with `100 passed`
+- `python scripts/run_longterm_cycle.py --motley-fool-config <missing path> --portfolio-state <temp portfolio json> --journal-db <temp db> --quiet`
+  - works
+  - confirmed the cycle can emit recommendation markdown and next-actions markdown even with zero ideas / zero decisions
 
 ## 4. Critical Guardrails
 
@@ -274,13 +281,15 @@ What is already done in Phase 1:
   - disabled
   - login required
   - capture enabled
+- the cycle can now emit recommendation markdown
+- the cycle can now emit next-actions markdown when given portfolio state
 
 What is not done yet in Phase 1:
 - actual browser-open/login flow when `cookie_ready=false`
-- richer end-of-cycle outputs like recommendation-table and next-actions artifacts
 - explicit batch summaries for captured/manual idea provenance
 - recurring scheduled invocation
-- integration with next-actions / rebalance / capital-alert outputs in the same cycle result
+- richer structured end-of-cycle summaries beyond raw markdown strings
+- fuller integration of rebalance / capital-alert outputs in the same cycle result
 
 Likely implementation seams:
 - add a long-term scheduler entrypoint or orchestration module under `ai_trader/trading_agent/longterm/`
@@ -480,7 +489,8 @@ This first deliverable is now partially complete:
 - orchestration function exists
 - CLI/script entrypoint exists
 - packet normalization + decision logging path exists
-- next-actions / recommendation output integration is still the next best sub-step
+- recommendation / next-actions output integration now exists in a first markdown-returning form
+- login/setup automation is the next best orchestration sub-step
 
 ## 8. Practical Notes For Another Codex
 
@@ -529,10 +539,10 @@ For this repo, trust these first:
 
 Once the scheduler/orchestration layer is built and validated, the next likely best sequence is:
 
-1. Extend the new orchestration cycle so it also returns or emits recommendation-table and next-actions outputs.
-2. Add the real interactive login/setup behavior for `cookie_ready=false`.
-3. Harden packet completeness and source provenance.
-4. Improve recommendation-table ranking/reporting maturity.
-5. Strengthen thesis-monitor and review workflow.
-6. Refine next-actions / rebalance decision quality.
+1. Add the real interactive login/setup behavior for `cookie_ready=false`.
+2. Harden packet completeness and source provenance.
+3. Improve recommendation-table ranking/reporting maturity.
+4. Strengthen thesis-monitor and review workflow.
+5. Refine next-actions / rebalance decision quality.
+6. Expand orchestration outputs from markdown-only strings toward more structured operator/scheduler artifacts.
 7. Only then start a true live-readiness design review.

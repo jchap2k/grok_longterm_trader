@@ -10,6 +10,7 @@ from typing import Any
 
 from longterm.motley_fool_settings import load_motley_fool_capture_settings
 from longterm.orchestration import run_longterm_cycle
+from longterm.portfolio_state import PortfolioState
 from portfolio.portfolio_profile import PortfolioProfile
 
 
@@ -24,6 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--profile-config", default=str(DEFAULT_PROFILE_PATH))
     parser.add_argument("--motley-fool-config", default=None)
     parser.add_argument("--journal-db", default=None)
+    parser.add_argument("--portfolio-state", default="")
     parser.add_argument("--agent-config", default=None)
     parser.add_argument("--agent-preset", default="decision_4")
     parser.add_argument("--quiet", action="store_true")
@@ -38,12 +40,18 @@ def run_cli(
     profile = PortfolioProfile.from_file(args.profile_config)
     manual_ideas = _load_manual_ideas(args.idea_file, args.idea_batch)
     settings = load_motley_fool_capture_settings(args.motley_fool_config)
+    portfolio_state = (
+        PortfolioState.from_file(args.portfolio_state, profile=profile)
+        if args.portfolio_state
+        else None
+    )
 
     kwargs: dict[str, Any] = {
         "profile": profile,
         "manual_ideas": manual_ideas,
         "motley_fool_settings": settings,
         "journal_db_path": args.journal_db,
+        "portfolio_state": portfolio_state,
         "agent_preset": args.agent_preset,
         "verbose": not args.quiet,
     }

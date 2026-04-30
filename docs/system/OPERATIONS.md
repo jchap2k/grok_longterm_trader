@@ -116,6 +116,40 @@ profile available. Future scheduler behavior should be:
 - If `enabled` and `cookie_ready` are both `true`, call the capture API/scripts
   directly and continue treating Fool rows as research ideas, not trade orders.
 
+## One-Cycle Long-Term Orchestration
+
+The repo now has a first dry-run orchestration entrypoint that can combine:
+- manual idea input
+- optional Motley Fool capture
+- research packet normalization
+- CGH decision recording
+- markdown recommendation report generation
+- optional next-actions report generation when a portfolio snapshot is supplied
+
+Minimal smoke with Motley Fool disabled or config-missing:
+
+```powershell
+python scripts/run_longterm_cycle.py --motley-fool-config path\to\missing_or_optional.json --quiet
+```
+
+Run one cycle from a single idea file:
+
+```powershell
+python scripts/run_longterm_cycle.py --idea-file path\to\idea.json --journal-db path\to\journal.db
+```
+
+Run one cycle and also generate next-actions output using a portfolio snapshot:
+
+```powershell
+python scripts/run_longterm_cycle.py --idea-batch path\to\ideas.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db
+```
+
+Current limitations of this first cycle:
+- still dry-run only
+- no recurring scheduler loop yet
+- no automatic browser launch for Motley Fool login/setup yet
+- recommendation and next-actions outputs are returned as markdown strings in the cycle result JSON
+
 ## Grok Project Review
 
 The repo-safe project config is:

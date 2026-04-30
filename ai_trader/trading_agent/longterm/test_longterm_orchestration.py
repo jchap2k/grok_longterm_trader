@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from longterm.motley_fool_settings import MotleyFoolCaptureSettings
 from longterm.orchestration_cli import build_parser, run_cli
 from longterm.orchestration import run_longterm_cycle
+from longterm.portfolio_state import PortfolioState
 from portfolio.portfolio_profile import PortfolioProfile
 
 
@@ -142,6 +143,46 @@ def test_cycle_captures_configured_sources_and_records_all_ideas(tmp_path):
     ]
 
 
+def test_cycle_can_build_report_and_next_actions_outputs(tmp_path):
+    class FakeRunner:
+        def run_and_record(self, packet, **kwargs):
+            return f"decision-{packet.symbol}"
+
+    report_calls = []
+    next_actions_calls = []
+
+    def fake_report_builder(journal, *, limit):
+        report_calls.append((journal.db_path, limit))
+        return "# report\n"
+
+    def fake_next_actions_builder(journal, *, profile, portfolio_state, limit):
+        next_actions_calls.append((journal.db_path, profile.benchmark_symbol, portfolio_state.cash, limit))
+        return "# next actions\n"
+
+    portfolio_state = PortfolioState(
+        cash=2500,
+        holdings=[{"symbol": "AAPL", "market_value": 1000, "quantity": 5}],
+        protected_symbols=["FXAIX"],
+    )
+
+    result = run_longterm_cycle(
+        profile=_build_profile(),
+        manual_ideas=[{"symbol": "AAPL", "company_name": "Apple"}],
+        motley_fool_settings=MotleyFoolCaptureSettings(enabled=False, cookie_ready=False),
+        runner=FakeRunner(),
+        journal_db_path=tmp_path / "journal.db",
+        portfolio_state=portfolio_state,
+        report_builder_func=fake_report_builder,
+        next_actions_builder_func=fake_next_actions_builder,
+        report_limit=7,
+    )
+
+    assert result.recommendation_report_markdown == "# report\n"
+    assert result.next_actions_markdown == "# next actions\n"
+    assert report_calls == [(tmp_path / "journal.db", 7)]
+    assert next_actions_calls == [(tmp_path / "journal.db", "FXAIX", 2500.0, 7)]
+
+
 def test_orchestration_cli_loads_idea_file_and_prints_summary(tmp_path, capsys):
     idea_path = tmp_path / "idea.json"
     idea_path.write_text('{"symbol":"aapl","company_name":"Apple"}', encoding="utf-8")
@@ -212,3 +253,47 @@ def test_orchestration_cli_loads_idea_batch(tmp_path, capsys):
     captured = capsys.readouterr()
     assert exit_code == 0
     assert '"total_idea_count": 2' in captured.out
+
+
+def test_orchestration_cli_loads_portfolio_state_when_provided(tmp_path, capsys):
+    idea_path = tmp_path / "idea.json"
+    idea_path.write_text('{"symbol":"aapl","company_name":"Apple"}', encoding="utf-8")
+    profile_path = tmp_path / "profile.json"
+    profile_path.write_text(
+        '{"account_strategy_mode":"roth_ira","tradable_capital":35000,"protected_symbols":["FXAIX"],"benchmark_symbol":"FXAIX","defensive_parking_symbol":"SPY"}',
+        encoding="utf-8",
+    )
+    portfolio_state_path = tmp_path / "portfolio.json"
+    portfolio_state_path.write_text(
+        '{"cash":5000,"holdings":[{"symbol":"FXAIX","market_value":34000,"quantity":120.5}]}',
+        encoding="utf-8",
+    )
+
+    def fake_cycle(**kwargs):
+        assert kwargs["portfolio_state"].cash == 5000.0
+        assert kwargs["portfolio_state"].protected_symbols == ["FXAIX"]
+        return {
+            "status": "completed",
+            "decision_ids": ["decision-AAPL"],
+            "total_idea_count": 1,
+            "capture_status": "disabled",
+            "next_actions_markdown": "# actions\n",
+        }
+
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--idea-file",
+            str(idea_path),
+            "--profile-config",
+            str(profile_path),
+            "--portfolio-state",
+            str(portfolio_state_path),
+        ]
+    )
+
+    exit_code = run_cli(args, cycle_func=fake_cycle)
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"next_actions_markdown": "# actions\\n"' in captured.out

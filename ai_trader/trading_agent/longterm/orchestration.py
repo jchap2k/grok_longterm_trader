@@ -11,6 +11,10 @@ from longterm.motley_fool_settings import (
     MotleyFoolCaptureSettings,
     load_motley_fool_capture_settings,
 )
+from longterm.next_actions import build_next_actions_markdown
+from longterm.portfolio_state import PortfolioState
+from longterm.report_builder import build_markdown_report
+from longterm.decision_journal import LongTermDecisionJournal
 from longterm.research_runner import LongTermResearchRunner
 from portfolio.portfolio_profile import PortfolioProfile
 from research.intake import create_research_packet_from_idea
@@ -35,6 +39,8 @@ class LongTermCycleResult:
     capture_sources_run: list[str] = field(default_factory=list)
     login_url: str = ""
     profile_dir: Path | None = None
+    recommendation_report_markdown: str = ""
+    next_actions_markdown: str = ""
 
 
 def run_longterm_cycle(
@@ -45,6 +51,10 @@ def run_longterm_cycle(
     capture_func: Callable[..., list[dict[str, Any]]] = capture_motley_fool_ideas,
     runner: LongTermResearchRunner | Any | None = None,
     journal_db_path: str | Path | None = None,
+    portfolio_state: PortfolioState | None = None,
+    report_builder_func: Callable[..., str] = build_markdown_report,
+    next_actions_builder_func: Callable[..., str] = build_next_actions_markdown,
+    report_limit: int = 10,
     agent_config_path: str | Path = DEFAULT_AGENT_CONFIG_PATH,
     agent_preset: str = "decision_4",
     verbose: bool = False,
@@ -100,6 +110,22 @@ def run_longterm_cycle(
             )
         )
 
+    recommendation_report_markdown = ""
+    next_actions_markdown = ""
+    if journal_db_path:
+        journal = LongTermDecisionJournal(journal_db_path)
+        recommendation_report_markdown = report_builder_func(
+            journal,
+            limit=report_limit,
+        )
+        if portfolio_state is not None:
+            next_actions_markdown = next_actions_builder_func(
+                journal,
+                profile=profile,
+                portfolio_state=portfolio_state,
+                limit=report_limit,
+            )
+
     return LongTermCycleResult(
         status=status,
         capture_status=capture_status,
@@ -110,4 +136,6 @@ def run_longterm_cycle(
         capture_sources_run=capture_sources_run,
         login_url=settings.login_url if settings.should_open_login else "",
         profile_dir=settings.profile_dir if settings.should_open_login else settings.profile_dir,
+        recommendation_report_markdown=recommendation_report_markdown,
+        next_actions_markdown=next_actions_markdown,
     )
