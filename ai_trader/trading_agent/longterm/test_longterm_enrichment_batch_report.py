@@ -576,6 +576,36 @@ def test_recommendation_table_prioritizes_actionable_buys_over_passive_holds(tmp
     assert "HOLD" in rows[1]["rank_reason"]
 
 
+def test_markdown_report_exposes_ranking_score_and_reason(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    journal.record_decision(
+        create_research_packet_from_idea({"symbol": "MSFT", "benchmark_symbol": "FXAIX"}),
+        decision={
+            "recommendation": "HOLD",
+            "confidence": 99,
+            "suggested_size_pct": 0,
+            "key_thesis": "Excellent company, but not an add candidate today.",
+        },
+    )
+    journal.record_decision(
+        create_research_packet_from_idea({"symbol": "NVDA", "benchmark_symbol": "FXAIX"}),
+        decision={
+            "recommendation": "BUY",
+            "confidence": 85,
+            "suggested_size_pct": 8,
+            "key_thesis": "Actionable new active-sleeve candidate.",
+        },
+    )
+
+    report = build_markdown_report(journal)
+
+    assert "Rank Score" in report
+    assert "Rank Reason" in report
+    assert "BUY recommendation, confidence 85" in report
+    assert "HOLD recommendation, confidence 99" in report
+    assert report.index("| 1 |") < report.index("| 2 |")
+
+
 def test_recommendation_table_builder_enriches_without_mutating_journal(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     journal.record_decision(

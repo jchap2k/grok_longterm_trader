@@ -179,7 +179,8 @@ Cycle result JSON includes operator artifacts:
 
 Recommendation table ranks are action-aware. The journal emits a `ranking_score`
 and `rank_reason` for each row so actionable `BUY` / `ADD` candidates with
-meaningful suggested size can outrank passive high-confidence `HOLD` rows.
+meaningful suggested size can outrank passive high-confidence `HOLD` rows. The
+markdown report exposes both fields for operator auditability.
 
 Rebalance markdown is an explanatory dry-run artifact. It includes the funding
 source, target, proposed sell value, source and target ranks, rank gap, source

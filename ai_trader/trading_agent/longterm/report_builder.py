@@ -55,6 +55,12 @@ def _fmt_price(value) -> str:
     return f"${float(value):,.2f}"
 
 
+def _fmt_number(value) -> str:
+    if value is None:
+        return ""
+    return f"{float(value):g}"
+
+
 def _short_id(value: str | None) -> str:
     return (value or "")[:8]
 
@@ -89,18 +95,19 @@ def build_markdown_report(
         "",
         "## Recommendation Table",
         "",
-        "| Rank | Decision ID | Symbol | Company | Action | Service | Price | Change | Previous Rank | Market Cap | Type | 1Y Rev. Growth | Return Since Rec | Rec Date | Est. Return | Est. Max Drawdown | Review Due | Thesis State | Data As Of | Times Rec'd | Notes | Reason | Link |",
-        "|---:|---|---|---|---|---|---:|---:|---:|---:|---|---:|---:|---|---:|---:|---|---|---|---:|---:|---|---|",
+        "| Rank | Rank Score | Decision ID | Symbol | Company | Action | Service | Price | Change | Previous Rank | Market Cap | Type | 1Y Rev. Growth | Return Since Rec | Rec Date | Est. Return | Est. Max Drawdown | Review Due | Thesis State | Data As Of | Times Rec'd | Notes | Rank Reason | Reason | Link |",
+        "|---:|---:|---|---|---|---|---|---:|---:|---:|---:|---|---:|---:|---|---:|---:|---|---|---|---:|---:|---|---|---|",
     ]
 
     for row in RecommendationTableBuilder(
         journal,
         enricher=enricher,
         review_status_by_symbol=review_status_by_symbol,
-    ).build(limit=limit):
+        ).build(limit=limit):
         lines.append(
-            "| {rank} | {decision_id} | {symbol} | {company} | {action} | {service} | {price} | {change} | {previous_rank} | {market_cap} | {risk_type} | {growth} | {return_since_rec} | {rec_date} | {return_range} | {drawdown} | {review_due} | {thesis_state} | {data_as_of} | {times} | {notes} | {reason} | {link} |".format(
+            "| {rank} | {rank_score} | {decision_id} | {symbol} | {company} | {action} | {service} | {price} | {change} | {previous_rank} | {market_cap} | {risk_type} | {growth} | {return_since_rec} | {rec_date} | {return_range} | {drawdown} | {review_due} | {thesis_state} | {data_as_of} | {times} | {notes} | {rank_reason} | {reason} | {link} |".format(
                 rank=row.get("rank", ""),
+                rank_score=_fmt_number(row.get("ranking_score")),
                 decision_id=_short_id(row.get("decision_id")),
                 symbol=row.get("symbol", ""),
                 company=row.get("company_name") or "",
@@ -121,6 +128,7 @@ def build_markdown_report(
                 data_as_of=row.get("data_as_of") or "",
                 times=row.get("times_recommended") or "",
                 notes=row.get("discussion_count") or "",
+                rank_reason=row.get("rank_reason") or "",
                 reason=row.get("reason") or "",
                 link=row.get("info_link") or "",
             )

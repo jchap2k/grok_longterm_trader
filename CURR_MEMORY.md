@@ -65,6 +65,7 @@ Additional continuation work completed on 2026-04-30:
 - added optional review/thesis status context to rebalance proposals so future review-aware scoring can explain stale or healthy source/target names
 - made review/thesis status influence dry-run rebalance source selection through an auditable rebalance-score adjustment
 - made recommendation-table ranking action-aware with a visible `ranking_score` / `rank_reason` so actionable `BUY` and `ADD` rows can outrank passive `HOLD` rows
+- exposed recommendation `Rank Score` and `Rank Reason` in the markdown report so the operator can audit table ordering
 
 What those changes accomplished:
 
@@ -89,7 +90,7 @@ What those changes accomplished:
 ### Recommendation table / reporting layer
 - A recommendation-table builder now creates ranked rows with traceability.
 - The output is closer to a curated service/research list than a raw log dump.
-- Recommendation rows now include an action-aware ranking score that blends confidence, suggested size, and `BUY` / `ADD` actionability.
+- Recommendation rows now include an action-aware ranking score that blends confidence, suggested size, and `BUY` / `ADD` actionability; the markdown report shows both the score and reason.
 - Enrichment adds daily/volatile fields like price, change, market cap, revenue growth, estimated return range, and drawdown without polluting the immutable journal.
 - Review status can be derived later from stored packets without mutating historical decision records.
 
