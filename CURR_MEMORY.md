@@ -57,6 +57,7 @@ Additional continuation work completed on 2026-04-30:
 - extended the cycle so it can also build a next-actions markdown report when portfolio state is provided
 - added a research-only pure-Python calendar-flow backtest module and CLI for evaluating the TLT monthly timing concept from the X thread
 - added interactive Motley Fool login/setup flow that can open the configured Chrome profile, verify premium capture access, and persist `cookie_ready=true`
+- fixed the Grok/LLM-collab Playwright launcher so it prefers installed Chrome for the reused persistent profile instead of crashing immediately with bundled Chromium
 
 What those changes accomplished:
 
@@ -174,9 +175,10 @@ What those changes accomplished:
   - this should be treated as a research note or macro-flow lens, not as a direct autonomous rule for the long-term quality-growth sleeve
   - if reused at all, it likely belongs as optional research context rather than portfolio action logic
 - LLM-collab note:
-  - a Grok plan-review attempt was made before implementation
-  - it failed on this machine because the Playwright/Grok browser launcher closed immediately on startup
-  - treat that as a tooling blocker, not as a design rejection
+  - earlier Grok plan-review attempts failed because Playwright bundled Chromium could not open the reused `~/.grok3api_chrome_profile`
+  - root cause was profile/browser-build incompatibility: temp profiles launched, the real profile launched with installed Chrome, but bundled Chromium closed immediately
+  - `analytics/grok_playwright_client.py` now prefers `channel="chrome"` and falls back to bundled Chromium if Chrome is unavailable
+  - smoke verified `GrokPlanReviewer` can launch and complete a small plan review again
 
 ## 3. Validation Already Completed
 
@@ -217,6 +219,11 @@ Additional automated validation completed on 2026-04-30:
 - `python scripts/longterm_motley_fool_setup.py --config <missing path>`
   - works
   - confirmed clean disabled-config path with no browser launch
+- `python -m pytest analytics/test_grok_playwright_launch.py analytics/test_grok_project_config.py -q`
+  - passed with `6 passed`
+- Grok plan-review smoke for the dry-run scheduler wrapper
+  - launched successfully
+  - returned `revise_first` with 85% confidence, mainly asking for fuller reporting/safety handling before scheduler implementation
 
 ## 4. Critical Guardrails
 

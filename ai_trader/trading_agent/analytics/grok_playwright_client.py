@@ -81,6 +81,31 @@ class GrokPlaywrightError(Exception):
     pass
 
 
+def _launch_persistent_context(chromium, *, user_data_dir: str, launch_options: dict):
+    """Launch persistent context with installed Chrome before bundled Chromium.
+
+    Existing user profiles can be incompatible with Playwright's bundled
+    Chromium build. Installed Chrome matches the profile's on-disk format and
+    avoids immediate browser exits on startup.
+    """
+    try:
+        return chromium.launch_persistent_context(
+            user_data_dir=user_data_dir,
+            channel="chrome",
+            **launch_options,
+        )
+    except Exception as chrome_exc:
+        logger.warning(
+            "[GrokPlaywright] Chrome channel launch failed; falling back to bundled "
+            "Chromium: %s",
+            chrome_exc,
+        )
+        return chromium.launch_persistent_context(
+            user_data_dir=user_data_dir,
+            **launch_options,
+        )
+
+
 class GrokPlaywrightClient:
     """
     Project-aware Grok client using Playwright browser automation.
@@ -243,14 +268,17 @@ class GrokPlaywrightClient:
                 "--disable-default-apps",
                 "--headless=new",
             ])
-        self._context = self._pw.chromium.launch_persistent_context(
+        self._context = _launch_persistent_context(
+            self._pw.chromium,
             user_data_dir=self.SESSION_DIR,
-            headless=self._headless,
-            viewport={"width": 1280, "height": 900},
-            user_agent=self.USER_AGENT,
-            locale="en-US",
-            timezone_id="America/New_York",
-            args=launch_args,
+            launch_options={
+                "headless": self._headless,
+                "viewport": {"width": 1280, "height": 900},
+                "user_agent": self.USER_AGENT,
+                "locale": "en-US",
+                "timezone_id": "America/New_York",
+                "args": launch_args,
+            },
         )
 
         self._page = (
