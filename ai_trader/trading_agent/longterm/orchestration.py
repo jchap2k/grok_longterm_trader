@@ -206,6 +206,8 @@ def run_longterm_cycle(
                 limit=report_limit,
             )
             account_action_plan = plan.to_dict()
+            if hasattr(journal, "record_action_plan"):
+                journal.record_action_plan(account_action_plan)
             account_action_plan_generated = bool(account_action_plan)
 
     return LongTermCycleResult(

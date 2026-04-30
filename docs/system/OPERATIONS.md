@@ -183,6 +183,9 @@ autonomous account manager. It includes a schema version, plan id, dry-run mode,
 benchmark gate reason, blocked reasons, and machine-readable intents such as
 `BUY`, `REBALANCE`, `REVIEW`, `CAPITAL_NEEDED`, and `BLOCKED`. It is not an
 order ticket and does not place broker orders.
+When the journal supports it, each generated account action plan is also stored
+in `longterm_action_plan_journal` so later paper/live reconciliation can compare
+intended actions against outcomes.
 
 Recommendation table ranks are action-aware. The journal emits a `ranking_score`
 and `rank_reason` for each row so actionable `BUY` / `ADD` candidates with

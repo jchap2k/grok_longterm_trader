@@ -27,7 +27,7 @@ Deterministic business-story, balance-sheet, quality-durability, and quality-at-
 Assigns review cadence and expected holding horizon by company category and risk language.
 
 `longterm/decision_journal.py`
-Stores decisions, structured packets, raw responses, benchmark start prices, outcome updates, recommendation table rows, and review candidates.
+Stores decisions, structured packets, raw responses, benchmark start prices, outcome updates, recommendation table rows, review candidates, and dry-run account action plans for future paper/live reconciliation.
 
 `longterm/report_builder.py`
 Creates a markdown decision report with benchmark outcomes and a Motley-Fool-style recommendation table. `RecommendationTableBuilder` is the preferred seam for report/next-action rows: it starts from `DecisionJournal` rows, optionally hydrates volatile fields, carries shortened decision IDs for traceability, and does not write enrichment back into the journal.

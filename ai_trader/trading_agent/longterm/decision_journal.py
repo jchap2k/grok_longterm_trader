@@ -56,6 +56,17 @@ class LongTermDecisionJournal:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS longterm_action_plan_journal (
+                    plan_id TEXT PRIMARY KEY,
+                    timestamp TEXT NOT NULL,
+                    mode TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    plan_json TEXT NOT NULL
+                )
+                """
+            )
             conn.commit()
         finally:
             conn.close()
@@ -284,6 +295,60 @@ class LongTermDecisionJournal:
         finally:
             conn.close()
         return [dict(row) for row in rows]
+
+    def record_action_plan(self, plan: Mapping[str, Any]) -> str:
+        """Persist a dry-run account action plan for paper/live reconciliation."""
+        plan_id = str(plan.get("plan_id") or uuid.uuid4())
+        timestamp = datetime.now().isoformat()
+        mode = str(plan.get("mode") or "dry_run")
+        status = str(plan.get("status") or "")
+        payload = dict(plan)
+        payload["plan_id"] = plan_id
+
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO longterm_action_plan_journal (
+                    plan_id, timestamp, mode, status, plan_json
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    plan_id,
+                    timestamp,
+                    mode,
+                    status,
+                    json.dumps(payload, sort_keys=True),
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        return plan_id
+
+    def list_action_plans(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Return recent dry-run account action plans, newest first."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                """
+                SELECT plan_id, timestamp, mode, status, plan_json
+                FROM longterm_action_plan_journal
+                ORDER BY timestamp DESC
+                LIMIT ?
+                """,
+                (int(limit),),
+            ).fetchall()
+        finally:
+            conn.close()
+
+        results = []
+        for row in rows:
+            record = dict(row)
+            record["plan_json"] = json.loads(record.get("plan_json") or "{}")
+            results.append(record)
+        return results
 
     def summarize_benchmark_performance(self) -> dict[str, Any]:
         """Summarize decisions that have both active and benchmark outcomes."""

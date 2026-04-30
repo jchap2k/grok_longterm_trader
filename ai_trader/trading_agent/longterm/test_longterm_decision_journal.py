@@ -100,3 +100,24 @@ def test_longterm_decision_journal_schema_is_created(tmp_path):
     conn.close()
 
     assert "longterm_decision_journal" in tables
+
+
+def test_decision_journal_records_dry_run_action_plan(tmp_path):
+    db_path = tmp_path / "longterm_decisions.db"
+    journal = LongTermDecisionJournal(db_path)
+    plan = {
+        "schema_version": 1,
+        "plan_id": "plan-123",
+        "mode": "dry_run",
+        "status": "ready",
+        "intents": [{"symbol": "NVDA", "intent_type": "BUY"}],
+    }
+
+    record_id = journal.record_action_plan(plan)
+    rows = journal.list_action_plans(limit=5)
+
+    assert record_id == "plan-123"
+    assert rows[0]["plan_id"] == "plan-123"
+    assert rows[0]["mode"] == "dry_run"
+    assert rows[0]["status"] == "ready"
+    assert rows[0]["plan_json"]["intents"][0]["symbol"] == "NVDA"

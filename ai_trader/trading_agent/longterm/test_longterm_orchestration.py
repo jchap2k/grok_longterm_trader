@@ -416,6 +416,7 @@ def test_cycle_can_build_account_action_plan(tmp_path):
 
     class FakeJournal:
         db_path = tmp_path / "journal.db"
+        recorded_plans = []
 
         def list_recommendation_table(self, limit=10):
             return []
@@ -427,6 +428,10 @@ def test_cycle_can_build_account_action_plan(tmp_path):
                 "decisions_beating_benchmark": 0,
             }
 
+        def record_action_plan(self, plan):
+            self.recorded_plans.append(plan)
+            return plan["plan_id"]
+
     class FakeAccountActionPlanBuilder:
         def build(self, journal, *, profile, portfolio_state, limit=10):
             return type(
@@ -435,6 +440,7 @@ def test_cycle_can_build_account_action_plan(tmp_path):
                 {
                     "to_dict": lambda self: {
                         "schema_version": 1,
+                        "plan_id": "plan-123",
                         "mode": "dry_run",
                         "status": "ready",
                         "intents": [{"symbol": "NVDA", "intent_type": "BUY"}],
@@ -458,6 +464,7 @@ def test_cycle_can_build_account_action_plan(tmp_path):
     assert result.account_action_plan_generated is True
     assert result.account_action_plan["mode"] == "dry_run"
     assert result.account_action_plan["intents"][0]["symbol"] == "NVDA"
+    assert FakeJournal.recorded_plans[0]["mode"] == "dry_run"
 
 
 def test_orchestration_cli_loads_idea_file_and_prints_summary(tmp_path, capsys):
