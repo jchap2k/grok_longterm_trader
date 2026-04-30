@@ -162,10 +162,23 @@ Run one cycle and also generate next-actions output using a portfolio snapshot:
 python scripts/run_longterm_cycle.py --idea-batch path\to\ideas.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db
 ```
 
+Add dry-run capital-needed alert markdown to the same cycle result:
+
+```powershell
+python scripts/run_longterm_cycle.py --idea-batch path\to\ideas.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --active-sleeve-value 35000 --available-cash 500
+```
+
+Cycle result JSON includes operator artifacts:
+- `idea_provenance_summary`
+- `packet_completeness_warnings`
+- `decision_journal_refs`
+- `report_generated`
+- `next_actions_generated`
+- `capital_alert_markdown` and `capital_alert_generated`
+
 Current limitations of this first cycle:
 - still dry-run only
-- no recurring scheduler loop yet
-- recommendation and next-actions outputs are returned as markdown strings in the cycle result JSON
+- recommendation, next-actions, and capital-alert outputs are returned as markdown strings in the cycle result JSON
 
 ## Dry-Run Long-Term Scheduler
 
@@ -186,6 +199,12 @@ Run a bounded recurring dry-run:
 python scripts/run_longterm_scheduler.py --max-runs 3 --interval-seconds 3600 --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --quiet
 ```
 
+Write the structured scheduler summary to disk:
+
+```powershell
+python scripts/run_longterm_scheduler.py --run-once --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --summary-output path\to\scheduler_summary.json --quiet
+```
+
 Allow setup if Motley Fool is enabled but cookies are stale:
 
 ```powershell
@@ -193,9 +212,10 @@ python scripts/run_longterm_scheduler.py --run-once --launch-login-if-needed --j
 ```
 
 The scheduler summary JSON includes per-run status, capture/setup status,
-decision IDs, recommendation markdown, next-actions markdown, and any error
-message. Use `--continue-on-error` only for supervised dry-run testing where a
-later cycle should still run after a failed cycle.
+decision IDs, idea provenance summary, packet completeness warnings,
+recommendation markdown, next-actions markdown, capital-alert markdown, and any
+error message. Use `--continue-on-error` only for supervised dry-run testing
+where a later cycle should still run after a failed cycle.
 
 ## Calendar-Flow Concept Research
 

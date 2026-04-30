@@ -29,6 +29,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--agent-config", default=None)
     parser.add_argument("--agent-preset", default="decision_4")
     parser.add_argument("--launch-login-if-needed", action="store_true")
+    parser.add_argument("--active-sleeve-value", type=float, default=None)
+    parser.add_argument("--available-cash", type=float, default=None)
     parser.add_argument("--quiet", action="store_true")
     return parser
 
@@ -55,6 +57,8 @@ def run_cli(
         "portfolio_state": portfolio_state,
         "agent_preset": args.agent_preset,
         "launch_login_if_needed": args.launch_login_if_needed,
+        "active_sleeve_value": args.active_sleeve_value,
+        "available_cash": args.available_cash,
         "verbose": not args.quiet,
     }
     if args.agent_config:

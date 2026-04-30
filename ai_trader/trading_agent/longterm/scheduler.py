@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import json
 from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -26,6 +27,8 @@ class LongTermSchedulerInputs:
     agent_config: str | Path | None = None
     agent_preset: str = "decision_4"
     launch_login_if_needed: bool = False
+    active_sleeve_value: float | None = None
+    available_cash: float | None = None
     quiet: bool = False
 
 
@@ -48,6 +51,9 @@ class LongTermSchedulerRunRecord:
     decision_ids: list[str] = field(default_factory=list)
     recommendation_report_markdown: str = ""
     next_actions_markdown: str = ""
+    capital_alert_markdown: str = ""
+    idea_provenance_summary: dict[str, int] = field(default_factory=dict)
+    packet_completeness_warnings: list[str] = field(default_factory=list)
     error: str = ""
 
 
@@ -81,6 +87,8 @@ def build_cycle_kwargs(inputs: LongTermSchedulerInputs) -> dict[str, Any]:
         "portfolio_state": portfolio_state,
         "agent_preset": inputs.agent_preset,
         "launch_login_if_needed": inputs.launch_login_if_needed,
+        "active_sleeve_value": inputs.active_sleeve_value,
+        "available_cash": inputs.available_cash,
         "verbose": not inputs.quiet,
     }
     if inputs.agent_config:
@@ -94,6 +102,7 @@ def run_longterm_scheduler(
     config: LongTermSchedulerConfig,
     cycle_func: Callable[..., Any] = run_longterm_cycle,
     sleep_func: Callable[[int], Any] = time.sleep,
+    summary_output_path: str | Path | None = None,
 ) -> LongTermSchedulerSummary:
     """Run recurring dry-run long-term cycles with bounded, testable control."""
     records: list[LongTermSchedulerRunRecord] = []
@@ -114,14 +123,18 @@ def run_longterm_scheduler(
             )
             records.append(record)
             if config.stop_on_error:
-                return _summary_from_records(records, stopped_on_error=True)
+                summary = _summary_from_records(records, stopped_on_error=True)
+                _write_summary_output(summary, summary_output_path)
+                return summary
         else:
             records.append(record)
 
         if run_number < max_runs:
             sleep_func(max(0, int(config.interval_seconds or 0)))
 
-    return _summary_from_records(records, stopped_on_error=False)
+    summary = _summary_from_records(records, stopped_on_error=False)
+    _write_summary_output(summary, summary_output_path)
+    return summary
 
 
 def _record_from_result(
@@ -141,6 +154,9 @@ def _record_from_result(
         decision_ids=list(payload.get("decision_ids") or []),
         recommendation_report_markdown=str(payload.get("recommendation_report_markdown") or ""),
         next_actions_markdown=str(payload.get("next_actions_markdown") or ""),
+        capital_alert_markdown=str(payload.get("capital_alert_markdown") or ""),
+        idea_provenance_summary=dict(payload.get("idea_provenance_summary") or {}),
+        packet_completeness_warnings=list(payload.get("packet_completeness_warnings") or []),
     )
 
 
@@ -168,3 +184,14 @@ def _summary_from_records(
 
 def _now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat()
+
+
+def _write_summary_output(
+    summary: LongTermSchedulerSummary,
+    output_path: str | Path | None,
+) -> None:
+    if not output_path:
+        return
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(asdict(summary), indent=2, sort_keys=True) + "\n", encoding="utf-8")

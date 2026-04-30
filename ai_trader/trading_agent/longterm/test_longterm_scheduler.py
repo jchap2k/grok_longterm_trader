@@ -59,6 +59,9 @@ def test_scheduler_run_once_records_explicit_outputs(tmp_path):
             "total_idea_count": 1,
             "recommendation_report_markdown": "# report\n",
             "next_actions_markdown": "# actions\n",
+            "capital_alert_markdown": "# capital\n",
+            "idea_provenance_summary": {"manual": 1},
+            "packet_completeness_warnings": [],
         }
 
     summary = run_longterm_scheduler(
@@ -75,6 +78,8 @@ def test_scheduler_run_once_records_explicit_outputs(tmp_path):
     assert summary.runs[0].decision_ids == ["decision-AAPL"]
     assert summary.runs[0].recommendation_report_markdown == "# report\n"
     assert summary.runs[0].next_actions_markdown == "# actions\n"
+    assert summary.runs[0].capital_alert_markdown == "# capital\n"
+    assert summary.runs[0].idea_provenance_summary == {"manual": 1}
     assert calls[0]["profile"].protected_symbols == ["FXAIX"]
 
 
@@ -191,3 +196,21 @@ def test_scheduler_cli_forwards_inputs_and_prints_summary(tmp_path, capsys):
     assert inputs.launch_login_if_needed is True
     assert inputs.quiet is True
     assert config.max_runs == 1
+
+
+def test_scheduler_writes_summary_output_file(tmp_path):
+    profile_path = tmp_path / "profile.json"
+    _write_profile(profile_path)
+    output_path = tmp_path / "summary.json"
+
+    summary = run_longterm_scheduler(
+        inputs=LongTermSchedulerInputs(profile_config=profile_path),
+        config=LongTermSchedulerConfig(max_runs=1, interval_seconds=5),
+        cycle_func=lambda **kwargs: {"status": "completed", "decision_ids": []},
+        sleep_func=lambda seconds: None,
+        summary_output_path=output_path,
+    )
+
+    assert summary.status == "completed"
+    assert output_path.exists()
+    assert '"status": "completed"' in output_path.read_text(encoding="utf-8")

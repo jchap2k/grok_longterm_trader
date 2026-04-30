@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from longterm.capital_alert import build_capital_needed_alert
+from longterm.decision_journal import LongTermDecisionJournal
 from longterm.motley_fool_capture import capture_motley_fool_ideas
 from longterm.motley_fool_settings import (
     MotleyFoolCaptureSettings,
@@ -15,7 +17,6 @@ from longterm.motley_fool_setup import complete_motley_fool_setup
 from longterm.next_actions import build_next_actions_markdown
 from longterm.portfolio_state import PortfolioState
 from longterm.report_builder import build_markdown_report
-from longterm.decision_journal import LongTermDecisionJournal
 from longterm.research_runner import LongTermResearchRunner
 from portfolio.portfolio_profile import PortfolioProfile
 from research.intake import create_research_packet_from_idea
@@ -43,6 +44,13 @@ class LongTermCycleResult:
     profile_dir: Path | None = None
     recommendation_report_markdown: str = ""
     next_actions_markdown: str = ""
+    capital_alert_markdown: str = ""
+    capital_alert_generated: bool = False
+    report_generated: bool = False
+    next_actions_generated: bool = False
+    idea_provenance_summary: dict[str, int] = field(default_factory=dict)
+    packet_completeness_warnings: list[str] = field(default_factory=list)
+    decision_journal_refs: list[str] = field(default_factory=list)
 
 
 def run_longterm_cycle(
@@ -58,6 +66,10 @@ def run_longterm_cycle(
     portfolio_state: PortfolioState | None = None,
     report_builder_func: Callable[..., str] = build_markdown_report,
     next_actions_builder_func: Callable[..., str] = build_next_actions_markdown,
+    capital_alert_builder_func: Callable[..., Any] = build_capital_needed_alert,
+    journal_factory: Callable[[str | Path | None], LongTermDecisionJournal] = LongTermDecisionJournal,
+    active_sleeve_value: float | None = None,
+    available_cash: float | None = None,
     report_limit: int = 10,
     agent_config_path: str | Path = DEFAULT_AGENT_CONFIG_PATH,
     agent_preset: str = "decision_4",
@@ -70,6 +82,8 @@ def run_longterm_cycle(
     """
     settings = motley_fool_settings or load_motley_fool_capture_settings()
     base_ideas = [dict(idea) for idea in (manual_ideas or [])]
+    for idea in base_ideas:
+        idea.setdefault("_provenance_bucket", "manual")
 
     captured_ideas: list[dict[str, Any]] = []
     capture_sources_run: list[str] = []
@@ -86,10 +100,13 @@ def run_longterm_cycle(
         for source_key in settings.sources:
             capture_sources_run.append(source_key)
             captured_ideas.extend(
-                capture_func(
+                _with_provenance_bucket(
+                    capture_func(
+                        source_key,
+                        profile_dir=settings.profile_dir,
+                        url=None,
+                    ),
                     source_key,
-                    profile_dir=settings.profile_dir,
-                    url=None,
                 )
             )
         capture_status = "captured"
@@ -108,12 +125,17 @@ def run_longterm_cycle(
         )
 
     decision_ids: list[str] = []
+    packet_completeness_warnings: list[str] = []
     for idea in all_ideas:
+        packet_idea = {
+            key: value for key, value in idea.items() if not str(key).startswith("_")
+        }
         packet = create_research_packet_from_idea(
-            idea,
+            packet_idea,
             profile=profile,
-            idea_source=idea.get("idea_source"),
+            idea_source=packet_idea.get("idea_source"),
         )
+        packet_completeness_warnings.extend(_packet_completeness_warnings(packet))
         decision_ids.append(
             runner.run_and_record(
                 packet,
@@ -123,12 +145,17 @@ def run_longterm_cycle(
 
     recommendation_report_markdown = ""
     next_actions_markdown = ""
+    capital_alert_markdown = ""
+    capital_alert_generated = False
+    report_generated = False
+    next_actions_generated = False
     if journal_db_path:
-        journal = LongTermDecisionJournal(journal_db_path)
+        journal = journal_factory(journal_db_path)
         recommendation_report_markdown = report_builder_func(
             journal,
             limit=report_limit,
         )
+        report_generated = bool(recommendation_report_markdown)
         if portfolio_state is not None:
             next_actions_markdown = next_actions_builder_func(
                 journal,
@@ -136,6 +163,17 @@ def run_longterm_cycle(
                 portfolio_state=portfolio_state,
                 limit=report_limit,
             )
+            next_actions_generated = bool(next_actions_markdown)
+        if active_sleeve_value is not None and available_cash is not None:
+            alert = capital_alert_builder_func(
+                journal,
+                active_sleeve_value=active_sleeve_value,
+                available_cash=available_cash,
+                portfolio_state=portfolio_state,
+                limit=report_limit,
+            )
+            capital_alert_markdown = getattr(alert, "markdown", "") or ""
+            capital_alert_generated = bool(getattr(alert, "should_alert", False))
 
     return LongTermCycleResult(
         status=status,
@@ -150,4 +188,48 @@ def run_longterm_cycle(
         profile_dir=settings.profile_dir if settings.should_open_login else settings.profile_dir,
         recommendation_report_markdown=recommendation_report_markdown,
         next_actions_markdown=next_actions_markdown,
+        capital_alert_markdown=capital_alert_markdown,
+        capital_alert_generated=capital_alert_generated,
+        report_generated=report_generated,
+        next_actions_generated=next_actions_generated,
+        idea_provenance_summary=_idea_provenance_summary(all_ideas),
+        packet_completeness_warnings=packet_completeness_warnings,
+        decision_journal_refs=list(decision_ids),
     )
+
+
+def _with_provenance_bucket(
+    ideas: list[dict[str, Any]],
+    source_key: str,
+) -> list[dict[str, Any]]:
+    bucket = f"motley_fool_{source_key}"
+    enriched = []
+    for idea in ideas:
+        payload = dict(idea)
+        payload.setdefault("_provenance_bucket", bucket)
+        enriched.append(payload)
+    return enriched
+
+
+def _idea_provenance_summary(ideas: list[dict[str, Any]]) -> dict[str, int]:
+    summary: dict[str, int] = {}
+    for idea in ideas:
+        bucket = str(
+            idea.get("_provenance_bucket")
+            or idea.get("idea_source")
+            or "manual"
+        )
+        summary[bucket] = summary.get(bucket, 0) + 1
+    return summary
+
+
+def _packet_completeness_warnings(packet) -> list[str]:
+    warnings: list[str] = []
+    symbol = packet.symbol or "UNKNOWN"
+    if not packet.company_name:
+        warnings.append(f"{symbol}: missing company_name")
+    if not packet.idea_source:
+        warnings.append(f"{symbol}: missing idea_source")
+    if not packet.thesis_summary and not packet.business_summary:
+        warnings.append(f"{symbol}: missing thesis_summary or business_summary")
+    return warnings

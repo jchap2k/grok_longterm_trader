@@ -39,7 +39,14 @@ def test_cycle_skips_motley_fool_capture_when_disabled(tmp_path):
     runner = FakeRunner()
     result = run_longterm_cycle(
         profile=_build_profile(),
-        manual_ideas=[{"symbol": "AAPL", "company_name": "Apple"}],
+        manual_ideas=[
+            {
+                "symbol": "AAPL",
+                "company_name": "Apple",
+                "idea_source": "manual",
+                "thesis_summary": "Durable ecosystem compounder.",
+            }
+        ],
         motley_fool_settings=MotleyFoolCaptureSettings(enabled=False, cookie_ready=False),
         capture_func=fake_capture,
         runner=runner,
@@ -161,11 +168,12 @@ def test_cycle_captures_configured_sources_and_records_all_ideas(tmp_path):
     def fake_capture(source_key, *, profile_dir=None, url=None):
         captured_calls.append((source_key, profile_dir, url))
         return [
-            {
-                "symbol": "NVDA" if source_key == "new_recommendations" else "META",
-                "company_name": source_key,
-                "idea_source": f"motley_fool_{source_key}",
-            }
+                {
+                    "symbol": "NVDA" if source_key == "new_recommendations" else "META",
+                    "company_name": source_key,
+                    "idea_source": f"motley_fool_{source_key}",
+                    "business_summary": "Premium source candidate.",
+                }
         ]
 
     class FakeRunner:
@@ -186,7 +194,14 @@ def test_cycle_captures_configured_sources_and_records_all_ideas(tmp_path):
 
     result = run_longterm_cycle(
         profile=_build_profile(),
-        manual_ideas=[{"symbol": "AAPL", "company_name": "Apple"}],
+        manual_ideas=[
+            {
+                "symbol": "AAPL",
+                "company_name": "Apple",
+                "idea_source": "manual",
+                "thesis_summary": "Durable ecosystem compounder.",
+            }
+        ],
         motley_fool_settings=settings,
         capture_func=fake_capture,
         runner=runner,
@@ -207,6 +222,17 @@ def test_cycle_captures_configured_sources_and_records_all_ideas(tmp_path):
     assert captured_calls == [
         ("new_recommendations", settings.profile_dir, None),
         ("quant_rankings", settings.profile_dir, None),
+    ]
+    assert result.idea_provenance_summary == {
+        "manual": 1,
+        "motley_fool_new_recommendations": 1,
+        "motley_fool_quant_rankings": 1,
+    }
+    assert result.packet_completeness_warnings == []
+    assert result.decision_journal_refs == [
+        "decision-AAPL",
+        "decision-NVDA",
+        "decision-META",
     ]
 
 
@@ -246,8 +272,73 @@ def test_cycle_can_build_report_and_next_actions_outputs(tmp_path):
 
     assert result.recommendation_report_markdown == "# report\n"
     assert result.next_actions_markdown == "# next actions\n"
+    assert result.report_generated is True
+    assert result.next_actions_generated is True
     assert report_calls == [(tmp_path / "journal.db", 7)]
     assert next_actions_calls == [(tmp_path / "journal.db", "FXAIX", 2500.0, 7)]
+
+
+def test_cycle_surfaces_packet_completeness_warnings(tmp_path):
+    class FakeRunner:
+        def run_and_record(self, packet, **kwargs):
+            return f"decision-{packet.symbol}"
+
+    result = run_longterm_cycle(
+        profile=_build_profile(),
+        manual_ideas=[{"symbol": "TSLA"}],
+        motley_fool_settings=MotleyFoolCaptureSettings(enabled=False, cookie_ready=False),
+        runner=FakeRunner(),
+        journal_db_path=tmp_path / "journal.db",
+    )
+
+    assert result.packet_completeness_warnings == [
+        "TSLA: missing company_name",
+        "TSLA: missing idea_source",
+        "TSLA: missing thesis_summary or business_summary",
+    ]
+
+
+def test_cycle_can_build_capital_alert_markdown(tmp_path):
+    class FakeRunner:
+        def run_and_record(self, packet, **kwargs):
+            return f"decision-{packet.symbol}"
+
+    class FakeJournal:
+        db_path = tmp_path / "journal.db"
+
+    capital_alert_calls = []
+
+    def fake_capital_alert_builder(journal, **kwargs):
+        capital_alert_calls.append((journal.db_path, kwargs))
+        return type(
+            "Alert",
+            (),
+            {
+                "should_alert": True,
+                "markdown": "# Capital Needed Alert\n",
+                "reason": "Capital shortfall.",
+            },
+        )()
+
+    result = run_longterm_cycle(
+        profile=_build_profile(),
+        manual_ideas=[],
+        motley_fool_settings=MotleyFoolCaptureSettings(enabled=False, cookie_ready=False),
+        runner=FakeRunner(),
+        journal_db_path=tmp_path / "journal.db",
+        portfolio_state=PortfolioState(cash=500, holdings=[]),
+        active_sleeve_value=35000,
+        available_cash=500,
+        journal_factory=lambda path: FakeJournal(),
+        capital_alert_builder_func=fake_capital_alert_builder,
+        report_builder_func=lambda journal, *, limit: "",
+        next_actions_builder_func=lambda journal, *, profile, portfolio_state, limit: "",
+    )
+
+    assert result.capital_alert_markdown == "# Capital Needed Alert\n"
+    assert result.capital_alert_generated is True
+    assert capital_alert_calls[0][1]["active_sleeve_value"] == 35000
+    assert capital_alert_calls[0][1]["available_cash"] == 500
 
 
 def test_orchestration_cli_loads_idea_file_and_prints_summary(tmp_path, capsys):

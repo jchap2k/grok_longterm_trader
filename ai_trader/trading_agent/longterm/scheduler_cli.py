@@ -26,10 +26,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--agent-config", default=None)
     parser.add_argument("--agent-preset", default="decision_4")
     parser.add_argument("--launch-login-if-needed", action="store_true")
+    parser.add_argument("--active-sleeve-value", type=float, default=None)
+    parser.add_argument("--available-cash", type=float, default=None)
     parser.add_argument("--run-once", action="store_true")
     parser.add_argument("--max-runs", type=int, default=1)
     parser.add_argument("--interval-seconds", type=int, default=3600)
     parser.add_argument("--continue-on-error", action="store_true")
+    parser.add_argument("--summary-output", default="")
     parser.add_argument("--quiet", action="store_true")
     return parser
 
@@ -49,6 +52,8 @@ def run_cli(
         agent_config=Path(args.agent_config) if args.agent_config else None,
         agent_preset=args.agent_preset,
         launch_login_if_needed=args.launch_login_if_needed,
+        active_sleeve_value=args.active_sleeve_value,
+        available_cash=args.available_cash,
         quiet=args.quiet,
     )
     config = LongTermSchedulerConfig(
@@ -56,7 +61,10 @@ def run_cli(
         interval_seconds=args.interval_seconds,
         stop_on_error=not args.continue_on_error,
     )
-    result = scheduler_func(inputs=inputs, config=config)
+    kwargs = {"inputs": inputs, "config": config}
+    if args.summary_output:
+        kwargs["summary_output_path"] = Path(args.summary_output)
+    result = scheduler_func(**kwargs)
     payload = asdict(result) if is_dataclass(result) else result
     print(json.dumps(payload, indent=2, sort_keys=True, default=str))
     return 0

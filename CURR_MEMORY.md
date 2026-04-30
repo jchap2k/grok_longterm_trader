@@ -59,6 +59,7 @@ Additional continuation work completed on 2026-04-30:
 - added interactive Motley Fool login/setup flow that can open the configured Chrome profile, verify premium capture access, and persist `cookie_ready=true`
 - fixed the Grok/LLM-collab Playwright launcher so it prefers installed Chrome for the reused persistent profile instead of crashing immediately with bundled Chromium
 - added a dry-run long-term scheduler wrapper that repeatedly calls the one-cycle orchestration while reloading profile/config/portfolio state each run
+- added richer operator artifacts: idea provenance, packet completeness warnings, decision refs, generated-output flags, dry-run capital-alert markdown, and scheduler summary JSON output
 
 What those changes accomplished:
 
@@ -170,6 +171,19 @@ What those changes accomplished:
   - `python scripts/run_longterm_scheduler.py --run-once --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --quiet`
   - `python scripts/run_longterm_scheduler.py --max-runs 3 --interval-seconds 3600 --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --quiet`
 
+### Operator artifacts
+- Cycle and scheduler outputs now include:
+  - `idea_provenance_summary`
+  - `packet_completeness_warnings`
+  - `decision_journal_refs`
+  - `report_generated`
+  - `next_actions_generated`
+  - `capital_alert_markdown`
+  - `capital_alert_generated`
+- Capital-alert markdown is dry-run only and uses the existing capital alert suppression logic.
+- Scheduler can write the structured JSON summary to disk:
+  - `python scripts/run_longterm_scheduler.py --run-once --summary-output path\to\scheduler_summary.json ...`
+
 ### Research-only calendar-flow concept test
 - Added:
   - `ai_trader/trading_agent/longterm/calendar_flow_research.py`
@@ -250,6 +264,11 @@ Additional automated validation completed on 2026-04-30:
 - `python scripts/run_longterm_scheduler.py --run-once --profile-config <temp profile> --portfolio-state <temp portfolio> --motley-fool-config <missing path> --journal-db <temp db> --quiet`
   - works
   - confirmed disabled Fool capture, zero decisions, recommendation markdown, and next-actions markdown in scheduler summary
+- `python -m pytest longterm -q`
+  - now passes with `118 passed`
+- `python scripts/run_longterm_scheduler.py --run-once --profile-config <temp profile> --portfolio-state <temp portfolio> --motley-fool-config <missing path> --journal-db <temp db> --summary-output <temp summary> --active-sleeve-value 35000 --available-cash 5000 --quiet`
+  - works
+  - confirmed summary-output file is written with new artifact fields
 
 ## 4. Critical Guardrails
 
@@ -375,10 +394,10 @@ What is already done in Phase 1:
 - interactive Motley Fool setup is now implemented and tested for `cookie_ready=false`
 - the cycle can now emit recommendation markdown
 - the cycle can now emit next-actions markdown when given portfolio state
+- the cycle can now emit dry-run capital-alert markdown when active sleeve/cash inputs are supplied
+- scheduler summary output can now be written to disk
 
 What is not done yet in Phase 1:
-- explicit batch summaries for captured/manual idea provenance
-- richer structured end-of-cycle summaries beyond raw markdown strings
 - fuller integration of rebalance / capital-alert outputs in the same cycle result
 
 Likely implementation seams:
@@ -641,9 +660,8 @@ For this repo, trust these first:
 
 Once the scheduler/orchestration layer is built and validated, the next likely best sequence is:
 
-1. Harden packet completeness and source provenance.
-2. Improve recommendation-table ranking/reporting maturity.
-3. Strengthen thesis-monitor and review workflow.
-4. Refine next-actions / rebalance decision quality.
-5. Expand orchestration outputs from markdown-only strings toward more structured operator/scheduler artifacts.
-6. Only then start a true live-readiness design review.
+1. Improve recommendation-table ranking/reporting maturity.
+2. Strengthen thesis-monitor and review workflow.
+3. Refine next-actions / rebalance decision quality.
+4. Add fuller rebalance output into the same cycle artifacts.
+5. Only then start a true live-readiness design review.
