@@ -53,7 +53,7 @@ The next-actions report is still dry-run only. It evaluates the FXAIX benchmark 
 
 ## Capital-Needed Email Payloads
 
-Capital-needed emails are informational only. The long-term trader can build provider-agnostic email payloads and send them through a Brevo-compatible SMTP sender, but email sending should remain off until explicitly enabled in a local ignored config file.
+Capital-needed emails are informational only. The long-term trader can build provider-agnostic email payloads and send them through a Brevo-compatible SMTP sender, but email sending should remain off until explicitly enabled in a local ignored config file. A capital request should only be sent when a high-conviction candidate lacks active-sleeve cash and existing non-protected holdings do not already have sell/reduce recommendations that should fund the idea first.
 
 Use this template:
 
@@ -62,6 +62,18 @@ ai_trader/trading_agent/config/email_notifications.example.json
 ```
 
 Copy it locally to `ai_trader/trading_agent/config/email_notifications.json` and fill in the Brevo SMTP login/key if you want delivery. It is fine to reuse `jchap2k.swingtrader@gmail.com` as both recipient and verified sender.
+
+Dry-run the alert markdown:
+
+```powershell
+python scripts/longterm_capital_alert.py --active-sleeve-value 34000 --available-cash 500 --portfolio-state path\to\portfolio.json
+```
+
+Send through the local Brevo-compatible config only when explicitly intended:
+
+```powershell
+python scripts/longterm_capital_alert.py --active-sleeve-value 34000 --available-cash 500 --portfolio-state path\to\portfolio.json --send
+```
 
 ## Grok Project Review
 

@@ -291,8 +291,15 @@
 <capital_needed_alerts>
     <trigger>
         The system finds a very strong new candidate or a strong add-to-current-holding
-        opportunity but lacks available active-sleeve cash.
+        opportunity, lacks available active-sleeve cash, and current active holdings
+        should not be sold or reduced first.
     </trigger>
+    <eligibility_rules>
+        <rule>Do not request more capital merely because a recommendation exists and cash is short.</rule>
+        <rule>Before requesting capital, check whether non-protected active holdings have SELL or REDUCE recommendations.</rule>
+        <rule>If a non-protected active holding should be sold or reduced, fund the better idea from active-sleeve rotation before requesting more cash.</rule>
+        <rule>Only send or prepare a capital-needed email for truly high-conviction candidates after existing-position funding options have been ruled out.</rule>
+    </eligibility_rules>
     <actions>
         <action>log the opportunity</action>
         <action>include it in the recommendation table</action>

@@ -13,6 +13,7 @@ from longterm.journal_cli import build_parser as build_journal_parser, run_cli a
 from longterm.market_enrichment import enrich_prices
 from longterm.recommendation_enrichment import CachedRecommendationEnricher
 from longterm.capital_alert import build_capital_needed_alert, build_capital_needed_email
+from longterm.portfolio_state import PortfolioState
 from longterm.report_builder import RecommendationTableBuilder, build_markdown_report
 from portfolio.portfolio_profile import PortfolioProfile
 from research.intake import create_research_packet_from_idea
@@ -382,6 +383,43 @@ def test_capital_needed_alert_uses_ranked_recommendation_table(tmp_path):
     assert "https://example.com/nvda" in alert.markdown
 
 
+def test_capital_needed_alert_suppressed_when_existing_holding_should_be_sold_first(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    journal.record_decision(
+        create_research_packet_from_idea({"symbol": "AAPL", "benchmark_symbol": "FXAIX"}),
+        decision={
+            "recommendation": "SELL",
+            "confidence": 88,
+            "suggested_size_pct": 0,
+            "key_thesis": "Thesis broke.",
+        },
+    )
+    journal.record_decision(
+        create_research_packet_from_idea({"symbol": "NVDA", "benchmark_symbol": "FXAIX"}),
+        decision={
+            "recommendation": "BUY",
+            "confidence": 94,
+            "suggested_size_pct": 8,
+            "key_thesis": "AI infrastructure leader.",
+        },
+    )
+    state = PortfolioState(
+        cash=500,
+        holdings=[{"symbol": "AAPL", "market_value": 3000}],
+        protected_symbols=["FXAIX"],
+    )
+
+    alert = build_capital_needed_alert(
+        journal,
+        active_sleeve_value=34000,
+        available_cash=500,
+        portfolio_state=state,
+    )
+
+    assert alert.should_alert is False
+    assert "sell/reduce" in alert.reason.lower()
+
+
 def test_capital_needed_email_payload_is_informational_and_traceable(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     decision_id = journal.record_decision(
@@ -459,7 +497,7 @@ def test_smtp_email_sender_uses_brevo_tls_settings(tmp_path):
             email_to="user@example.com",
             email_from="bot@example.com",
             username="abc123@smtp-brevo.com",
-            password="xsmtpsib-example",
+            password="fake-smtp-password",
             smtp_host="smtp-relay.brevo.com",
             smtp_port=587,
         ),
@@ -470,7 +508,7 @@ def test_smtp_email_sender_uses_brevo_tls_settings(tmp_path):
     assert smtp.host == "smtp-relay.brevo.com"
     assert smtp.port == 587
     assert smtp.started_tls is True
-    assert smtp.logged_in == ("abc123@smtp-brevo.com", "xsmtpsib-example")
+    assert smtp.logged_in == ("abc123@smtp-brevo.com", "fake-smtp-password")
     assert smtp.sent[0] == "bot@example.com"
     assert smtp.sent[1] == ["user@example.com"]
     assert "Capital needed" in smtp.sent[2]
@@ -486,7 +524,7 @@ def test_load_email_settings_uses_simple_bot_brevo_keys(tmp_path):
                 "email_to": "user@example.com",
                 "email_from": "bot@example.com",
                 "email_username": "abc123@smtp-brevo.com",
-                "email_password": "xsmtpsib-example",
+                "email_password": "fake-smtp-password",
                 "email_smtp_host": "smtp-relay.brevo.com",
                 "email_smtp_port": 587,
             }
@@ -500,7 +538,7 @@ def test_load_email_settings_uses_simple_bot_brevo_keys(tmp_path):
     assert settings.email_to == "user@example.com"
     assert settings.email_from == "bot@example.com"
     assert settings.username == "abc123@smtp-brevo.com"
-    assert settings.password == "xsmtpsib-example"
+    assert settings.password == "fake-smtp-password"
     assert settings.smtp_host == "smtp-relay.brevo.com"
     assert settings.smtp_port == 587
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from longterm.decision_journal import LongTermDecisionJournal
+from longterm.portfolio_state import PortfolioState
 
 
 @dataclass(frozen=True)
@@ -13,6 +14,7 @@ class CapitalNeededAlert:
     top_symbol: str
     estimated_capital_needed: float
     markdown: str
+    reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -30,23 +32,28 @@ def build_capital_needed_alert(
     *,
     active_sleeve_value: float,
     available_cash: float,
+    portfolio_state: PortfolioState | None = None,
     min_confidence: int = 85,
     limit: int = 5,
 ) -> CapitalNeededAlert:
     """Build an alert payload when high-conviction ideas exceed available cash."""
+    suppression_reason = _capital_request_suppression_reason(journal, portfolio_state)
+    if suppression_reason:
+        return CapitalNeededAlert(False, "", 0.0, "", suppression_reason)
+
     rows = [
         row
         for row in journal.list_recommendation_table(limit=limit)
         if int(row.get("confidence") or 0) >= min_confidence
     ]
     if not rows:
-        return CapitalNeededAlert(False, "", 0.0, "")
+        return CapitalNeededAlert(False, "", 0.0, "", "No high-conviction candidates.")
 
     top = rows[0]
     target_cash = active_sleeve_value * (float(top.get("suggested_size_pct") or 0.0) / 100.0)
     needed = round(max(0.0, target_cash - available_cash), 2)
     if needed <= 0:
-        return CapitalNeededAlert(False, top["symbol"], 0.0, "")
+        return CapitalNeededAlert(False, top["symbol"], 0.0, "", "Available cash is sufficient.")
 
     lines = [
         "# Capital Needed Alert",
@@ -73,7 +80,7 @@ def build_capital_needed_alert(
             )
         )
 
-    return CapitalNeededAlert(True, top["symbol"], needed, "\n".join(lines) + "\n")
+    return CapitalNeededAlert(True, top["symbol"], needed, "\n".join(lines) + "\n", "Capital shortfall.")
 
 
 def build_capital_needed_email(
@@ -82,6 +89,7 @@ def build_capital_needed_email(
     active_sleeve_value: float,
     available_cash: float,
     recipient_email: str,
+    portfolio_state: PortfolioState | None = None,
     min_confidence: int = 85,
     limit: int = 5,
 ) -> CapitalNeededEmail:
@@ -90,6 +98,7 @@ def build_capital_needed_email(
         journal,
         active_sleeve_value=active_sleeve_value,
         available_cash=available_cash,
+        portfolio_state=portfolio_state,
         min_confidence=min_confidence,
         limit=limit,
     )
@@ -167,3 +176,29 @@ def _format_link(value: str) -> str:
         return ""
     escaped = _escape_html(value)
     return f'<a href="{escaped}">{escaped}</a>'
+
+
+def _capital_request_suppression_reason(
+    journal: LongTermDecisionJournal,
+    portfolio_state: PortfolioState | None,
+) -> str:
+    if portfolio_state is None:
+        return ""
+
+    latest_by_symbol: dict[str, str] = {}
+    for row in journal.list_recent_decisions(limit=100):
+        symbol = str(row.get("symbol") or "").upper()
+        if symbol and symbol not in latest_by_symbol:
+            latest_by_symbol[symbol] = str(row.get("recommendation") or "").upper()
+
+    for holding in portfolio_state.holdings:
+        symbol = holding.symbol.upper()
+        if symbol in portfolio_state.protected_symbols or holding.market_value <= 0:
+            continue
+        recommendation = latest_by_symbol.get(symbol, "")
+        if recommendation in {"SELL", "REDUCE"}:
+            return (
+                f"Existing active holding {symbol} has a sell/reduce recommendation; "
+                "fund the stronger idea from active-sleeve rotation before requesting more capital."
+            )
+    return ""
