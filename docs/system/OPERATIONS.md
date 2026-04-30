@@ -99,6 +99,23 @@ Use one capture process at a time for that profile. The default full capture run
 the pages sequentially so the profile is not opened by multiple Playwright
 sessions at once.
 
+Scheduler-facing Motley Fool settings live at:
+
+```text
+ai_trader/trading_agent/config/motley_fool_capture.json
+```
+
+Use the committed `.example.json` as the safe template. The local config is
+ignored because it records whether this machine has a subscribed/logged-in Fool
+profile available. Future scheduler behavior should be:
+
+- If `enabled` is `false`, skip Motley Fool intake without warning or failure.
+- If `enabled` is `true` and `cookie_ready` is `false`, open the configured
+  Chrome profile at `login_url` for interactive login/setup, then set
+  `cookie_ready` once verified.
+- If `enabled` and `cookie_ready` are both `true`, call the capture API/scripts
+  directly and continue treating Fool rows as research ideas, not trade orders.
+
 ## Grok Project Review
 
 The repo-safe project config is:

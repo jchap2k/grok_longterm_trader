@@ -29,6 +29,7 @@
     "ai_trader/trading_agent/longterm/motley_fool_intake.py",
     "ai_trader/trading_agent/longterm/motley_fool_capture.py",
     "ai_trader/trading_agent/longterm/motley_fool_capture_cli.py",
+    "ai_trader/trading_agent/longterm/motley_fool_settings.py",
     "ai_trader/trading_agent/longterm/review_status.py",
     "ai_trader/trading_agent/longterm/action_planner.py",
     "ai_trader/trading_agent/longterm/benchmark_guard.py",
@@ -37,6 +38,7 @@
   ],
   "agent_configs": [
     "ai_trader/trading_agent/config/grok_project_config.json",
+    "ai_trader/trading_agent/config/motley_fool_capture.example.json",
     "ai_trader/trading_agent/agent/configs/longterm_trading_agent_specs.json",
     "ai_trader/trading_agent/agent/configs/planning_agent_specs.json",
     "ai_trader/trading_agent/agent/configs/code_review_agent_specs.json"

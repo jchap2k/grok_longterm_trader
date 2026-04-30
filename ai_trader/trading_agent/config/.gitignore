@@ -3,5 +3,6 @@
 *_secret.txt
 *_token.txt
 broker_config.json
+motley_fool_capture.json
 !.gitignore
 !README.md

@@ -11,6 +11,7 @@ from longterm.email_sender import EmailSendResult
 from longterm.journal_cli import build_parser, run_cli
 from longterm.motley_fool_capture_cli import build_parser as build_motley_parser
 from longterm.motley_fool_capture_cli import run_cli as run_motley_cli
+from longterm.motley_fool_settings import load_motley_fool_capture_settings
 from research.intake import create_research_packet_from_idea
 
 
@@ -257,3 +258,58 @@ def test_motley_fool_capture_cli_outputs_investigation_ideas(capsys):
     assert exit_code == 0
     assert payload[0]["symbol"] == "MOGA"
     assert payload[0]["idea_source"] == "motley_fool_dashboard"
+
+
+def test_motley_fool_settings_missing_config_is_disabled(tmp_path):
+    settings = load_motley_fool_capture_settings(tmp_path / "missing.json")
+
+    assert settings.enabled is False
+    assert settings.cookie_ready is False
+    assert settings.can_capture is False
+    assert settings.should_open_login is False
+
+
+def test_motley_fool_settings_enabled_cookie_ready_can_capture(tmp_path):
+    config_path = tmp_path / "motley_fool_capture.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "motley_fool": {
+                    "enabled": True,
+                    "cookie_ready": True,
+                    "profile_dir": "~/.grok3api_chrome_profile",
+                    "sources": ["new_recommendations", "quant_rankings"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_motley_fool_capture_settings(config_path)
+
+    assert settings.enabled is True
+    assert settings.cookie_ready is True
+    assert settings.can_capture is True
+    assert settings.should_open_login is False
+    assert settings.sources == ["new_recommendations", "quant_rankings"]
+
+
+def test_motley_fool_settings_enabled_without_cookie_requests_login(tmp_path):
+    config_path = tmp_path / "motley_fool_capture.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "motley_fool": {
+                    "enabled": True,
+                    "cookie_ready": False,
+                    "open_login_when_cookie_missing": True,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_motley_fool_capture_settings(config_path)
+
+    assert settings.can_capture is False
+    assert settings.should_open_login is True

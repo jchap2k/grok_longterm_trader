@@ -53,6 +53,19 @@ Uses the logged-in Playwright/Chrome profile to capture Motley Fool premium tabl
 `longterm/motley_fool_capture_cli.py`
 Provides a command surface for exporting captured Motley Fool ideas as JSON. The default source set captures the full new recommendations, analyst rankings, and AI rankings pages; dashboard capture is available as a smoke test.
 
+`config/motley_fool_capture.json`
+Local scheduler-facing toggle for optional Motley Fool intake. It records
+whether Fool is enabled on this machine, whether the logged-in Chrome profile is
+ready, which profile to use, and which premium sources should be captured. The
+real local file is ignored; `config/motley_fool_capture.example.json` is the
+repo-safe template.
+
+`longterm/motley_fool_settings.py`
+Loads the optional Motley Fool config for future scheduler wiring. Missing config
+is treated as disabled, `enabled=true` plus `cookie_ready=true` means scheduled
+capture may run, and `enabled=true` plus `cookie_ready=false` can trigger an
+interactive login/setup flow.
+
 `longterm/review_status.py`
 Builds per-symbol thesis review status from journal review candidates. It rehydrates the stored research packet, applies `ThesisMonitor`, and returns review-due/thesis-state fields for recommendation tables, markdown reports, and next-action reports without mutating the journal.
 

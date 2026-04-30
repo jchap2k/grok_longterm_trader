@@ -1,0 +1,14 @@
+{
+  "motley_fool": {
+    "enabled": false,
+    "cookie_ready": false,
+    "profile_dir": "~/.grok3api_chrome_profile",
+    "open_login_when_cookie_missing": true,
+    "login_url": "https://www.fool.com/premium?watchSymbols=NASDAQ%3ACRWD",
+    "sources": [
+      "new_recommendations",
+      "analyst_rankings",
+      "quant_rankings"
+    ]
+  }
+}
