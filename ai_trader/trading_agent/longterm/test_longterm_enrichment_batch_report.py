@@ -547,6 +547,35 @@ def test_recommendation_table_keeps_latest_ranked_candidates_with_links(tmp_path
     assert rows[0]["info_link"] == "https://example.com/nvda"
 
 
+def test_recommendation_table_prioritizes_actionable_buys_over_passive_holds(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    journal.record_decision(
+        create_research_packet_from_idea({"symbol": "MSFT", "benchmark_symbol": "FXAIX"}),
+        decision={
+            "recommendation": "HOLD",
+            "confidence": 99,
+            "suggested_size_pct": 0,
+            "key_thesis": "Excellent company, but not an add candidate today.",
+        },
+    )
+    journal.record_decision(
+        create_research_packet_from_idea({"symbol": "NVDA", "benchmark_symbol": "FXAIX"}),
+        decision={
+            "recommendation": "BUY",
+            "confidence": 85,
+            "suggested_size_pct": 8,
+            "key_thesis": "Actionable new active-sleeve candidate.",
+        },
+    )
+
+    rows = journal.list_recommendation_table()
+
+    assert [row["symbol"] for row in rows] == ["NVDA", "MSFT"]
+    assert rows[0]["ranking_score"] > rows[1]["ranking_score"]
+    assert "BUY" in rows[0]["rank_reason"]
+    assert "HOLD" in rows[1]["rank_reason"]
+
+
 def test_recommendation_table_builder_enriches_without_mutating_journal(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     journal.record_decision(

@@ -64,6 +64,7 @@ Additional continuation work completed on 2026-04-30:
 - refined rebalance proposals with auditable explanation fields: source/target ranks, rank gap, source current/target value, suggested target size, decision IDs, and benchmark gate reason
 - added optional review/thesis status context to rebalance proposals so future review-aware scoring can explain stale or healthy source/target names
 - made review/thesis status influence dry-run rebalance source selection through an auditable rebalance-score adjustment
+- made recommendation-table ranking action-aware with a visible `ranking_score` / `rank_reason` so actionable `BUY` and `ADD` rows can outrank passive `HOLD` rows
 
 What those changes accomplished:
 
@@ -88,6 +89,7 @@ What those changes accomplished:
 ### Recommendation table / reporting layer
 - A recommendation-table builder now creates ranked rows with traceability.
 - The output is closer to a curated service/research list than a raw log dump.
+- Recommendation rows now include an action-aware ranking score that blends confidence, suggested size, and `BUY` / `ADD` actionability.
 - Enrichment adds daily/volatile fields like price, change, market cap, revenue growth, estimated return range, and drawdown without polluting the immutable journal.
 - Review status can be derived later from stored packets without mutating historical decision records.
 
@@ -406,7 +408,7 @@ What is already done in Phase 1:
 - scheduler summary output can now be written to disk
 
 What is not done yet in Phase 1:
-- fuller ranking/reporting maturity and backtesting/tuning the rebalance scoring weights against real journal outcomes
+- fuller ranking/reporting maturity, rank-movement history, and backtesting/tuning the rebalance scoring weights against real journal outcomes
 
 Likely implementation seams:
 - add a long-term scheduler entrypoint or orchestration module under `ai_trader/trading_agent/longterm/`

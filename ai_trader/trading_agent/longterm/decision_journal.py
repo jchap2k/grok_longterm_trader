@@ -247,13 +247,16 @@ class LongTermDecisionJournal:
             record["estimated_max_drawdown_pct"] = decision.get("estimated_max_drawdown_pct")
             record["times_recommended"] = sum(1 for item in rows if item["symbol"] == symbol)
             record["discussion_count"] = decision.get("discussion_count")
+            ranking_score = _recommendation_ranking_score(record)
+            record["ranking_score"] = ranking_score
+            record["rank_reason"] = _rank_reason(record, ranking_score)
             latest_by_symbol[symbol] = record
 
         ranked = sorted(
             latest_by_symbol.values(),
             key=lambda row: (
-                int(row.get("confidence") or 0),
-                float(row.get("suggested_size_pct") or 0.0),
+                float(row.get("ranking_score") or 0.0),
+                str(row.get("timestamp") or ""),
             ),
             reverse=True,
         )[: int(limit)]
@@ -319,3 +322,26 @@ class LongTermDecisionJournal:
             "average_excess_return_pct": round(sum(excess_returns) / count, 4),
             "decisions_beating_benchmark": sum(1 for value in excess_returns if value > 0),
         }
+
+
+def _recommendation_ranking_score(row: Mapping[str, Any]) -> float:
+    """Score recommendation rows for active-sleeve actionability."""
+    action = str(row.get("recommendation") or row.get("action") or "").upper()
+    action_boost = {
+        "BUY": 10.0,
+        "ADD": 8.0,
+        "HOLD": 0.0,
+    }.get(action, 0.0)
+    confidence = float(row.get("confidence") or 0.0)
+    size = float(row.get("suggested_size_pct") or 0.0)
+    return round(confidence + (size * 2.0) + action_boost, 4)
+
+
+def _rank_reason(row: Mapping[str, Any], ranking_score: float) -> str:
+    action = str(row.get("recommendation") or row.get("action") or "").upper()
+    confidence = int(row.get("confidence") or 0)
+    size = float(row.get("suggested_size_pct") or 0.0)
+    return (
+        f"{action} recommendation, confidence {confidence}, "
+        f"suggested size {size:g}%, ranking score {ranking_score:g}."
+    )
