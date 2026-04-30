@@ -150,6 +150,35 @@ Current limitations of this first cycle:
 - no automatic browser launch for Motley Fool login/setup yet
 - recommendation and next-actions outputs are returned as markdown strings in the cycle result JSON
 
+## Calendar-Flow Concept Research
+
+There is now a research-only tool for evaluating the monthly `TLT` calendar-flow
+idea that came from the X thread. This is not wired into long-term decision
+rules or live trading.
+
+Run the summary view:
+
+```powershell
+python scripts/run_tlt_calendar_flow_research.py --symbol TLT --start 2004-01-01 --end 2024-12-01
+```
+
+Add a simple round-trip cost assumption:
+
+```powershell
+python scripts/run_tlt_calendar_flow_research.py --symbol TLT --start 2004-01-01 --end 2024-12-01 --round-trip-cost-bps 10
+```
+
+Show every trade only when needed:
+
+```powershell
+python scripts/run_tlt_calendar_flow_research.py --symbol TLT --start 2004-01-01 --end 2024-12-01 --include-trades
+```
+
+Current conclusion from the rebuilt test:
+- the social-media backtest claims were not credible as shown
+- the cleaned-up test still suggests a plausible `TLT` calendar effect
+- this should be treated as optional research context, not as a direct active-sleeve rule for the long-term quality-growth trader
+
 ## Grok Project Review
 
 The repo-safe project config is:

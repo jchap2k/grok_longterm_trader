@@ -54,6 +54,7 @@ Additional continuation work completed on 2026-04-30:
 - added tests for disabled / login-required / capture-enabled Motley Fool orchestration states
 - extended the cycle so it can also build a recommendation markdown report
 - extended the cycle so it can also build a next-actions markdown report when portfolio state is provided
+- added a research-only pure-Python calendar-flow backtest module and CLI for evaluating the TLT monthly timing concept from the X thread
 
 What those changes accomplished:
 
@@ -132,6 +133,34 @@ What those changes accomplished:
   - no automatic browser launch yet
   - no full recurring scheduler loop yet
 
+### Research-only calendar-flow concept test
+- Added:
+  - `ai_trader/trading_agent/longterm/calendar_flow_research.py`
+  - `ai_trader/trading_agent/longterm/calendar_flow_cli.py`
+  - `ai_trader/trading_agent/scripts/run_tlt_calendar_flow_research.py`
+  - `ai_trader/trading_agent/longterm/test_longterm_calendar_flow_research.py`
+- Purpose:
+  - test the calendar-based `TLT` concept from the X thread using transparent pandas/yfinance-style accounting rather than vectorbt
+  - reproduce the posted window logic cleanly:
+    - short from the first trading day of the month to 5 trading days later
+    - long from 7 trading days before the next month boundary to the final trading day of the current month
+  - avoid hidden sizing/accounting artifacts
+- Result of the concept test on real `TLT` data (`2004-01-02` to `2024-11-29`):
+  - buy-and-hold return was about `+118.5%`
+  - strategy return was about `+494.4%` before costs
+  - strategy return was about `+260.3%` with `10 bps` round-trip cost per trade
+  - max drawdown stayed around `-17.6%` to `-18.1%`
+  - win rate stayed around `57%` to `59%`
+- Interpretation:
+  - this makes the concept look plausible as a real calendar effect
+  - it does **not** support the absurd social-media backtest claims (`+47,189%`, Sharpe `103`, etc.)
+  - this should be treated as a research note or macro-flow lens, not as a direct autonomous rule for the long-term quality-growth sleeve
+  - if reused at all, it likely belongs as optional research context rather than portfolio action logic
+- LLM-collab note:
+  - a Grok plan-review attempt was made before implementation
+  - it failed on this machine because the Playwright/Grok browser launcher closed immediately on startup
+  - treat that as a tooling blocker, not as a design rejection
+
 ## 3. Validation Already Completed
 
 Validated command baseline:
@@ -156,10 +185,16 @@ Additional automated validation completed on 2026-04-30:
 - `python -m pytest ai_trader/trading_agent/longterm/test_longterm_orchestration.py -q`
   - passed with `7 passed`
 - `python -m pytest longterm -q`
-  - now passes with `100 passed`
+  - now passes with `105 passed`
 - `python scripts/run_longterm_cycle.py --motley-fool-config <missing path> --portfolio-state <temp portfolio json> --journal-db <temp db> --quiet`
   - works
   - confirmed the cycle can emit recommendation markdown and next-actions markdown even with zero ideas / zero decisions
+- `python scripts/run_tlt_calendar_flow_research.py --symbol TLT --start 2004-01-01 --end 2024-12-01`
+  - works
+  - default output is now summary-only unless `--include-trades` is supplied
+- `python scripts/run_tlt_calendar_flow_research.py --symbol TLT --start 2004-01-01 --end 2024-12-01 --round-trip-cost-bps 10`
+  - works
+  - confirms the concept still remains positive after a small per-trade cost
 
 ## 4. Critical Guardrails
 
