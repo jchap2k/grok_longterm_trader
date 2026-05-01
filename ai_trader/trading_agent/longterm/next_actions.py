@@ -38,11 +38,15 @@ class NextActionsPlanner:
         review_status_by_symbol: dict[str, dict] | None = None,
         paper_preview_status_by_decision: dict[str, dict] | None = None,
         paper_preview_status_by_symbol: dict[str, dict] | None = None,
+        paper_execution_status_by_decision: dict[str, dict] | None = None,
+        paper_execution_status_by_symbol: dict[str, dict] | None = None,
     ):
         self.enricher = enricher
         self.review_status_by_symbol = review_status_by_symbol or {}
         self.paper_preview_status_by_decision = paper_preview_status_by_decision or {}
         self.paper_preview_status_by_symbol = paper_preview_status_by_symbol or {}
+        self.paper_execution_status_by_decision = paper_execution_status_by_decision or {}
+        self.paper_execution_status_by_symbol = paper_execution_status_by_symbol or {}
 
     def plan(
         self,
@@ -59,6 +63,8 @@ class NextActionsPlanner:
             review_status_by_symbol=self.review_status_by_symbol,
             paper_preview_status_by_decision=self.paper_preview_status_by_decision,
             paper_preview_status_by_symbol=self.paper_preview_status_by_symbol,
+            paper_execution_status_by_decision=self.paper_execution_status_by_decision,
+            paper_execution_status_by_symbol=self.paper_execution_status_by_symbol,
         ).build(limit=limit)
         actions: list[NextAction] = []
 
@@ -137,10 +143,10 @@ class NextActionsPlanner:
                 actions.append(
                     NextAction(
                         priority=len(actions) + 1,
-                        category=category,
+                        category=_paper_execution_category(row) or category,
                         symbol=symbol,
                         action="REVIEW",
-                        reason=reason,
+                        reason=_paper_execution_reason(row) or reason,
                     )
                 )
 
@@ -161,6 +167,8 @@ def build_next_actions_markdown(
     deferred_research_queue: list[Mapping[str, Any]] | None = None,
     paper_preview_status_by_decision: dict[str, dict] | None = None,
     paper_preview_status_by_symbol: dict[str, dict] | None = None,
+    paper_execution_status_by_decision: dict[str, dict] | None = None,
+    paper_execution_status_by_symbol: dict[str, dict] | None = None,
     paper_execution_eligibility: Mapping[str, Any] | None = None,
     limit: int = 10,
 ) -> str:
@@ -182,6 +190,8 @@ def build_next_actions_markdown(
         review_status_by_symbol=review_status_by_symbol,
         paper_preview_status_by_decision=paper_preview_status_by_decision,
         paper_preview_status_by_symbol=paper_preview_status_by_symbol,
+        paper_execution_status_by_decision=paper_execution_status_by_decision,
+        paper_execution_status_by_symbol=paper_execution_status_by_symbol,
     ).plan(
         journal,
         profile=profile,
@@ -272,6 +282,9 @@ def _prioritize_actions(actions: list[NextAction]) -> list[NextAction]:
         "paper_execution_blocked": 1,
         "paper_preview_ready": 2,
         "paper_execution_eligible": 2,
+        "paper_execution_filled": 2,
+        "paper_execution_rejected": 1,
+        "paper_execution_submitted": 2,
         "paused_buy_candidate": 1,
         "capital_needed": 2,
         "buy_candidate": 3,
@@ -348,6 +361,25 @@ def _paper_preview_action(row: Mapping[str, Any]) -> dict[str, str]:
             "reason": f"Paper preview {preview_id} is ready for operator review. Preview log {log_id}.",
         }
     return {}
+
+
+def _paper_execution_category(row: Mapping[str, Any]) -> str:
+    status = str(row.get("paper_execution_status") or row.get("paper_execution_latest_status") or "")
+    if not status:
+        return ""
+    if status in {"filled", "partially_filled"}:
+        return "paper_execution_filled"
+    if status in {"rejected", "status_refresh_error"}:
+        return "paper_execution_rejected"
+    return "paper_execution_submitted"
+
+
+def _paper_execution_reason(row: Mapping[str, Any]) -> str:
+    status = str(row.get("paper_execution_status") or row.get("paper_execution_latest_status") or "")
+    if not status:
+        return ""
+    broker_order = str(row.get("paper_execution_broker_order_id") or "")
+    return f"Paper execution status is {status}. Broker order {broker_order}."
 
 
 def _load_evidence_json(path: Path, *, protected_symbols: set[str]) -> dict[str, list[str]]:

@@ -294,6 +294,7 @@ Inspect recorded preview rows:
 
 ```powershell
 python scripts/longterm_paper_preview_ledger.py list --ledger-db path\to\paper_ledger.db
+python scripts/longterm_paper_preview_ledger.py executions --ledger-db path\to\paper_ledger.db
 python scripts/longterm_paper_preview_ledger.py summary --ledger-db path\to\paper_ledger.db
 python scripts/longterm_paper_preview_ledger.py summary --ledger-db path\to\paper_ledger.db --json
 ```
@@ -303,6 +304,11 @@ Recommendation reports can also show the latest paper preview status:
 ```powershell
 python scripts/longterm_journal.py report --journal-db path\to\journal.db --paper-ledger-db path\to\paper_ledger.db
 ```
+
+Recommendation reports, next-actions, and position intelligence reports can also
+surface latest paper execution status from the same ledger when execution/status
+events exist. Original decision rows remain immutable; these surfaces join by
+`decision_id` at report time.
 
 Evaluate pre-6B paper execution eligibility from the same action plan and
 preview ledger:

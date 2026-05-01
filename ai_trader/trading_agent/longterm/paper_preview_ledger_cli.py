@@ -19,6 +19,10 @@ def build_parser() -> argparse.ArgumentParser:
     list_cmd.add_argument("--ledger-db", default=None)
     list_cmd.add_argument("--limit", type=int, default=50)
 
+    executions = subparsers.add_parser("executions", help="List execution events.")
+    executions.add_argument("--ledger-db", default=None)
+    executions.add_argument("--limit", type=int, default=50)
+
     summary = subparsers.add_parser("summary", help="Summarize preview rows.")
     summary.add_argument("--ledger-db", default=None)
     summary.add_argument("--json", action="store_true")
@@ -30,6 +34,9 @@ def run_cli(args: argparse.Namespace) -> int:
     ledger = PaperTradeLedger(args.ledger_db)
     if args.command == "list":
         print(json.dumps(ledger.list_previews(limit=args.limit), indent=2, sort_keys=True))
+        return 0
+    if args.command == "executions":
+        print(json.dumps(ledger.list_execution_events(limit=args.limit), indent=2, sort_keys=True))
         return 0
     if args.command == "summary":
         summary = ledger.summarize_previews()

@@ -42,6 +42,7 @@
     "ai_trader/trading_agent/longterm/paper_order_preview.py",
     "ai_trader/trading_agent/longterm/paper_trade_ledger.py",
     "ai_trader/trading_agent/longterm/paper_preview_status.py",
+    "ai_trader/trading_agent/longterm/paper_execution_status.py",
     "ai_trader/trading_agent/longterm/paper_execution_eligibility.py",
     "ai_trader/trading_agent/longterm/paper_execution.py",
     "ai_trader/trading_agent/longterm/paper_order_status_refresh.py",

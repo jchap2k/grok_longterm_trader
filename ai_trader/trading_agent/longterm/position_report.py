@@ -8,6 +8,7 @@ from typing import Any, Mapping
 from longterm.capital_alert import CapitalNeededEmail
 from longterm.decision_journal import LongTermDecisionJournal
 from longterm.feedback_refresh import outcome_freshness
+from longterm.paper_execution_status import PaperExecutionStatusBuilder
 from longterm.paper_preview_status import PaperPreviewStatusBuilder
 from longterm.paper_trade_ledger import PaperTradeLedger
 from longterm.portfolio_state import PortfolioState
@@ -25,12 +26,15 @@ def build_position_intelligence_report(
 ) -> str:
     """Build a read-only report of collected knowledge for current holdings."""
     paper_status = PaperPreviewStatusBuilder(paper_ledger).build() if paper_ledger else None
+    execution_status = PaperExecutionStatusBuilder(paper_ledger).build() if paper_ledger else None
     review_status = ReviewStatusBuilder(journal).build(limit=limit)
     recommendation_rows = RecommendationTableBuilder(
         journal,
         review_status_by_symbol=review_status,
         paper_preview_status_by_decision=paper_status.by_decision_id if paper_status else None,
         paper_preview_status_by_symbol=paper_status.by_symbol if paper_status else None,
+        paper_execution_status_by_decision=execution_status.by_decision_id if execution_status else None,
+        paper_execution_status_by_symbol=execution_status.by_symbol if execution_status else None,
     ).build(limit=limit)
     rows_by_symbol = {str(row.get("symbol") or "").upper(): row for row in recommendation_rows}
     packets_by_symbol = _latest_packets_by_symbol(journal, limit=limit)
@@ -80,6 +84,8 @@ def build_position_intelligence_report(
                 f"- Review status: {row.get('thesis_state') or 'unknown'}; review due: {_yes_no(row.get('review_due'))}",
                 f"- Paper preview: {row.get('paper_preview_status') or profile.get('latest_paper_preview_status') or 'none'}",
                 f"- Paper preview blocked reasons: {_join(row.get('paper_preview_blocked_reasons') or profile.get('paper_preview_blocked_reasons')) or 'none'}",
+                f"- Paper execution: {row.get('paper_execution_status') or row.get('paper_execution_latest_status') or 'none'}",
+                f"- Paper broker order: {row.get('paper_execution_broker_order_id') or 'none'}",
                 f"- Paper execution eligibility: {eligibility.get('status') or 'not evaluated'}",
                 f"- Reconciliation: {profile.get('latest_reconciliation_status') or 'none'}",
                 f"- Reconciliation notes: {_join(profile.get('paper_reconciliation_notes')) or 'none'}",
