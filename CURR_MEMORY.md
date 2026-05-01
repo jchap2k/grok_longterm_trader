@@ -4,7 +4,7 @@ Last updated: 2026-04-30
 Repo: `S:\LLM_files\grok_longterm_trader`
 Remote: `https://github.com/jchap2k/grok_longterm_trader.git`
 Branch: `main`
-Latest feature commit: `4796254 Add local discovery source loaders`
+Latest feature commit: `84f77c0 Add discovery enrichment inputs`
 
 This file is a temporary handoff document for another Codex instance. It is meant to explain:
 - what this project is
@@ -71,6 +71,7 @@ Additional continuation work completed on 2026-04-30:
 - added V1 discovery queue logic and CLI/export path for building the research universe before any trade decisions are made
 - wired discovery candidates into one-cycle orchestration and scheduler inputs so discovery can feed research cycles directly
 - added local discovery source loaders for S&P-style CSVs, ETF holdings CSVs, and NasdaqTrader pipe-delimited listing files; discovery, cycle, and scheduler CLIs can now ingest those files directly
+- added local/cacheable discovery enrichment inputs so candidate JSON/source files can be hydrated with market cap, growth, profitability, leverage, trend, leadership, valuation, rank, and score fields before discovery scoring
 
 What those changes accomplished:
 
@@ -87,6 +88,7 @@ What those changes accomplished:
 - Discovery can export `research_queue` as idea-batch JSON for the existing research cycle.
 - `run_longterm_cycle` and the dry-run scheduler can now load discovery candidate files and feed only `research_queue` names into research.
 - Discovery source loaders normalize local S&P/ETF/NasdaqTrader files into candidate dictionaries while preserving source notes such as sector, market category, and ETF/index weight.
+- Discovery enrichment can normalize local JSON/CSV metric caches by symbol, preserve the original discovery source, append enrichment provenance notes, and carry enriched metrics into generated research idea `source_notes`.
 - Discovery is explicitly upstream: it does not read portfolio state, does not call benchmark/account-action logic, and does not trade.
 
 ### Strategy / rules foundation
@@ -312,6 +314,10 @@ Additional automated validation completed on 2026-04-30:
   - works
 - `python -m pytest longterm -q`
   - now passes with `146 passed`
+- `python -m py_compile longterm/discovery_enrichment.py longterm/discovery.py longterm/discovery_cli.py longterm/orchestration_cli.py longterm/scheduler.py longterm/scheduler_cli.py`
+  - works
+- `python -m pytest longterm -q`
+  - now passes with `153 passed`
 
 ## 4. Critical Guardrails
 
@@ -442,7 +448,7 @@ What is already done in Phase 1:
 
 What is not done yet in Phase 1:
 - fuller ranking/reporting maturity, rank-movement history, and backtesting/tuning the rebalance scoring weights against real journal outcomes
-- enrichment/fundamental fetchers for discovery candidates beyond local source-file normalization
+- live/data-provider discovery fetchers beyond local source-file and local enrichment-cache normalization
 
 Likely implementation seams:
 - add a long-term scheduler entrypoint or orchestration module under `ai_trader/trading_agent/longterm/`
@@ -660,8 +666,11 @@ From `ai_trader/trading_agent`:
 - `python scripts/run_longterm_cycle.py --launch-login-if-needed`
 - `python scripts/run_longterm_scheduler.py --run-once --journal-db path\\to\\journal.db --portfolio-state path\\to\\portfolio.json --quiet`
 - `python scripts/run_longterm_discovery.py --source-file path\\to\\sp500.csv --source sp500`
+- `python scripts/run_longterm_discovery.py --source-file path\\to\\sp500.csv --source sp500 --enrichment-file path\\to\\fundamentals.json --enrichment-source fundamentals_cache`
 - `python scripts/run_longterm_cycle.py --discovery-source-file path\\to\\sp500.csv --discovery-source sp500 --journal-db path\\to\\journal.db`
+- `python scripts/run_longterm_cycle.py --discovery-source-file path\\to\\sp500.csv --discovery-source sp500 --discovery-enrichment-file path\\to\\fundamentals.json --discovery-enrichment-source fundamentals_cache --journal-db path\\to\\journal.db`
 - `python scripts/run_longterm_scheduler.py --run-once --discovery-source-file path\\to\\sp500.csv --discovery-source sp500 --journal-db path\\to\\journal.db --quiet`
+- `python scripts/run_longterm_scheduler.py --run-once --discovery-source-file path\\to\\sp500.csv --discovery-source sp500 --discovery-enrichment-file path\\to\\fundamentals.json --discovery-enrichment-source fundamentals_cache --journal-db path\\to\\journal.db --quiet`
 
 New files added on 2026-04-30:
 - `ai_trader/trading_agent/longterm/orchestration.py`
@@ -677,6 +686,7 @@ New files added on 2026-04-30:
 - `ai_trader/trading_agent/longterm/test_longterm_scheduler.py`
 - `ai_trader/trading_agent/scripts/run_longterm_scheduler.py`
 - `ai_trader/trading_agent/longterm/discovery_sources.py`
+- `ai_trader/trading_agent/longterm/discovery_enrichment.py`
 
 ### Local machine state worth knowing
 - local email config exists in `ai_trader/trading_agent/config/email_notifications.json`
