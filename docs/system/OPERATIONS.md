@@ -276,6 +276,19 @@ the exported paper account has no unexpected non-protected holdings and whether
 cash is near the optional expected baseline. It does not call Alpaca or alter
 the account.
 
+Build one pre-flight report before a supervised paper smoke:
+
+```powershell
+python scripts/longterm_paper_smoke_readiness.py --portfolio-state path\to\portfolio.json --expected-cash 74000 --scheduler-readiness path\to\scheduler_readiness.json
+python scripts/longterm_paper_smoke_readiness.py --portfolio-state path\to\portfolio.json --expected-cash 74000 --required-order-model whole_share --json
+```
+
+The smoke-readiness report combines account cleanliness, broker-capability
+compatibility, and optional scheduler-readiness output. The default
+`notional_fractional` model intentionally blocks Schwab API live compatibility;
+use `--required-order-model whole_share` only when the planned smoke/live path
+has been adapted to whole-share sizing.
+
 Reconcile the current paper snapshot against a dry-run action plan or expected
 cash before considering any paper-execution feature:
 
