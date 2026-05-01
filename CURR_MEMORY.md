@@ -4,7 +4,7 @@ Last updated: 2026-04-30
 Repo: `S:\LLM_files\grok_longterm_trader`
 Remote: `https://github.com/jchap2k/grok_longterm_trader.git`
 Branch: `main`
-Latest feature commit: `b80ad99 Gate incomplete research packets`
+Latest feature commit: `3fde0fd Add deferred research queue`
 
 This file is a temporary handoff document for another Codex instance. It is meant to explain:
 - what this project is
@@ -73,6 +73,7 @@ Additional continuation work completed on 2026-04-30:
 - added local discovery source loaders for S&P-style CSVs, ETF holdings CSVs, and NasdaqTrader pipe-delimited listing files; discovery, cycle, and scheduler CLIs can now ingest those files directly
 - added local/cacheable discovery enrichment inputs so candidate JSON/source files can be hydrated with market cap, growth, profitability, leverage, trend, leadership, valuation, rank, and score fields before discovery scoring
 - added a minimum `ResearchPacket` completeness gate so thin ticker stubs are skipped before LLM research; skipped ideas are counted and preserved in cycle/scheduler artifacts
+- added a structured `deferred_research_queue` for skipped research packets with missing fields, provenance bucket, next-step guidance, and a suggested enrichment command
 
 What those changes accomplished:
 
@@ -107,6 +108,7 @@ What those changes accomplished:
 ### Research and decision pipeline
 - Raw ideas can be normalized into canonical `ResearchPacket` objects.
 - `ResearchPacket` now owns the minimum completeness rule for deep research: company name, idea source, and at least one research-context field (`business_summary`, `thesis_summary`, or `source_notes`). Incomplete packets are skipped before `runner.run_and_record(...)`.
+- Skipped packets now also appear in `deferred_research_queue`, turning thin ticker stubs into explicit enrichment work for a later cycle.
 - Deterministic local reviewers ground the decision with business-story, balance-sheet, quality-durability, and quality-at-reasonable-price context.
 - The long-term CGH committee then produces the actual structured decision.
 - That decision is persisted into the journal for later reporting and benchmarking.
@@ -326,6 +328,12 @@ Additional automated validation completed on 2026-04-30:
   - works
 - `python -m pytest longterm -q`
   - now passes with `156 passed`
+- Grok plan review for `deferred_research_queue`
+  - returned `revise_first` at 85% confidence; V1 addressed the useful notes by reusing `ResearchPacket` completeness and adding a suggested enrichment command while deferring journal/report integration
+- `python -m py_compile longterm/orchestration.py longterm/scheduler.py`
+  - works
+- `python -m pytest longterm -q`
+  - still passes with `156 passed`
 
 ## 4. Critical Guardrails
 
