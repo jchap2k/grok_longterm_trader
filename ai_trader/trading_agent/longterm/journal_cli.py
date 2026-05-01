@@ -24,6 +24,16 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("--journal-db", default=None)
     report.add_argument("--limit", type=int, default=20)
 
+    deferred_list = subparsers.add_parser("deferred-list", help="List deferred research items.")
+    deferred_list.add_argument("--journal-db", default=None)
+    deferred_list.add_argument("--limit", type=int, default=20)
+    deferred_list.add_argument("--include-resolved", action="store_true")
+
+    deferred_resolve = subparsers.add_parser("deferred-resolve", help="Resolve a deferred research item.")
+    deferred_resolve.add_argument("--journal-db", default=None)
+    deferred_resolve.add_argument("--deferred-id", required=True)
+    deferred_resolve.add_argument("--notes", default="")
+
     update = subparsers.add_parser("update-outcome", help="Update active-vs-benchmark outcome.")
     update.add_argument("--journal-db", default=None)
     update.add_argument("--decision-id", required=True)
@@ -47,6 +57,24 @@ def run_cli(args: argparse.Namespace) -> int:
 
     if args.command == "report":
         print(build_markdown_report(journal, limit=args.limit), end="")
+        return 0
+
+    if args.command == "deferred-list":
+        print(
+            json.dumps(
+                journal.list_deferred_research_items(
+                    limit=args.limit,
+                    include_resolved=args.include_resolved,
+                ),
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0
+
+    if args.command == "deferred-resolve":
+        journal.resolve_deferred_research_item(args.deferred_id, notes=args.notes)
+        print(f"resolved {args.deferred_id}")
         return 0
 
     if args.command == "update-outcome":

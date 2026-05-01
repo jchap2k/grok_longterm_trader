@@ -111,6 +111,46 @@ def test_journal_cli_list_outputs_recent_rows(tmp_path, capsys):
     assert payload[0]["symbol"] == "AAPL"
 
 
+def test_journal_cli_lists_and_resolves_deferred_research_items(tmp_path, capsys):
+    db_path = tmp_path / "journal.db"
+    journal = LongTermDecisionJournal(db_path)
+    deferred_id = journal.record_deferred_research_item(
+        {
+            "symbol": "TSLA",
+            "reason": "incomplete_research_packet",
+            "missing_fields": ["company_name"],
+            "provenance_bucket": "manual",
+            "suggested_next_step": "enrich_candidate_before_research",
+        }
+    )
+    parser = build_parser()
+
+    list_args = parser.parse_args(["deferred-list", "--journal-db", str(db_path)])
+    list_exit_code = run_cli(list_args)
+    listed_payload = json.loads(capsys.readouterr().out)
+
+    assert list_exit_code == 0
+    assert listed_payload[0]["deferred_id"] == deferred_id
+    assert listed_payload[0]["symbol"] == "TSLA"
+
+    resolve_args = parser.parse_args(
+        [
+            "deferred-resolve",
+            "--journal-db",
+            str(db_path),
+            "--deferred-id",
+            deferred_id,
+            "--notes",
+            "Added fundamentals.",
+        ]
+    )
+    resolve_exit_code = run_cli(resolve_args)
+
+    assert resolve_exit_code == 0
+    assert "resolved" in capsys.readouterr().out
+    assert LongTermDecisionJournal(db_path).list_deferred_research_items(limit=5) == []
+
+
 def test_capital_alert_cli_outputs_markdown_without_sending(tmp_path, capsys):
     db_path = tmp_path / "journal.db"
     journal = LongTermDecisionJournal(db_path)

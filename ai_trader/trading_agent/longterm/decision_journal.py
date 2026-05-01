@@ -67,6 +67,39 @@ class LongTermDecisionJournal:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS longterm_deferred_research_queue (
+                    deferred_id TEXT PRIMARY KEY,
+                    timestamp TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    reason TEXT,
+                    missing_fields_json TEXT NOT NULL,
+                    provenance_bucket TEXT,
+                    suggested_next_step TEXT,
+                    suggested_enrichment_command TEXT,
+                    parent_decision_id TEXT,
+                    source_run_id TEXT,
+                    priority_score REAL NOT NULL,
+                    deferred_json TEXT NOT NULL,
+                    resolved_at TEXT,
+                    resolution_notes TEXT
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_longterm_deferred_status_symbol
+                ON longterm_deferred_research_queue (status, symbol, timestamp)
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_longterm_deferred_parent_decision
+                ON longterm_deferred_research_queue (parent_decision_id)
+                """
+            )
             conn.commit()
         finally:
             conn.close()
@@ -350,6 +383,110 @@ class LongTermDecisionJournal:
             results.append(record)
         return results
 
+    def record_deferred_research_item(
+        self,
+        item: Mapping[str, Any],
+        *,
+        parent_decision_id: str | None = None,
+        source_run_id: str | None = None,
+    ) -> str:
+        """Persist a skipped research item so enrichment work survives runs."""
+        deferred_id = str(item.get("deferred_id") or uuid.uuid4())
+        payload = dict(item)
+        payload["deferred_id"] = deferred_id
+        timestamp = datetime.now().isoformat()
+        missing_fields = _normalize_missing_fields(payload.get("missing_fields"))
+        priority_score = _deferred_research_priority(payload, missing_fields)
+
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO longterm_deferred_research_queue (
+                    deferred_id, timestamp, symbol, status, reason,
+                    missing_fields_json, provenance_bucket, suggested_next_step,
+                    suggested_enrichment_command, parent_decision_id, source_run_id,
+                    priority_score, deferred_json, resolved_at, resolution_notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    deferred_id,
+                    timestamp,
+                    str(payload.get("symbol") or "UNKNOWN").upper(),
+                    str(payload.get("status") or "open"),
+                    str(payload.get("reason") or ""),
+                    json.dumps(missing_fields, sort_keys=True),
+                    str(payload.get("provenance_bucket") or ""),
+                    str(payload.get("suggested_next_step") or ""),
+                    str(payload.get("suggested_enrichment_command") or ""),
+                    parent_decision_id or payload.get("parent_decision_id"),
+                    source_run_id or payload.get("source_run_id"),
+                    priority_score,
+                    json.dumps(payload, sort_keys=True),
+                    payload.get("resolved_at"),
+                    payload.get("resolution_notes"),
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        return deferred_id
+
+    def list_deferred_research_items(
+        self,
+        *,
+        limit: int = 20,
+        include_resolved: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Return deferred research/enrichment tasks, newest first."""
+        where_clause = "" if include_resolved else "WHERE status != 'resolved'"
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                f"""
+                SELECT deferred_id, timestamp, symbol, status, reason,
+                       missing_fields_json, provenance_bucket, suggested_next_step,
+                       suggested_enrichment_command, parent_decision_id, source_run_id,
+                       priority_score, deferred_json, resolved_at, resolution_notes
+                FROM longterm_deferred_research_queue
+                {where_clause}
+                ORDER BY timestamp DESC
+                LIMIT ?
+                """,
+                (int(limit),),
+            ).fetchall()
+        finally:
+            conn.close()
+
+        results = []
+        for row in rows:
+            record = dict(row)
+            record["missing_fields"] = json.loads(record.pop("missing_fields_json") or "[]")
+            record["deferred_json"] = json.loads(record.get("deferred_json") or "{}")
+            results.append(record)
+        return results
+
+    def resolve_deferred_research_item(self, deferred_id: str, *, notes: str = "") -> None:
+        """Mark a deferred research item resolved after enrichment/retry work."""
+        conn = sqlite3.connect(self.db_path)
+        try:
+            cursor = conn.execute(
+                """
+                UPDATE longterm_deferred_research_queue
+                SET status = 'resolved',
+                    resolved_at = ?,
+                    resolution_notes = ?
+                WHERE deferred_id = ?
+                """,
+                (datetime.now().isoformat(), notes, deferred_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        if cursor.rowcount == 0:
+            raise KeyError(f"Deferred research item not found: {deferred_id}")
+
     def summarize_benchmark_performance(self) -> dict[str, Any]:
         """Summarize decisions that have both active and benchmark outcomes."""
         conn = sqlite3.connect(self.db_path)
@@ -410,3 +547,22 @@ def _rank_reason(row: Mapping[str, Any], ranking_score: float) -> str:
         f"{action} recommendation, confidence {confidence}, "
         f"suggested size {size:g}%, ranking score {ranking_score:g}."
     )
+
+
+def _normalize_missing_fields(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    if value:
+        return [str(value)]
+    return []
+
+
+def _deferred_research_priority(item: Mapping[str, Any], missing_fields: list[str]) -> float:
+    provenance = str(item.get("provenance_bucket") or "").lower()
+    score = 10.0
+    if "motley" in provenance:
+        score += 20.0
+    elif provenance in {"sp500", "etf_holdings", "manual"}:
+        score += 10.0
+    score += max(0.0, 10.0 - (len(missing_fields) * 2.0))
+    return round(score, 4)

@@ -121,3 +121,34 @@ def test_decision_journal_records_dry_run_action_plan(tmp_path):
     assert rows[0]["mode"] == "dry_run"
     assert rows[0]["status"] == "ready"
     assert rows[0]["plan_json"]["intents"][0]["symbol"] == "NVDA"
+
+
+def test_decision_journal_records_and_resolves_deferred_research_items(tmp_path):
+    db_path = tmp_path / "longterm_decisions.db"
+    journal = LongTermDecisionJournal(db_path)
+    item = {
+        "symbol": "TSLA",
+        "reason": "incomplete_research_packet",
+        "missing_fields": ["company_name", "idea_source", "research_context"],
+        "provenance_bucket": "manual",
+        "suggested_next_step": "enrich_candidate_before_research",
+        "suggested_enrichment_command": "python scripts/run_longterm_discovery.py --candidates path\\to\\candidates.json",
+    }
+
+    deferred_id = journal.record_deferred_research_item(item, parent_decision_id="decision-123")
+    rows = journal.list_deferred_research_items(limit=5)
+
+    assert rows[0]["deferred_id"] == deferred_id
+    assert rows[0]["symbol"] == "TSLA"
+    assert rows[0]["status"] == "open"
+    assert rows[0]["parent_decision_id"] == "decision-123"
+    assert rows[0]["missing_fields"] == ["company_name", "idea_source", "research_context"]
+    assert rows[0]["deferred_json"]["provenance_bucket"] == "manual"
+    assert rows[0]["priority_score"] > 0
+
+    journal.resolve_deferred_research_item(deferred_id, notes="Enriched from fundamentals cache.")
+
+    assert journal.list_deferred_research_items(limit=5) == []
+    resolved = journal.list_deferred_research_items(limit=5, include_resolved=True)[0]
+    assert resolved["status"] == "resolved"
+    assert resolved["resolution_notes"] == "Enriched from fundamentals cache."

@@ -5,6 +5,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from longterm.motley_fool_setup import MotleyFoolSetupResult
 from longterm.motley_fool_settings import MotleyFoolCaptureSettings
+from longterm.decision_journal import LongTermDecisionJournal
 from longterm.orchestration_cli import build_parser, run_cli
 from longterm.orchestration import run_longterm_cycle
 from longterm.portfolio_state import PortfolioState
@@ -421,6 +422,27 @@ def test_cycle_surfaces_packet_completeness_warnings(tmp_path):
     ]
     assert result.decision_ids == []
     assert runner.symbols == []
+
+
+def test_cycle_persists_deferred_research_queue_to_journal(tmp_path):
+    class FakeRunner:
+        def run_and_record(self, packet, **kwargs):
+            return f"decision-{packet.symbol}"
+
+    journal_db_path = tmp_path / "journal.db"
+
+    result = run_longterm_cycle(
+        profile=_build_profile(),
+        manual_ideas=[{"symbol": "TSLA"}],
+        motley_fool_settings=MotleyFoolCaptureSettings(enabled=False, cookie_ready=False),
+        runner=FakeRunner(),
+        journal_db_path=journal_db_path,
+    )
+
+    rows = LongTermDecisionJournal(journal_db_path).list_deferred_research_items(limit=5)
+    assert result.deferred_research_queue[0]["symbol"] == "TSLA"
+    assert rows[0]["symbol"] == "TSLA"
+    assert rows[0]["missing_fields"] == ["company_name", "idea_source", "research_context"]
 
 
 def test_cycle_allows_discovery_ideas_with_source_notes_as_research_context(tmp_path):

@@ -30,7 +30,7 @@ Builds context sections and runs the CGH decision committee through `CheapGrokHe
 Defines the normalized research packet and the minimum completeness rule for deep research. Packets must have a company name, idea source, and at least one research-context field (`business_summary`, `thesis_summary`, or `source_notes`) before the cycle calls the research runner. Incomplete ideas are skipped and reported rather than sent to the LLM committee.
 
 `longterm/orchestration.py`
-Builds one dry-run cycle from manual, discovery, and optional Motley Fool ideas. It now emits `skipped_ideas` and a richer `deferred_research_queue` for incomplete packets, including missing fields and a suggested enrichment command, so skipped ticker stubs become explicit enrichment work instead of disappearing.
+Builds one dry-run cycle from manual, discovery, and optional Motley Fool ideas. It now emits `skipped_ideas` and a richer `deferred_research_queue` for incomplete packets, including missing fields and a suggested enrichment command, so skipped ticker stubs become explicit enrichment work instead of disappearing. When a journal is configured, deferred research rows are persisted for later enrichment follow-up.
 
 `longterm/next_actions.py`
 Creates the operator-facing dry-run next-actions report from the journal, portfolio state, review status, and benchmark guard. It also renders deferred research items from the cycle so incomplete candidate packets become visible enrichment work with missing fields and suggested discovery/enrichment commands.
@@ -48,7 +48,7 @@ Deterministic business-story, balance-sheet, quality-durability, and quality-at-
 Assigns review cadence and expected holding horizon by company category and risk language.
 
 `longterm/decision_journal.py`
-Stores decisions, structured packets, raw responses, benchmark start prices, outcome updates, recommendation table rows, review candidates, and dry-run account action plans for future paper/live reconciliation.
+Stores decisions, structured packets, raw responses, benchmark start prices, outcome updates, recommendation table rows, review candidates, dry-run account action plans, and persisted deferred research items for future paper/live reconciliation.
 
 `longterm/report_builder.py`
 Creates a markdown decision report with benchmark outcomes and a Motley-Fool-style recommendation table. `RecommendationTableBuilder` is the preferred seam for report/next-action rows: it starts from `DecisionJournal` rows, optionally hydrates volatile fields, carries shortened decision IDs for traceability, and does not write enrichment back into the journal.

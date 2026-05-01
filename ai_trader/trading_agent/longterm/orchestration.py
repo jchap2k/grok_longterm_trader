@@ -216,6 +216,9 @@ def run_longterm_cycle(
     next_actions_generated = False
     if journal_db_path:
         journal = journal_factory(journal_db_path)
+        if hasattr(journal, "record_deferred_research_item"):
+            for item in deferred_research_queue:
+                journal.record_deferred_research_item(item)
         recommendation_report_markdown = report_builder_func(
             journal,
             limit=report_limit,

@@ -90,7 +90,20 @@ source, and research context from `business_summary`, `thesis_summary`, or
 and listed in `skipped_ideas` instead of consuming research calls.
 The richer `deferred_research_queue` lists the missing fields and includes a
 suggested `run_longterm_discovery.py --enrichment-file ...` command so those
-ideas can be enriched before a later research run.
+ideas can be enriched before a later research run. When `--journal-db` is
+provided, those deferred rows are also stored in the decision journal.
+
+List open deferred research/enrichment tasks:
+
+```powershell
+python scripts/longterm_journal.py deferred-list --journal-db path\to\journal.db
+```
+
+After enriching/retrying an item, mark it resolved:
+
+```powershell
+python scripts/longterm_journal.py deferred-resolve --journal-db path\to\journal.db --deferred-id <id> --notes "Enriched from fundamentals cache."
+```
 
 ## Dry-Run Action Plan
 
