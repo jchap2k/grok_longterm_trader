@@ -420,6 +420,19 @@ recommendation ranks, rebalance weights, position sizing, or action planning.
 It can include paper execution counts/status so research follow-ups know whether
 a recommendation has been filled, rejected, or hit a status-refresh error.
 
+Build the advisory scheduler-readiness checklist from existing artifacts:
+
+```powershell
+python scripts/longterm_scheduler_readiness.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --feedback-summary path\to\feedback_summary.json --paper-lifecycle-summary path\to\paper_lifecycle.json
+python scripts/longterm_scheduler_readiness.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --json
+```
+
+Scheduler readiness is not automation. V1 always reports
+`scheduler_submission_enabled=false` and `ready_for_scheduler_paper_submit=false`.
+It surfaces blockers and warnings around protected symbols, benchmark guard,
+review/thesis state, active rules, feedback freshness, lifecycle errors, and
+decision traceability before any future scheduler-submit design is considered.
+
 ## Position Intelligence Report
 
 Generate an on-demand monthly or quarterly position intelligence report before

@@ -77,3 +77,6 @@ Before live execution exists:
   event
 - keep paper order status refresh broker-read-only; it may append status events
   to the paper ledger, but it must not submit, cancel, replace, or modify orders
+- keep scheduler-readiness reports advisory-only; readiness checks may surface
+  blockers and warnings, but they must not enable scheduler submission or call
+  broker execution paths
