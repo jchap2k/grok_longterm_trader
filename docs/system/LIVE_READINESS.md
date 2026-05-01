@@ -14,6 +14,9 @@ must be satisfied before live execution should even be considered.
   treated as proof that a future live broker supports the same sizing model.
   For example, Schwab's public API is whole-share oriented even though Schwab
   offers fractional "Stock Slices" outside the API.
+- The paper preview and supervised paper execution boundary can use an explicit
+  whole-share order model so Alpaca paper tests can mirror Schwab-compatible
+  sizing assumptions before any live-readiness claim is made.
 
 ## Required Gates
 
@@ -51,6 +54,10 @@ live readiness because Schwab API is treated as whole-share only. If a future
 live plan is intentionally adapted to whole shares, run it with
 `--required-order-model whole_share` and include the generated observed JSON in
 the larger live-readiness evidence file.
+
+Whole-share paper previews require an explicit price map and floor quantities to
+whole shares. This intentionally surfaces size variance and cash drag instead of
+letting Alpaca fractional/notional behavior hide live-broker constraints.
 
 `longterm_live_readiness.py` can merge a base observed file with one or more
 `--observed-fragment` files. Later fragments override earlier values, which

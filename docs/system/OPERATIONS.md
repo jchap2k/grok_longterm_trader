@@ -310,6 +310,7 @@ Build a non-submitting paper order preview from a dry-run action plan:
 python scripts/longterm_paper_order_preview.py --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json
 python scripts/longterm_paper_order_preview.py --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --json
 python scripts/longterm_paper_order_preview.py --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --record-preview --ledger-db path\to\paper_ledger.db --json
+python scripts/longterm_paper_order_preview.py --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --order-model whole_share --price-map path\to\price_map.json --record-preview --ledger-db path\to\paper_ledger.db --json
 ```
 
 The preview converts `BUY` intents into buy-notional preview rows, `REBALANCE`
@@ -317,6 +318,14 @@ intents into paired sell/buy preview rows, and `REVIEW` / `BLOCKED` /
 `CAPITAL_NEEDED` intents into `no_order` rows. It carries decision IDs, risk
 metadata, blocked reasons, cash shortfall, and rebalance transaction IDs. It
 does not import Alpaca and cannot submit orders.
+
+Use `--order-model whole_share` with an explicit JSON price map when the paper
+workflow should mirror a whole-share live broker such as Schwab API. The preview
+floors BUY quantities to whole shares, records the requested notional, estimated
+price, executable quantity, estimated notional, and size variance, and blocks
+rows when the price is missing or the target value cannot buy at least one share.
+The price map is caller-supplied on purpose; this command does not make hidden
+market-data calls.
 
 Inspect recorded preview rows:
 

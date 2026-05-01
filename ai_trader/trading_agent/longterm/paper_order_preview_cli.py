@@ -21,6 +21,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--profile-config", default=str(DEFAULT_PROFILE_PATH))
     parser.add_argument("--portfolio-state", required=True)
     parser.add_argument("--action-plan", required=True)
+    parser.add_argument("--order-model", default="notional", choices=["notional", "whole_share"])
+    parser.add_argument("--price-map", default="")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--record-preview", action="store_true")
     parser.add_argument("--ledger-db", default=None)
@@ -31,7 +33,14 @@ def run_cli(args: argparse.Namespace) -> int:
     profile = PortfolioProfile.from_file(args.profile_config)
     state = PortfolioState.from_file(args.portfolio_state, profile=profile)
     action_plan = _load_json(args.action_plan)
-    preview = build_paper_order_preview(action_plan, portfolio_state=state, profile=profile)
+    price_map = _load_json(args.price_map) if args.price_map else {}
+    preview = build_paper_order_preview(
+        action_plan,
+        portfolio_state=state,
+        profile=profile,
+        order_model=args.order_model,
+        price_map=price_map,
+    )
     if args.record_preview:
         preview["preview_log_id"] = PaperTradeLedger(args.ledger_db).record_preview(preview)
     if args.json:

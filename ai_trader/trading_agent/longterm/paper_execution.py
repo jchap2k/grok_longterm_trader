@@ -34,6 +34,16 @@ class PaperSubmitBroker(Protocol):
         time_in_force: str,
     ) -> Mapping[str, Any]: ...
 
+    def submit_quantity_order(
+        self,
+        *,
+        symbol: str,
+        side: str,
+        quantity: float,
+        client_order_id: str,
+        time_in_force: str,
+    ) -> Mapping[str, Any]: ...
+
 
 @dataclass(frozen=True)
 class ActiveRulesReference:
@@ -111,6 +121,37 @@ class AlpacaPaperSubmitAdapter:
         request = MarketOrderRequest(
             symbol=symbol,
             notional=float(notional),
+            side=OrderSide.BUY if side.lower() == "buy" else OrderSide.SELL,
+            time_in_force=TimeInForce.DAY if time_in_force.lower() == "day" else TimeInForce.DAY,
+            client_order_id=client_order_id,
+        )
+        order = client.submit_order(request)
+        return {
+            "id": str(getattr(order, "id", "") or ""),
+            "status": str(getattr(order, "status", "") or ""),
+        }
+
+    def submit_quantity_order(
+        self,
+        *,
+        symbol: str,
+        side: str,
+        quantity: float,
+        client_order_id: str,
+        time_in_force: str,
+    ) -> Mapping[str, Any]:
+        try:
+            from alpaca.trading.client import TradingClient
+            from alpaca.trading.enums import OrderSide, TimeInForce
+            from alpaca.trading.requests import MarketOrderRequest
+        except Exception as exc:  # pragma: no cover - depends on optional SDK
+            raise RuntimeError("Alpaca trading SDK is required for paper submission.") from exc
+        if not self.api_key or not self.secret_key:
+            raise RuntimeError("Alpaca paper API credentials are required.")
+        client = TradingClient(self.api_key, self.secret_key, paper=True)
+        request = MarketOrderRequest(
+            symbol=symbol,
+            qty=float(quantity),
             side=OrderSide.BUY if side.lower() == "buy" else OrderSide.SELL,
             time_in_force=TimeInForce.DAY if time_in_force.lower() == "day" else TimeInForce.DAY,
             client_order_id=client_order_id,
@@ -300,8 +341,13 @@ class PaperExecutionBoundary:
         if bool(status.get("review_due")):
             blocked.append("review_due")
         notional = float((preview or {}).get("notional") or intent.get("trade_value") or 0.0)
+        order_type = str((preview or {}).get("order_type") or "")
+        preview_json = dict((preview or {}).get("preview_json") or {})
+        quantity = _preview_quantity(preview)
         if notional <= 0:
             blocked.append("notional_not_positive")
+        if order_type == "market_quantity_preview" and quantity <= 0:
+            blocked.append("quantity_not_positive")
         if notional > float(portfolio_state.cash or 0.0):
             blocked.append("insufficient_cash")
         if ledger.has_submitted_execution(
@@ -314,7 +360,11 @@ class PaperExecutionBoundary:
             "decision_id": decision_id,
             "symbol": symbol,
             "side": str((preview or {}).get("side") or ""),
+            "order_type": order_type,
             "notional": notional,
+            "quantity": quantity,
+            "requested_notional": float(preview_json.get("requested_notional") or notional or 0.0),
+            "estimated_price": float(preview_json.get("estimated_price") or 0.0),
             "preview_id": str((preview or {}).get("preview_id") or ""),
             "preview_log_id": str((preview or {}).get("preview_log_id") or ""),
             "plan_id": str((preview or {}).get("plan_id") or intent.get("plan_id") or ""),
@@ -341,13 +391,22 @@ class PaperExecutionBoundary:
                 ledger.record_execution_event(_event_for_item(item, status="submit_blocked", rules=rules))
                 continue
             try:
-                response = broker.submit_notional_order(
-                    symbol=item["symbol"],
-                    side="buy",
-                    notional=float(item["notional"]),
-                    client_order_id=item["client_order_id"],
-                    time_in_force="day",
-                )
+                if item.get("order_type") == "market_quantity_preview":
+                    response = broker.submit_quantity_order(
+                        symbol=item["symbol"],
+                        side="buy",
+                        quantity=float(item["quantity"]),
+                        client_order_id=item["client_order_id"],
+                        time_in_force="day",
+                    )
+                else:
+                    response = broker.submit_notional_order(
+                        symbol=item["symbol"],
+                        side="buy",
+                        notional=float(item["notional"]),
+                        client_order_id=item["client_order_id"],
+                        time_in_force="day",
+                    )
                 broker_status = _normalize_broker_status(response.get("status"))
                 broker_order_id = str(response.get("id") or response.get("order_id") or "")
                 if broker_status in SUBMITTED_BROKER_STATUSES:
@@ -455,6 +514,10 @@ def _event_for_item(
         "symbol": item.get("symbol") or "",
         "side": item.get("side") or "buy",
         "notional": item.get("notional") or 0.0,
+        "quantity": item.get("quantity") or 0.0,
+        "order_type": item.get("order_type") or "",
+        "requested_notional": item.get("requested_notional") or 0.0,
+        "estimated_price": item.get("estimated_price") or 0.0,
         "status": status,
         "error": error or "; ".join(str(reason) for reason in (item.get("blocked_reasons") or [])),
         "submission_attempt_id": item.get("submission_attempt_id") or "",
@@ -498,6 +561,18 @@ def _preview_age_hours(timestamp: Any, now: datetime) -> float:
         parsed = parsed.replace(tzinfo=UTC)
     current = now if now.tzinfo else now.replace(tzinfo=UTC)
     return max(0.0, (current - parsed).total_seconds() / 3600.0)
+
+
+def _preview_quantity(preview: Mapping[str, Any] | None) -> float:
+    if not preview:
+        return 0.0
+    value = preview.get("quantity")
+    if value is None:
+        value = (preview.get("preview_json") or {}).get("quantity")
+    try:
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _rules_excerpt(text: str) -> str:

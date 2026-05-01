@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from math import floor
 from typing import Any, Mapping
 
 from longterm.portfolio_state import PortfolioState
@@ -19,6 +20,10 @@ class PaperOrderPreview:
     notional: float
     allowed: bool
     reason: str
+    requested_notional: float = 0.0
+    quantity: int | None = None
+    estimated_price: float = 0.0
+    size_variance: float = 0.0
     decision_id: str = ""
     intent_type: str = ""
     paired_symbol: str = ""
@@ -44,11 +49,15 @@ def build_paper_order_preview(
     *,
     portfolio_state: PortfolioState,
     profile: PortfolioProfile,
+    order_model: str = "notional",
+    price_map: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build paper-order-shaped previews without submitting anything."""
     plan_id = str(action_plan.get("plan_id") or "")
     benchmark_reason = str(action_plan.get("benchmark_gate_reason") or "")
     protected = set(profile.protected_symbols) | set(portfolio_state.protected_symbols)
+    normalized_order_model = _normalize_order_model(order_model)
+    normalized_price_map = _normalize_price_map(price_map or {})
     previews: list[PaperOrderPreview] = []
     for index, intent in enumerate(action_plan.get("intents") or [], start=1):
         previews.extend(
@@ -59,6 +68,8 @@ def build_paper_order_preview(
                 benchmark_reason=benchmark_reason,
                 portfolio_state=portfolio_state,
                 protected_symbols=protected,
+                order_model=normalized_order_model,
+                price_map=normalized_price_map,
             )
         )
     rows = [preview.to_dict() for preview in previews]
@@ -66,6 +77,7 @@ def build_paper_order_preview(
         "schema_version": 1,
         "mode": "paper_order_preview",
         "order_submission_enabled": False,
+        "order_model": normalized_order_model,
         "plan_id": plan_id,
         "preview_count": len(rows),
         "allowed_count": sum(1 for row in rows if row["allowed"]),
@@ -114,6 +126,8 @@ def _previews_for_intent(
     benchmark_reason: str,
     portfolio_state: PortfolioState,
     protected_symbols: set[str],
+    order_model: str,
+    price_map: Mapping[str, float],
 ) -> list[PaperOrderPreview]:
     intent_type = str(intent.get("intent_type") or "").upper()
     if intent_type == "BUY":
@@ -125,6 +139,8 @@ def _previews_for_intent(
                 benchmark_reason=benchmark_reason,
                 portfolio_state=portfolio_state,
                 protected_symbols=protected_symbols,
+                order_model=order_model,
+                price_map=price_map,
             )
         ]
     if intent_type == "REBALANCE":
@@ -135,6 +151,8 @@ def _previews_for_intent(
             benchmark_reason=benchmark_reason,
             portfolio_state=portfolio_state,
             protected_symbols=protected_symbols,
+            order_model=order_model,
+            price_map=price_map,
         )
     return [
         _no_order_preview(
@@ -154,10 +172,28 @@ def _buy_preview(
     benchmark_reason: str,
     portfolio_state: PortfolioState,
     protected_symbols: set[str],
+    order_model: str,
+    price_map: Mapping[str, float],
 ) -> PaperOrderPreview:
     symbol = _symbol(intent)
-    notional = _intent_notional(intent)
+    requested_notional = _intent_notional(intent)
     blocked = _common_blocks(intent, symbol, protected_symbols)
+    order_type = "market_notional_preview"
+    notional = requested_notional
+    quantity: int | None = None
+    estimated_price = 0.0
+    if order_model == "whole_share":
+        order_type = "market_quantity_preview"
+        estimated_price = float(price_map.get(symbol) or 0.0)
+        if estimated_price <= 0:
+            blocked.append("missing_price_for_whole_share_preview")
+            notional = 0.0
+            quantity = 0
+        else:
+            quantity = int(floor(requested_notional / estimated_price))
+            notional = round(quantity * estimated_price, 2)
+            if quantity < 1:
+                blocked.append("whole_share_quantity_below_one")
     cash_shortfall = max(0.0, round(notional - portfolio_state.cash, 2))
     if cash_shortfall > 0:
         blocked.append(f"Insufficient cash for preview; short ${cash_shortfall:,.2f}.")
@@ -167,8 +203,11 @@ def _buy_preview(
         plan_id=plan_id,
         symbol=symbol,
         side="buy",
-        order_type="market_notional_preview",
+        order_type=order_type,
         notional=notional,
+        requested_notional=requested_notional,
+        quantity=quantity,
+        estimated_price=estimated_price,
         allowed=not blocked,
         reason=_reason(intent, blocked),
         cash_shortfall=cash_shortfall,
@@ -185,11 +224,34 @@ def _rebalance_previews(
     benchmark_reason: str,
     portfolio_state: PortfolioState,
     protected_symbols: set[str],
+    order_model: str,
+    price_map: Mapping[str, float],
 ) -> list[PaperOrderPreview]:
     target = _symbol(intent)
     source = str(intent.get("source_symbol") or "").upper()
     notional = _intent_notional(intent)
     blocked = _common_blocks(intent, target, protected_symbols)
+    order_type = "market_notional_preview"
+    target_price = 0.0
+    target_quantity: int | None = None
+    source_price = 0.0
+    source_quantity: int | None = None
+    if order_model == "whole_share":
+        order_type = "market_quantity_preview"
+        target_price = float(price_map.get(target) or 0.0)
+        source_price = float(price_map.get(source) or 0.0)
+        if target_price <= 0:
+            blocked.append("missing_target_price_for_whole_share_preview")
+        if source_price <= 0:
+            blocked.append("missing_source_price_for_whole_share_preview")
+        if target_price > 0:
+            target_quantity = int(floor(notional / target_price))
+            if target_quantity < 1:
+                blocked.append("whole_share_target_quantity_below_one")
+        if source_price > 0:
+            source_quantity = int(floor(notional / source_price))
+            if source_quantity < 1:
+                blocked.append("whole_share_source_quantity_below_one")
     if not source:
         blocked.append("Missing source symbol for rebalance preview.")
     if source in protected_symbols:
@@ -203,8 +265,11 @@ def _rebalance_previews(
         plan_id=plan_id,
         symbol=source,
         side="sell",
-        order_type="market_notional_preview",
+        order_type=order_type,
         notional=notional,
+        requested_notional=notional,
+        quantity=source_quantity,
+        estimated_price=source_price,
         allowed=allowed,
         reason=_reason(intent, blocked),
         paired_symbol=target,
@@ -219,8 +284,11 @@ def _rebalance_previews(
         plan_id=plan_id,
         symbol=target,
         side="buy",
-        order_type="market_notional_preview",
+        order_type=order_type,
         notional=notional,
+        requested_notional=notional,
+        quantity=target_quantity,
+        estimated_price=target_price,
         allowed=allowed,
         reason=_reason(intent, blocked),
         paired_symbol=source,
@@ -265,6 +333,9 @@ def _preview(
     side: str,
     order_type: str,
     notional: float,
+    requested_notional: float | None = None,
+    quantity: int | None = None,
+    estimated_price: float = 0.0,
     allowed: bool,
     reason: str,
     benchmark_reason: str,
@@ -282,6 +353,10 @@ def _preview(
         side=side,
         order_type=order_type,
         notional=round(float(notional or 0.0), 2),
+        requested_notional=round(float(requested_notional if requested_notional is not None else notional or 0.0), 2),
+        quantity=quantity,
+        estimated_price=round(float(estimated_price or 0.0), 4),
+        size_variance=round(float(notional or 0.0) - float(requested_notional if requested_notional is not None else notional or 0.0), 2),
         allowed=bool(allowed),
         reason=reason,
         decision_id=str(intent.get("decision_id") or ""),
@@ -319,6 +394,26 @@ def _common_blocks(
 
 def _intent_notional(intent: Mapping[str, Any]) -> float:
     return float(intent.get("trade_value") or intent.get("target_value") or 0.0)
+
+
+def _normalize_order_model(order_model: str) -> str:
+    value = str(order_model or "notional").lower().strip()
+    if value in {"notional", "market_notional"}:
+        return "notional"
+    if value in {"whole_share", "whole-share", "quantity"}:
+        return "whole_share"
+    raise ValueError("order_model must be 'notional' or 'whole_share'.")
+
+
+def _normalize_price_map(price_map: Mapping[str, Any]) -> dict[str, float]:
+    prices: dict[str, float] = {}
+    for symbol, value in price_map.items():
+        try:
+            price = float(value or 0.0)
+        except (TypeError, ValueError):
+            price = 0.0
+        prices[str(symbol or "").upper()] = price
+    return prices
 
 
 def _symbol(intent: Mapping[str, Any]) -> str:

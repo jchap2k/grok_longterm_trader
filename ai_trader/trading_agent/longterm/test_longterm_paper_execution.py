@@ -29,9 +29,25 @@ class FakePaperBroker:
     def submit_notional_order(self, *, symbol, side, notional, client_order_id, time_in_force):
         self.calls.append(
             {
+                "order_model": "notional",
                 "symbol": symbol,
                 "side": side,
                 "notional": notional,
+                "client_order_id": client_order_id,
+                "time_in_force": time_in_force,
+            }
+        )
+        if self.fail:
+            raise TimeoutError("network timeout")
+        return {"id": self.order_id, "status": self.status}
+
+    def submit_quantity_order(self, *, symbol, side, quantity, client_order_id, time_in_force):
+        self.calls.append(
+            {
+                "order_model": "quantity",
+                "symbol": symbol,
+                "side": side,
+                "quantity": quantity,
                 "client_order_id": client_order_id,
                 "time_in_force": time_in_force,
             }
@@ -103,25 +119,29 @@ def _record_preview(
     allowed=True,
     timestamp=None,
     transaction_id="",
+    order_type=None,
+    quantity=None,
 ):
+    order_type = order_type or ("market_notional_preview" if side != "none" else "no_order")
+    row = {
+        "preview_id": f"preview-{symbol.lower()}-{side}",
+        "plan_id": "plan-1",
+        "decision_id": decision_id,
+        "transaction_id": transaction_id,
+        "symbol": symbol,
+        "side": side,
+        "order_type": order_type,
+        "notional": notional,
+        "allowed": allowed,
+        "blocked_reasons": [] if allowed else ["cash shortfall"],
+    }
+    if quantity is not None:
+        row["quantity"] = quantity
     return ledger.record_preview(
         {
             "plan_id": "plan-1",
             "order_submission_enabled": False,
-            "previews": [
-                {
-                    "preview_id": f"preview-{symbol.lower()}-{side}",
-                    "plan_id": "plan-1",
-                    "decision_id": decision_id,
-                    "transaction_id": transaction_id,
-                    "symbol": symbol,
-                    "side": side,
-                    "order_type": "market_notional_preview" if side != "none" else "no_order",
-                    "notional": notional,
-                    "allowed": allowed,
-                    "blocked_reasons": [] if allowed else ["cash shortfall"],
-                }
-            ],
+            "previews": [row],
         },
         timestamp=timestamp,
     )
@@ -214,6 +234,72 @@ def test_paper_execution_normalizes_alpaca_enum_statuses_as_submitted(tmp_path):
     assert events[0]["status"] == "submitted"
     assert events[0]["broker_order_id"] == "alpaca-paper-enum-1"
     assert events[0]["event_json"]["broker_status"] == "pending_new"
+
+
+def test_paper_execution_submit_uses_quantity_order_for_whole_share_preview(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = _record_decision(journal)
+    _record_preview(
+        ledger,
+        decision_id,
+        order_type="market_quantity_preview",
+        quantity=2,
+        notional=1820,
+    )
+    broker = FakePaperBroker(status="pending_new", order_id="alpaca-paper-qty-1")
+
+    result = _boundary(tmp_path).run(
+        _action_plan(decision_id, trade_value=1820),
+        journal=journal,
+        ledger=ledger,
+        profile=PortfolioProfile(protected_symbols=["FXAIX"]),
+        portfolio_state=PortfolioState(cash=5000, protected_symbols=["FXAIX"]),
+        broker=broker,
+        submit=True,
+    )
+
+    events = ledger.list_execution_events(limit=10)
+    assert result["submitted_count"] == 1
+    assert broker.calls == [
+        {
+            "order_model": "quantity",
+            "symbol": "NVDA",
+            "side": "buy",
+            "quantity": 2.0,
+            "client_order_id": events[0]["event_json"]["client_order_id"],
+            "time_in_force": "day",
+        }
+    ]
+    assert events[0]["event_json"]["quantity"] == 2.0
+    assert events[0]["event_json"]["order_type"] == "market_quantity_preview"
+
+
+def test_paper_execution_blocks_quantity_preview_without_positive_quantity(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = _record_decision(journal)
+    _record_preview(
+        ledger,
+        decision_id,
+        order_type="market_quantity_preview",
+        quantity=0,
+        notional=0,
+    )
+
+    result = _boundary(tmp_path).run(
+        _action_plan(decision_id, trade_value=1000),
+        journal=journal,
+        ledger=ledger,
+        profile=PortfolioProfile(protected_symbols=["FXAIX"]),
+        portfolio_state=PortfolioState(cash=5000, protected_symbols=["FXAIX"]),
+        broker=FakePaperBroker(),
+        submit=True,
+    )
+
+    assert result["submitted_count"] == 0
+    assert "quantity_not_positive" in result["items"][0]["blocked_reasons"]
+    assert ledger.list_execution_events(limit=1)[0]["status"] == "submit_blocked"
 
 
 def test_paper_execution_duplicate_preview_is_blocked_before_broker_call(tmp_path):
