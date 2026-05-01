@@ -39,3 +39,6 @@ Before live execution exists:
 - require audit logs for every proposed and executed action
 - require benchmark guard visibility before new buys
 - require a manual kill switch
+- keep rebalance outcome analysis read-only; outcome reports may justify future
+  scoring changes, but they must not auto-mutate planner weights or execution
+  behavior

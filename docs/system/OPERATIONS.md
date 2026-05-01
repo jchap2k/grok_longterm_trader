@@ -367,6 +367,18 @@ source holdings receive a small dry-run rebalance-score adjustment so the
 proposal can favor rotating from names with higher thesis-review risk. This is
 still advisory only and does not place orders.
 
+Analyze evaluated outcomes before changing any rebalance-score weights:
+
+```powershell
+python scripts/longterm_rebalance_outcomes.py --journal-db path\to\journal.db
+python scripts/longterm_rebalance_outcomes.py --journal-db path\to\journal.db --json
+```
+
+This report groups evaluated decisions by shared thesis/review-risk buckets and
+shows excess return versus `FXAIX`, beat rate, confidence-weighted excess return,
+and pending outcome counts. It is evidence for future tuning only; it does not
+change `RebalancePlanner` behavior.
+
 Current limitations of this first cycle:
 - still dry-run only
 - recommendation, next-actions, and capital-alert outputs are returned as markdown strings in the cycle result JSON

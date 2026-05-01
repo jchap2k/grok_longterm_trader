@@ -111,6 +111,9 @@ interactive login/setup flow.
 `longterm/review_status.py`
 Builds per-symbol thesis review status from journal review candidates and the durable thesis-review event table. Newer CGH decisions take precedence over older reviews; otherwise, recorded thesis reviews supply the last-review date and can preserve a `broken` or `weakening` state until a newer decision or new evidence changes it. The builder returns review-due/thesis-state fields for recommendation tables, markdown reports, and next-action reports without mutating the journal.
 
+`longterm/rebalance_outcome_analysis.py`
+Builds read-only evidence for future review-aware rebalance tuning. It groups evaluated decision outcomes by the shared thesis/review-risk buckets (`healthy`, `review_due`, `stale`, `weakening`, `broken`, `unreviewed`), reports excess return versus `FXAIX`, beat rate, confidence-weighted excess return, and pending outcome counts. It does not change planner weights.
+
 `longterm/action_planner.py`
 Converts a structured decision into a non-executing proposed `BUY`, `SELL`, or `NONE` intent.
 
@@ -137,7 +140,7 @@ Checks review due dates and whether current evidence matches invalidation condit
 
 ## Decision Flow
 
-Universe sources -> discovery queue -> research batches -> `ResearchPacket` completeness gate -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> Alpaca paper/read-only portfolio snapshot -> benchmark guard -> dry-run account action plan -> next-actions/report artifacts.
+Universe sources -> discovery queue -> research batches -> `ResearchPacket` completeness gate -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> rebalance outcome analysis -> Alpaca paper/read-only portfolio snapshot -> benchmark guard -> dry-run account action plan -> next-actions/report artifacts.
 
 ## Data Flow Safety
 

@@ -7,6 +7,7 @@ from typing import Any, Mapping
 
 from longterm.benchmark_guard import BenchmarkGuardResult
 from longterm.portfolio_state import PortfolioState
+from longterm.review_status import review_risk_bucket
 from portfolio.portfolio_profile import PortfolioProfile
 
 
@@ -198,10 +199,10 @@ def _thesis_state(status: Mapping[str, Any]) -> str:
 
 
 def _review_risk_adjustment(status: Mapping[str, Any]) -> int:
+    bucket = review_risk_bucket(status)
     adjustment = 1 if _review_due(status) else 0
-    thesis_state = _thesis_state(status).lower()
-    if thesis_state in {"broken", "invalidated"}:
+    if bucket == "broken":
         adjustment += 4
-    elif thesis_state in {"stale", "deteriorating", "weakening", "at_risk"}:
+    elif bucket in {"stale", "weakening"}:
         adjustment += 2
     return adjustment

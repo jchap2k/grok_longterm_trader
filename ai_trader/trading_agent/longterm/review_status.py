@@ -11,6 +11,9 @@ from longterm.thesis_monitor import ThesisMonitor
 from research.intake import create_research_packet_from_idea
 
 
+THESIS_RISK_BUCKETS = ("broken", "weakening", "stale", "review_due", "healthy", "unreviewed")
+
+
 class ReviewStatusBuilder:
     """Derive per-symbol review status without mutating journal records."""
 
@@ -103,3 +106,19 @@ def _status_from_recorded_review(review: Mapping[str, object], today: date) -> d
         "latest_thesis_review_id": review.get("review_id"),
         "latest_thesis_review_timestamp": review.get("timestamp"),
     }
+
+
+def review_risk_bucket(status: Mapping[str, object]) -> str:
+    """Normalize review status into the shared rebalance/outcome risk bucket."""
+    thesis_state = str(status.get("thesis_state") or "").lower()
+    if thesis_state in {"broken", "invalidated"}:
+        return "broken"
+    if thesis_state in {"weakening", "deteriorating", "at_risk"}:
+        return "weakening"
+    if thesis_state == "stale":
+        return "stale"
+    if thesis_state == "healthy":
+        return "review_due" if bool(status.get("review_due")) else "healthy"
+    if bool(status.get("review_due")):
+        return "review_due"
+    return "unreviewed"
