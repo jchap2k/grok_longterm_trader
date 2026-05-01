@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import inspect
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -226,6 +227,10 @@ def run_longterm_cycle(
                 profile=profile,
                 portfolio_state=portfolio_state,
                 limit=report_limit,
+                **_supported_next_actions_kwargs(
+                    next_actions_builder_func,
+                    deferred_research_queue=deferred_research_queue,
+                ),
             )
             next_actions_generated = bool(next_actions_markdown)
         if active_sleeve_value is not None and available_cash is not None:
@@ -354,6 +359,14 @@ def _missing_fields_from_warnings(warnings: list[str]) -> list[str]:
         elif "missing research context" in warning:
             missing_fields.append("research_context")
     return missing_fields
+
+
+def _supported_next_actions_kwargs(builder: Callable[..., str], **kwargs: Any) -> dict[str, Any]:
+    signature = inspect.signature(builder)
+    parameters = signature.parameters
+    if any(parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters.values()):
+        return kwargs
+    return {key: value for key, value in kwargs.items() if key in parameters}
 
 
 def _rebalance_markdown(proposal) -> str:

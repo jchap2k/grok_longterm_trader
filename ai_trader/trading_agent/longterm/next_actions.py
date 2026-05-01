@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from typing import Mapping
+from typing import Any, Mapping
 
 from longterm.action_planner import ActionPlanner
 from longterm.benchmark_guard import BenchmarkGuard, BenchmarkGuardResult
@@ -129,6 +129,7 @@ def build_next_actions_markdown(
     benchmark_guard: BenchmarkGuard | None = None,
     review_status_today: date | None = None,
     last_review_dates_by_symbol: Mapping[str, date] | None = None,
+    deferred_research_queue: list[Mapping[str, Any]] | None = None,
     limit: int = 10,
 ) -> str:
     guard = benchmark_guard or BenchmarkGuard()
@@ -158,4 +159,39 @@ def build_next_actions_markdown(
         lines.append(
             f"| {action.priority} | {action.category} | {action.symbol} | {action.action} | {action.reason} |"
         )
+    if deferred_research_queue:
+        lines.extend(_deferred_research_queue_lines(deferred_research_queue))
     return "\n".join(lines) + "\n"
+
+
+def _deferred_research_queue_lines(deferred_research_queue: list[Mapping[str, Any]]) -> list[str]:
+    lines = [
+        "",
+        "## Deferred Research Queue",
+        "",
+        "| Symbol | Missing Fields | Provenance | Next Step |",
+        "|---|---|---|---|",
+    ]
+    command_lines: list[str] = []
+    for item in deferred_research_queue:
+        symbol = _markdown_cell(str(item.get("symbol") or "UNKNOWN"))
+        missing_fields = _markdown_cell(_format_missing_fields(item.get("missing_fields")))
+        provenance = _markdown_cell(str(item.get("provenance_bucket") or "unknown"))
+        next_step = _markdown_cell(str(item.get("suggested_next_step") or "enrich_candidate_before_research"))
+        lines.append(f"| {symbol} | {missing_fields} | {provenance} | {next_step} |")
+        suggested_command = str(item.get("suggested_enrichment_command") or "").strip()
+        if suggested_command:
+            command_lines.append(f"- {symbol}: `{suggested_command}`")
+    if command_lines:
+        lines.extend(["", "Suggested enrichment commands:", *command_lines])
+    return lines
+
+
+def _format_missing_fields(value: Any) -> str:
+    if isinstance(value, list):
+        return ", ".join(str(field) for field in value)
+    return str(value or "")
+
+
+def _markdown_cell(value: str) -> str:
+    return value.replace("|", "\\|").replace("\n", " ")

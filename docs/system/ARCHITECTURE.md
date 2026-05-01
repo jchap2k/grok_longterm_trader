@@ -32,6 +32,9 @@ Defines the normalized research packet and the minimum completeness rule for dee
 `longterm/orchestration.py`
 Builds one dry-run cycle from manual, discovery, and optional Motley Fool ideas. It now emits `skipped_ideas` and a richer `deferred_research_queue` for incomplete packets, including missing fields and a suggested enrichment command, so skipped ticker stubs become explicit enrichment work instead of disappearing.
 
+`longterm/next_actions.py`
+Creates the operator-facing dry-run next-actions report from the journal, portfolio state, review status, and benchmark guard. It also renders deferred research items from the cycle so incomplete candidate packets become visible enrichment work with missing fields and suggested discovery/enrichment commands.
+
 `agent/configs/longterm_trading_agent_specs.json`
 Defines the long-term CGH domain roles and presets:
 

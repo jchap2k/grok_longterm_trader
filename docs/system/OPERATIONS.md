@@ -108,6 +108,7 @@ The next-actions report is still dry-run only. It evaluates the FXAIX benchmark 
 
 - If the active sleeve is not clearing the benchmark guard, new buy candidates are marked `paused_buy_candidate`.
 - If a buy is attractive but active-sleeve cash is short, it is marked `capital_needed` so an email or dashboard can later notify the user.
+- When generated from a cycle, it can include a `Deferred Research Queue` section listing incomplete symbols, missing fields, provenance, and the suggested enrichment command to run before those ideas should consume LLM research.
 - Protected symbols such as `FXAIX` remain excluded from sell, trim, rebalance, and rotation logic.
 
 ## Capital-Needed Email Payloads

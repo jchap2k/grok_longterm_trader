@@ -378,6 +378,33 @@ def test_next_actions_markdown_can_auto_include_review_due_status(tmp_path):
     assert "Review due before committing new capital." in markdown
 
 
+def test_next_actions_markdown_includes_deferred_research_queue(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
+    state = PortfolioState(cash=5000, protected_symbols=["FXAIX"])
+
+    markdown = build_next_actions_markdown(
+        journal,
+        profile=profile,
+        portfolio_state=state,
+        deferred_research_queue=[
+            {
+                "symbol": "TSLA",
+                "missing_fields": ["company_name", "idea_source", "research_context"],
+                "provenance_bucket": "manual",
+                "suggested_next_step": "enrich_candidate_before_research",
+                "suggested_enrichment_command": (
+                    "python scripts/run_longterm_discovery.py --candidates path\\to\\candidates.json"
+                ),
+            }
+        ],
+    )
+
+    assert "## Deferred Research Queue" in markdown
+    assert "| TSLA | company_name, idea_source, research_context | manual | enrich_candidate_before_research |" in markdown
+    assert "python scripts/run_longterm_discovery.py" in markdown
+
+
 def test_review_status_builder_marks_due_reviews_from_journal(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     _record_decision(journal, "MSFT", confidence=83)

@@ -314,8 +314,10 @@ def test_cycle_can_build_report_and_next_actions_outputs(tmp_path):
         report_calls.append((journal.db_path, limit))
         return "# report\n"
 
-    def fake_next_actions_builder(journal, *, profile, portfolio_state, limit):
-        next_actions_calls.append((journal.db_path, profile.benchmark_symbol, portfolio_state.cash, limit))
+    def fake_next_actions_builder(journal, *, profile, portfolio_state, limit, deferred_research_queue=None):
+        next_actions_calls.append(
+            (journal.db_path, profile.benchmark_symbol, portfolio_state.cash, limit, deferred_research_queue)
+        )
         return "# next actions\n"
 
     portfolio_state = PortfolioState(
@@ -326,7 +328,14 @@ def test_cycle_can_build_report_and_next_actions_outputs(tmp_path):
 
     result = run_longterm_cycle(
         profile=_build_profile(),
-        manual_ideas=[{"symbol": "AAPL", "company_name": "Apple"}],
+        manual_ideas=[
+            {
+                "symbol": "AAPL",
+                "company_name": "Apple",
+                "idea_source": "manual_watchlist",
+                "thesis_summary": "Durable ecosystem compounder.",
+            }
+        ],
         motley_fool_settings=MotleyFoolCaptureSettings(enabled=False, cookie_ready=False),
         runner=FakeRunner(),
         journal_db_path=tmp_path / "journal.db",
@@ -341,7 +350,34 @@ def test_cycle_can_build_report_and_next_actions_outputs(tmp_path):
     assert result.report_generated is True
     assert result.next_actions_generated is True
     assert report_calls == [(tmp_path / "journal.db", 7)]
-    assert next_actions_calls == [(tmp_path / "journal.db", "FXAIX", 2500.0, 7)]
+    assert next_actions_calls == [(tmp_path / "journal.db", "FXAIX", 2500.0, 7, [])]
+
+
+def test_cycle_passes_deferred_research_queue_to_next_actions_builder(tmp_path):
+    class FakeRunner:
+        def run_and_record(self, packet, **kwargs):
+            return f"decision-{packet.symbol}"
+
+    captured_deferred_queue = []
+
+    def fake_next_actions_builder(journal, *, profile, portfolio_state, limit, deferred_research_queue=None):
+        captured_deferred_queue.extend(deferred_research_queue or [])
+        return "# next actions\n"
+
+    result = run_longterm_cycle(
+        profile=_build_profile(),
+        manual_ideas=[{"symbol": "TSLA"}],
+        motley_fool_settings=MotleyFoolCaptureSettings(enabled=False, cookie_ready=False),
+        runner=FakeRunner(),
+        journal_db_path=tmp_path / "journal.db",
+        portfolio_state=PortfolioState(cash=2500, protected_symbols=["FXAIX"]),
+        report_builder_func=lambda journal, *, limit: "# report\n",
+        next_actions_builder_func=fake_next_actions_builder,
+    )
+
+    assert result.next_actions_generated is True
+    assert captured_deferred_queue == result.deferred_research_queue
+    assert captured_deferred_queue[0]["symbol"] == "TSLA"
 
 
 def test_cycle_surfaces_packet_completeness_warnings(tmp_path):
