@@ -270,11 +270,14 @@ cash before considering any paper-execution feature:
 ```powershell
 python scripts/longterm_paper_reconciliation.py --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --expected-cash 5000
 python scripts/longterm_paper_reconciliation.py --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --json
+python scripts/longterm_paper_reconciliation.py --portfolio-state path\to\portfolio.json --paper-ledger-db path\to\paper_ledger.db --json
 ```
 
 The reconciliation report flags missing target symbols, unexpected non-protected
 holdings, target-value mismatches, cash delta, and protected-symbol presence. It
-is read-only and does not submit paper or live orders.
+can also use filled/rejected paper execution events to flag missing filled
+symbols or unexpected holdings after rejected orders. It is read-only and does
+not submit paper or live orders.
 
 Build a non-submitting paper order preview from a dry-run action plan:
 

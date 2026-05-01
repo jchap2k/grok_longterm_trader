@@ -135,7 +135,7 @@ Loads read-only portfolio snapshots and separates active versus protected holdin
 Reads Alpaca paper-account state through the standard broker API, normalizes positions into a read-only snapshot, and can export the same `PortfolioState` contract used by next-actions, benchmark, rebalance, and capital-alert planning. It is paper-only and does not expose order placement.
 
 `longterm/paper_reconciliation.py`
-Compares read-only paper account state against dry-run action-plan targets and expected cash. It reports missing target symbols, extra non-protected symbols, value mismatches, and protected-symbol presence. It is reconciliation only and never submits orders.
+Compares read-only paper account state against dry-run action-plan targets, expected cash, and optional paper execution ledger events. It reports missing target symbols, extra non-protected symbols, value mismatches, protected-symbol presence, missing filled symbols, and unexpected holdings after rejected orders. It is reconciliation only and never submits orders.
 
 `longterm/paper_order_preview.py`
 Converts dry-run account action plan intents into broker-shaped paper order previews without importing Alpaca or submitting orders. Preview rows carry plan/decision traceability, risk/review metadata, cash shortfall, blocked reasons, and paired rebalance transaction IDs. `order_submission_enabled` is always `false`.

@@ -10,6 +10,7 @@ from longterm.paper_reconciliation import (
     build_paper_reconciliation_markdown,
     reconcile_paper_account,
 )
+from longterm.paper_trade_ledger import PaperTradeLedger
 from longterm.portfolio_state import PortfolioState
 
 
@@ -18,6 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--portfolio-state", required=True)
     parser.add_argument("--action-plan", default="")
     parser.add_argument("--expected-cash", type=float, default=None)
+    parser.add_argument("--paper-ledger-db", default=None)
     parser.add_argument("--protected-symbol", action="append", default=[])
     parser.add_argument("--json", action="store_true")
     return parser
@@ -31,6 +33,7 @@ def run_cli(args: argparse.Namespace) -> int:
         action_plan=action_plan,
         expected_cash=args.expected_cash,
         protected_symbols=args.protected_symbol or portfolio_state.protected_symbols,
+        paper_ledger=PaperTradeLedger(args.paper_ledger_db) if args.paper_ledger_db else None,
     )
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
