@@ -21,6 +21,7 @@ class LongTermSchedulerInputs:
     profile_config: str | Path
     idea_file: str | Path | None = None
     idea_batch: str | Path | None = None
+    discovery_candidates: str | Path | None = None
     motley_fool_config: str | Path | None = None
     journal_db: str | Path | None = None
     portfolio_state: str | Path | None = None
@@ -75,6 +76,7 @@ def build_cycle_kwargs(inputs: LongTermSchedulerInputs) -> dict[str, Any]:
         str(inputs.idea_file or ""),
         str(inputs.idea_batch or ""),
     )
+    discovery_candidates = _load_discovery_candidates(inputs.discovery_candidates)
     settings = load_motley_fool_capture_settings(inputs.motley_fool_config)
     portfolio_state = (
         PortfolioState.from_file(inputs.portfolio_state, profile=profile)
@@ -84,6 +86,7 @@ def build_cycle_kwargs(inputs: LongTermSchedulerInputs) -> dict[str, Any]:
     kwargs: dict[str, Any] = {
         "profile": profile,
         "manual_ideas": manual_ideas,
+        "discovery_candidates": discovery_candidates,
         "motley_fool_settings": settings,
         "journal_db_path": inputs.journal_db,
         "portfolio_state": portfolio_state,
@@ -96,6 +99,15 @@ def build_cycle_kwargs(inputs: LongTermSchedulerInputs) -> dict[str, Any]:
     if inputs.agent_config:
         kwargs["agent_config_path"] = inputs.agent_config
     return kwargs
+
+
+def _load_discovery_candidates(path: str | Path | None) -> list[dict[str, Any]]:
+    if not path:
+        return []
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, list):
+        raise ValueError("Discovery candidates file must contain a JSON list.")
+    return [dict(item) for item in payload]
 
 
 def run_longterm_scheduler(

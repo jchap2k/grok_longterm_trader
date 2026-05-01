@@ -55,6 +55,12 @@ python scripts/run_longterm_discovery.py --candidates path\to\candidates.json --
 python scripts/run_longterm_cycle.py --idea-batch path\to\research_ideas.json --journal-db path\to\journal.db
 ```
 
+Or let a cycle build the discovery queue directly before research:
+
+```powershell
+python scripts/run_longterm_cycle.py --discovery-candidates path\to\candidates.json --journal-db path\to\journal.db
+```
+
 Discovery buckets:
 - `research_queue`: candidates that clear the mechanical quality-growth pre-filter.
 - `watchlist`: interesting candidates that need more evidence before research.
@@ -244,6 +250,12 @@ Run exactly one scheduled cycle:
 
 ```powershell
 python scripts/run_longterm_scheduler.py --run-once --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --quiet
+```
+
+Run one scheduled cycle with a refreshed discovery-candidate file:
+
+```powershell
+python scripts/run_longterm_scheduler.py --run-once --discovery-candidates path\to\candidates.json --journal-db path\to\journal.db --quiet
 ```
 
 Run a bounded recurring dry-run:

@@ -24,10 +24,13 @@ def test_build_cycle_kwargs_loads_fresh_portfolio_state_each_time(tmp_path):
     _write_profile(profile_path)
     portfolio_path = tmp_path / "portfolio.json"
     portfolio_path.write_text('{"cash":1000,"holdings":[]}', encoding="utf-8")
+    discovery_path = tmp_path / "discovery.json"
+    discovery_path.write_text('[{"symbol":"MSFT","source":"sp500"}]', encoding="utf-8")
 
     inputs = LongTermSchedulerInputs(
         profile_config=profile_path,
         portfolio_state=portfolio_path,
+        discovery_candidates=discovery_path,
         journal_db=tmp_path / "journal.db",
         launch_login_if_needed=True,
         quiet=True,
@@ -39,6 +42,7 @@ def test_build_cycle_kwargs_loads_fresh_portfolio_state_each_time(tmp_path):
 
     assert first["portfolio_state"].cash == 1000.0
     assert second["portfolio_state"].cash == 2500.0
+    assert second["discovery_candidates"] == [{"symbol": "MSFT", "source": "sp500"}]
     assert second["journal_db_path"] == tmp_path / "journal.db"
     assert second["launch_login_if_needed"] is True
     assert second["verbose"] is False

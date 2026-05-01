@@ -19,6 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run recurring dry-run long-term research cycles.")
     parser.add_argument("--idea-file", default="")
     parser.add_argument("--idea-batch", default="")
+    parser.add_argument("--discovery-candidates", default="")
     parser.add_argument("--profile-config", default=str(DEFAULT_PROFILE_PATH))
     parser.add_argument("--motley-fool-config", default=None)
     parser.add_argument("--journal-db", default=None)
@@ -46,6 +47,7 @@ def run_cli(
         profile_config=Path(args.profile_config),
         idea_file=Path(args.idea_file) if args.idea_file else None,
         idea_batch=Path(args.idea_batch) if args.idea_batch else None,
+        discovery_candidates=Path(args.discovery_candidates) if args.discovery_candidates else None,
         motley_fool_config=Path(args.motley_fool_config) if args.motley_fool_config else None,
         journal_db=Path(args.journal_db) if args.journal_db else None,
         portfolio_state=Path(args.portfolio_state) if args.portfolio_state else None,

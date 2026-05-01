@@ -22,6 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run one long-term research cycle.")
     parser.add_argument("--idea-file", default="")
     parser.add_argument("--idea-batch", default="")
+    parser.add_argument("--discovery-candidates", default="")
     parser.add_argument("--profile-config", default=str(DEFAULT_PROFILE_PATH))
     parser.add_argument("--motley-fool-config", default=None)
     parser.add_argument("--journal-db", default=None)
@@ -42,6 +43,7 @@ def run_cli(
 ) -> int:
     profile = PortfolioProfile.from_file(args.profile_config)
     manual_ideas = _load_manual_ideas(args.idea_file, args.idea_batch)
+    discovery_candidates = _load_discovery_candidates(args.discovery_candidates)
     settings = load_motley_fool_capture_settings(args.motley_fool_config)
     portfolio_state = (
         PortfolioState.from_file(args.portfolio_state, profile=profile)
@@ -52,6 +54,7 @@ def run_cli(
     kwargs: dict[str, Any] = {
         "profile": profile,
         "manual_ideas": manual_ideas,
+        "discovery_candidates": discovery_candidates,
         "motley_fool_settings": settings,
         "journal_db_path": args.journal_db,
         "portfolio_state": portfolio_state,
@@ -89,3 +92,12 @@ def _load_manual_ideas(idea_file: str, idea_batch: str) -> list[dict[str, Any]]:
             raise ValueError("Idea batch file must contain a JSON list.")
         return [dict(item) for item in payload]
     return []
+
+
+def _load_discovery_candidates(path: str) -> list[dict[str, Any]]:
+    if not path:
+        return []
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, list):
+        raise ValueError("Discovery candidates file must contain a JSON list.")
+    return [dict(item) for item in payload]

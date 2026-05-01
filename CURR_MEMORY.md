@@ -69,6 +69,7 @@ Additional continuation work completed on 2026-04-30:
 - added a structured dry-run `account_action_plan` contract for the future autonomous account manager and wired it through cycle and scheduler artifacts
 - persisted generated dry-run account action plans into the decision journal for future paper/live reconciliation
 - added V1 discovery queue logic and CLI/export path for building the research universe before any trade decisions are made
+- wired discovery candidates into one-cycle orchestration and scheduler inputs so discovery can feed research cycles directly
 
 What those changes accomplished:
 
@@ -83,6 +84,7 @@ What those changes accomplished:
   - high-quality external idea feeds such as Motley Fool
   - manual watchlists and quality-growth screens
 - Discovery can export `research_queue` as idea-batch JSON for the existing research cycle.
+- `run_longterm_cycle` and the dry-run scheduler can now load discovery candidate files and feed only `research_queue` names into research.
 - Discovery is explicitly upstream: it does not read portfolio state, does not call benchmark/account-action logic, and does not trade.
 
 ### Strategy / rules foundation

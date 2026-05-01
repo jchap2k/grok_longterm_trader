@@ -236,6 +236,51 @@ def test_cycle_captures_configured_sources_and_records_all_ideas(tmp_path):
     ]
 
 
+def test_cycle_can_feed_discovery_candidates_into_research(tmp_path):
+    recorded_symbols = []
+
+    class FakeRunner:
+        def run_and_record(self, packet, **kwargs):
+            recorded_symbols.append(packet.symbol)
+            return f"decision-{packet.symbol}"
+
+    result = run_longterm_cycle(
+        profile=_build_profile(),
+        manual_ideas=[],
+        discovery_candidates=[
+            {
+                "symbol": "MSFT",
+                "company_name": "Microsoft",
+                "source": "sp500",
+                "revenue_growth_1y_pct": 16,
+                "earnings_growth_1y_pct": 20,
+                "return_on_capital_pct": 28,
+                "gross_margin_pct": 68,
+                "market_cap": 3_000_000_000_000,
+                "category_leader": True,
+            },
+            {
+                "symbol": "PENY",
+                "source": "screen_growth",
+                "market_cap": 100_000_000,
+                "revenue_growth_1y_pct": -40,
+            },
+        ],
+        motley_fool_settings=MotleyFoolCaptureSettings(enabled=False, cookie_ready=False),
+        runner=FakeRunner(),
+        journal_db_path=tmp_path / "journal.db",
+    )
+
+    assert recorded_symbols == ["MSFT"]
+    assert result.discovery_generated is True
+    assert result.discovery_summary == {
+        "research_queue": 1,
+        "watchlist": 0,
+        "rejected": 1,
+    }
+    assert result.discovery_research_symbols == ["MSFT"]
+
+
 def test_cycle_can_build_report_and_next_actions_outputs(tmp_path):
     class FakeRunner:
         def run_and_record(self, packet, **kwargs):

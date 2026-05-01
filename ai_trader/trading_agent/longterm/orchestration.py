@@ -10,6 +10,7 @@ from longterm.account_action_plan import AccountActionPlanBuilder
 from longterm.capital_alert import build_capital_needed_alert
 from longterm.decision_journal import LongTermDecisionJournal
 from longterm.benchmark_guard import BenchmarkGuard
+from longterm.discovery import DiscoveryEngine
 from longterm.motley_fool_capture import capture_motley_fool_ideas
 from longterm.motley_fool_settings import (
     MotleyFoolCaptureSettings,
@@ -43,6 +44,8 @@ class LongTermCycleResult:
     total_idea_count: int
     decision_ids: list[str] = field(default_factory=list)
     capture_sources_run: list[str] = field(default_factory=list)
+    discovery_summary: dict[str, int] = field(default_factory=dict)
+    discovery_research_symbols: list[str] = field(default_factory=list)
     login_url: str = ""
     profile_dir: Path | None = None
     recommendation_report_markdown: str = ""
@@ -53,6 +56,7 @@ class LongTermCycleResult:
     capital_alert_generated: bool = False
     rebalance_generated: bool = False
     account_action_plan_generated: bool = False
+    discovery_generated: bool = False
     report_generated: bool = False
     next_actions_generated: bool = False
     idea_provenance_summary: dict[str, int] = field(default_factory=dict)
@@ -64,6 +68,8 @@ def run_longterm_cycle(
     *,
     profile: PortfolioProfile,
     manual_ideas: list[Mapping[str, Any]] | None = None,
+    discovery_candidates: list[Mapping[str, Any]] | None = None,
+    discovery_engine: DiscoveryEngine | None = None,
     motley_fool_settings: MotleyFoolCaptureSettings | None = None,
     capture_func: Callable[..., list[dict[str, Any]]] = capture_motley_fool_ideas,
     setup_func: Callable[..., Any] = complete_motley_fool_setup,
@@ -95,6 +101,26 @@ def run_longterm_cycle(
     for idea in base_ideas:
         idea.setdefault("_provenance_bucket", "manual")
 
+    discovery_ideas: list[dict[str, Any]] = []
+    discovery_summary: dict[str, int] = {}
+    discovery_research_symbols: list[str] = []
+    discovery_generated = False
+    if discovery_candidates:
+        discovery_result = (discovery_engine or DiscoveryEngine()).build_queue(
+            [dict(candidate) for candidate in discovery_candidates],
+            research_limit=report_limit,
+        )
+        discovery_ideas = DiscoveryEngine.to_research_ideas(discovery_result.research_queue)
+        for idea in discovery_ideas:
+            idea.setdefault("_provenance_bucket", "discovery_research_queue")
+        discovery_summary = {
+            "research_queue": len(discovery_result.research_queue),
+            "watchlist": len(discovery_result.watchlist),
+            "rejected": len(discovery_result.rejected),
+        }
+        discovery_research_symbols = [candidate.symbol for candidate in discovery_result.research_queue]
+        discovery_generated = True
+
     captured_ideas: list[dict[str, Any]] = []
     capture_sources_run: list[str] = []
     capture_status = "disabled"
@@ -125,7 +151,7 @@ def run_longterm_cycle(
         status = "login_required"
         setup_status = "login_required" if setup_status == "not_requested" else setup_status
 
-    all_ideas = [*base_ideas, *captured_ideas]
+    all_ideas = [*base_ideas, *discovery_ideas, *captured_ideas]
 
     if runner is None:
         runner = LongTermResearchRunner(
@@ -219,6 +245,8 @@ def run_longterm_cycle(
         total_idea_count=len(all_ideas),
         decision_ids=decision_ids,
         capture_sources_run=capture_sources_run,
+        discovery_summary=discovery_summary,
+        discovery_research_symbols=discovery_research_symbols,
         login_url=settings.login_url if settings.should_open_login else "",
         profile_dir=settings.profile_dir if settings.should_open_login else settings.profile_dir,
         recommendation_report_markdown=recommendation_report_markdown,
@@ -229,6 +257,7 @@ def run_longterm_cycle(
         capital_alert_generated=capital_alert_generated,
         rebalance_generated=rebalance_generated,
         account_action_plan_generated=account_action_plan_generated,
+        discovery_generated=discovery_generated,
         report_generated=report_generated,
         next_actions_generated=next_actions_generated,
         idea_provenance_summary=_idea_provenance_summary(all_ideas),
