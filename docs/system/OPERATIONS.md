@@ -328,6 +328,24 @@ submit-blocked/submitted/filled/rejected/reconciled audit trails. Execution
 events require `decision_id` for traceability. Current helpers only record and
 list events; they do not call a broker.
 
+Run the feedback refresh maintenance loop:
+
+```powershell
+python scripts/longterm_feedback_refresh.py --journal-db path\to\journal.db --paper-ledger-db path\to\paper_ledger.db --profile-config path\to\profile.json --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json
+python scripts/longterm_feedback_refresh.py --journal-db path\to\journal.db --paper-ledger-db path\to\paper_ledger.db --outcome-price-map path\to\prices.json --record-eligibility-events --json
+```
+
+Feedback refresh is still dry-run maintenance. It can rebuild symbol profiles,
+apply paper-preview and reconciliation feedback, refresh outcomes only from an
+explicit price map, compute outcome freshness, summarize review status and
+benchmark guard state, and persist idempotent eligibility evaluation events.
+Eligibility events include `requires_revalidation=true`; they are audit records,
+not authorization to submit.
+
+The generated `feedback_tuning_inputs` payload is explicitly analysis-only. It
+may inform human review and future LLM planning, but it must not mutate
+recommendation ranks, rebalance weights, position sizing, or action planning.
+
 ## Capital-Needed Email Payloads
 
 Capital-needed emails are informational only. The long-term trader can build provider-agnostic email payloads and send them through a Brevo-compatible SMTP sender, but email sending should remain off until explicitly enabled in a local ignored config file. A capital request should only be sent when a high-conviction candidate lacks active-sleeve cash and existing non-protected holdings do not already have sell/reduce recommendations that should fund the idea first.

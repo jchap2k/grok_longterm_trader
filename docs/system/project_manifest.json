@@ -43,6 +43,7 @@
     "ai_trader/trading_agent/longterm/paper_trade_ledger.py",
     "ai_trader/trading_agent/longterm/paper_preview_status.py",
     "ai_trader/trading_agent/longterm/paper_execution_eligibility.py",
+    "ai_trader/trading_agent/longterm/feedback_refresh.py",
     "ai_trader/trading_agent/longterm/next_actions.py"
   ],
   "agent_configs": [

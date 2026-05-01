@@ -173,19 +173,69 @@ class PaperTradeLedger:
             conn.close()
         return event_id
 
-    def list_execution_events(self, limit: int = 50) -> list[dict[str, Any]]:
+    def record_eligibility_events(self, eligibility_payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Persist idempotent eligibility evaluation events for auditability."""
+        recorded = 0
+        skipped = 0
+        event_ids: list[str] = []
+        for item in eligibility_payload.get("items") or []:
+            decision_id = str(item.get("decision_id") or "").strip()
+            if not decision_id:
+                raise ValueError("Eligibility events require decision_id for traceability.")
+            preview_id = str(item.get("preview_id") or "")
+            is_ready = bool(item.get("eligible")) or str(item.get("status") or "") == "eligible"
+            status = "eligibility_ready" if is_ready else "eligibility_blocked"
+            if self._eligibility_event_exists(decision_id, preview_id, status):
+                skipped += 1
+                continue
+            event = {
+                "decision_id": decision_id,
+                "journal_short_id": decision_id[:8],
+                "preview_log_id": item.get("preview_log_id") or "",
+                "preview_id": preview_id,
+                "trade_id": item.get("trade_id") or "",
+                "plan_id": eligibility_payload.get("plan_id") or item.get("plan_id") or "",
+                "symbol": item.get("symbol") or "",
+                "side": item.get("side") or "",
+                "notional": item.get("notional") or 0.0,
+                "status": status,
+                "error": "; ".join(str(reason) for reason in (item.get("blocked_reasons") or [])),
+                "action": item.get("action") or "",
+                "blocked_reasons": list(item.get("blocked_reasons") or []),
+                "eligibility_status": item.get("status") or "",
+                "eligibility_item": dict(item),
+                "requires_revalidation": True,
+                "order_submission_enabled": False,
+            }
+            event_ids.append(self.record_execution_event(event))
+            recorded += 1
+        return {
+            "events_recorded": recorded,
+            "events_skipped": skipped,
+            "event_ids": event_ids,
+        }
+
+    def list_execution_events(
+        self,
+        limit: int = 50,
+        *,
+        decision_id: str | None = None,
+    ) -> list[dict[str, Any]]:
         """List paper execution events, newest first."""
+        where = "WHERE decision_id = ?" if decision_id else ""
+        params = (decision_id, int(limit)) if decision_id else (int(limit),)
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         try:
             rows = conn.execute(
-                """
+                f"""
                 SELECT *
                 FROM longterm_paper_execution_events
+                {where}
                 ORDER BY timestamp DESC, event_id ASC
                 LIMIT ?
                 """,
-                (int(limit),),
+                params,
             ).fetchall()
         finally:
             conn.close()
@@ -195,6 +245,24 @@ class PaperTradeLedger:
             record["event_json"] = json.loads(record.get("event_json") or "{}")
             results.append(record)
         return results
+
+    def _eligibility_event_exists(self, decision_id: str, preview_id: str, status: str) -> bool:
+        conn = sqlite3.connect(self.db_path)
+        try:
+            row = conn.execute(
+                """
+                SELECT 1
+                FROM longterm_paper_execution_events
+                WHERE decision_id = ?
+                  AND preview_id = ?
+                  AND status = ?
+                LIMIT 1
+                """,
+                (decision_id, preview_id, status),
+            ).fetchone()
+        finally:
+            conn.close()
+        return row is not None
 
     def list_previews(self, limit: int = 50) -> list[dict[str, Any]]:
         """List recorded preview rows, newest first."""

@@ -54,3 +54,8 @@ Before live execution exists:
   eligibility rows are non-submitting and must be revalidated at the broker
   boundary
 - require decision-id traceability for every future paper execution event
+- treat eligibility events and feedback refresh outputs as audit/review
+  artifacts only; they must include revalidation requirements and must not be
+  interpreted as durable authorization to submit orders
+- keep feedback tuning inputs analysis-only; they must not auto-mutate ranking,
+  sizing, rebalance scoring, or action-planner behavior

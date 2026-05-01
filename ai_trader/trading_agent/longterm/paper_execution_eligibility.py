@@ -85,10 +85,6 @@ class PaperExecutionEligibilityBuilder:
         preview_age_hours = None
         preview_is_fresh = False
 
-        if not self.paper_execution_enabled:
-            blocked.append("paper execution disabled")
-            status = "execution_disabled"
-            action = "ENABLE_PAPER_EXECUTION_GATE"
         if not decision_id:
             blocked.append("missing decision_id")
             status = _first_block_status(status, "missing_decision")
@@ -97,6 +93,10 @@ class PaperExecutionEligibilityBuilder:
             blocked.append(f"{symbol} is protected")
             status = _first_block_status(status, "protected_symbol")
             action = "BLOCKED_PROTECTED_SYMBOL"
+        if not self.paper_execution_enabled:
+            blocked.append("paper execution disabled")
+            status = _first_block_status(status, "execution_disabled")
+            action = "ENABLE_PAPER_EXECUTION_GATE" if status == "execution_disabled" else action
         if str(intent.get("intent_type") or "").upper() not in {"BUY", "REBALANCE"}:
             blocked.append("intent is not executable")
             status = _first_block_status(status, "intent_not_executable")
