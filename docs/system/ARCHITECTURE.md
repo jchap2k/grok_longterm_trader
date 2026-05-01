@@ -161,6 +161,9 @@ Refreshes already-submitted Alpaca paper order statuses by reading broker order 
 `longterm/paper_outcomes.py`
 Builds provider-free paper fill outcome summaries from `PaperTradeLedger` fill events and an explicit current-price map. It compares paper fill return against `FXAIX` from the fill baseline and does not mutate journal decisions or call a broker.
 
+`longterm/paper_lifecycle.py`
+Builds a read-only symbol lifecycle summary across paper previews, paper execution events, and optional provider-free paper outcomes. It classifies symbols as preview-ready, preview-blocked, submitted, filled with pending outcome, outcome-evaluated, rejected, or status-error without submitting or modifying broker orders.
+
 `longterm/feedback_refresh.py`
 Runs explicit dry-run feedback maintenance. It can rebuild symbol profiles, apply paper-preview feedback, apply paper execution feedback, apply reconciliation feedback, refresh active-vs-FXAIX outcomes from explicit price maps, compute ephemeral outcome freshness, summarize review/thesis state, compute benchmark-guard context, persist idempotent eligibility evaluation events, and produce analysis-only tuning inputs. It does not mutate ranking, sizing, planner weights, or broker state.
 
@@ -181,7 +184,7 @@ Checks review due dates and whether current evidence matches invalidation condit
 
 ## Decision Flow
 
-Universe sources -> discovery queue -> research packet enrichment -> research batches -> research campaign manifest -> `ResearchPacket` completeness gate -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> rebalance outcome analysis -> Alpaca paper/read-only portfolio snapshot -> paper reconciliation -> benchmark guard -> dry-run account action plan -> paper order preview -> paper preview ledger -> paper execution eligibility -> supervised Stage 6B paper execution boundary -> paper order status refresh -> feedback refresh -> next-actions/report artifacts and on-demand position intelligence reports.
+Universe sources -> discovery queue -> research packet enrichment -> research batches -> research campaign manifest -> `ResearchPacket` completeness gate -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> rebalance outcome analysis -> Alpaca paper/read-only portfolio snapshot -> paper reconciliation -> benchmark guard -> dry-run account action plan -> paper order preview -> paper preview ledger -> paper execution eligibility -> supervised Stage 6B paper execution boundary -> paper order status refresh -> paper outcomes/lifecycle summaries -> feedback refresh -> next-actions/report artifacts and on-demand position intelligence reports.
 
 ## Data Flow Safety
 

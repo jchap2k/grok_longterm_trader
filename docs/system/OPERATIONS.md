@@ -387,6 +387,18 @@ Paper outcomes do not mutate decision rows. They compare filled paper orders
 against the benchmark baseline stored in the fill event when available, and mark
 rows as `pending_price` when required prices are missing.
 
+Summarize the paper lifecycle across previews, execution events, and optional
+paper outcomes:
+
+```powershell
+python scripts/longterm_paper_lifecycle.py --ledger-db path\to\paper_ledger.db
+python scripts/longterm_paper_lifecycle.py --ledger-db path\to\paper_ledger.db --price-map path\to\prices.json --json
+```
+
+Lifecycle summaries are read-only and classify symbols as `preview_ready`,
+`preview_blocked`, `submitted_pending_fill`, `filled_outcome_pending`,
+`outcome_evaluated`, `execution_rejected`, or `execution_status_error`.
+
 Run the feedback refresh maintenance loop:
 
 ```powershell
