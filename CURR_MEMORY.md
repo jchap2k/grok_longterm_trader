@@ -4,7 +4,7 @@ Last updated: 2026-04-30
 Repo: `S:\LLM_files\grok_longterm_trader`
 Remote: `https://github.com/jchap2k/grok_longterm_trader.git`
 Branch: `main`
-Latest feature commit: `1438c79 Wire discovery into long-term cycles`
+Latest feature commit: `4796254 Add local discovery source loaders`
 
 This file is a temporary handoff document for another Codex instance. It is meant to explain:
 - what this project is
@@ -70,6 +70,7 @@ Additional continuation work completed on 2026-04-30:
 - persisted generated dry-run account action plans into the decision journal for future paper/live reconciliation
 - added V1 discovery queue logic and CLI/export path for building the research universe before any trade decisions are made
 - wired discovery candidates into one-cycle orchestration and scheduler inputs so discovery can feed research cycles directly
+- added local discovery source loaders for S&P-style CSVs, ETF holdings CSVs, and NasdaqTrader pipe-delimited listing files; discovery, cycle, and scheduler CLIs can now ingest those files directly
 
 What those changes accomplished:
 
@@ -85,6 +86,7 @@ What those changes accomplished:
   - manual watchlists and quality-growth screens
 - Discovery can export `research_queue` as idea-batch JSON for the existing research cycle.
 - `run_longterm_cycle` and the dry-run scheduler can now load discovery candidate files and feed only `research_queue` names into research.
+- Discovery source loaders normalize local S&P/ETF/NasdaqTrader files into candidate dictionaries while preserving source notes such as sector, market category, and ETF/index weight.
 - Discovery is explicitly upstream: it does not read portfolio state, does not call benchmark/account-action logic, and does not trade.
 
 ### Strategy / rules foundation
@@ -304,6 +306,12 @@ Additional automated validation completed on 2026-04-30:
 - `python scripts/run_longterm_scheduler.py --run-once --profile-config <temp profile> --portfolio-state <temp portfolio> --motley-fool-config <missing path> --journal-db <temp db> --summary-output <temp summary> --active-sleeve-value 35000 --available-cash 5000 --quiet`
   - works
   - confirmed summary-output file is written with new artifact fields
+- `python -m pytest longterm/test_longterm_discovery.py -q`
+  - passed with `10 passed`
+- `python -m py_compile longterm/discovery_sources.py longterm/discovery_cli.py longterm/orchestration_cli.py longterm/scheduler.py longterm/scheduler_cli.py`
+  - works
+- `python -m pytest longterm -q`
+  - now passes with `146 passed`
 
 ## 4. Critical Guardrails
 
@@ -434,6 +442,7 @@ What is already done in Phase 1:
 
 What is not done yet in Phase 1:
 - fuller ranking/reporting maturity, rank-movement history, and backtesting/tuning the rebalance scoring weights against real journal outcomes
+- enrichment/fundamental fetchers for discovery candidates beyond local source-file normalization
 
 Likely implementation seams:
 - add a long-term scheduler entrypoint or orchestration module under `ai_trader/trading_agent/longterm/`
@@ -650,6 +659,9 @@ From `ai_trader/trading_agent`:
 - `python scripts/run_longterm_cycle.py --motley-fool-config <missing_or_optional_config_path> --quiet`
 - `python scripts/run_longterm_cycle.py --launch-login-if-needed`
 - `python scripts/run_longterm_scheduler.py --run-once --journal-db path\\to\\journal.db --portfolio-state path\\to\\portfolio.json --quiet`
+- `python scripts/run_longterm_discovery.py --source-file path\\to\\sp500.csv --source sp500`
+- `python scripts/run_longterm_cycle.py --discovery-source-file path\\to\\sp500.csv --discovery-source sp500 --journal-db path\\to\\journal.db`
+- `python scripts/run_longterm_scheduler.py --run-once --discovery-source-file path\\to\\sp500.csv --discovery-source sp500 --journal-db path\\to\\journal.db --quiet`
 
 New files added on 2026-04-30:
 - `ai_trader/trading_agent/longterm/orchestration.py`
@@ -664,6 +676,7 @@ New files added on 2026-04-30:
 - `ai_trader/trading_agent/longterm/scheduler_cli.py`
 - `ai_trader/trading_agent/longterm/test_longterm_scheduler.py`
 - `ai_trader/trading_agent/scripts/run_longterm_scheduler.py`
+- `ai_trader/trading_agent/longterm/discovery_sources.py`
 
 ### Local machine state worth knowing
 - local email config exists in `ai_trader/trading_agent/config/email_notifications.json`
