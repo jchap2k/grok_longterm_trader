@@ -307,6 +307,7 @@ not submit paper or live orders.
 Build a non-submitting paper order preview from a dry-run action plan:
 
 ```powershell
+python scripts/longterm_paper_price_map.py --action-plan path\to\account_action_plan.json --price-map-output path\to\price_map.json --json
 python scripts/longterm_paper_order_preview.py --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json
 python scripts/longterm_paper_order_preview.py --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --json
 python scripts/longterm_paper_order_preview.py --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --record-preview --ledger-db path\to\paper_ledger.db --json
@@ -326,6 +327,11 @@ price, executable quantity, estimated notional, and size variance, and blocks
 rows when the price is missing or the target value cannot buy at least one share.
 The price map is caller-supplied on purpose; this command does not make hidden
 market-data calls.
+
+`longterm_paper_price_map.py` is an explicit read-only helper for the same
+workflow. It reads the action plan, skips protected symbols, fetches quotes for
+orderable BUY/REBALANCE symbols through the configured Alpaca paper data path,
+and writes the plain `{symbol: price}` JSON consumed by `--price-map`.
 
 Inspect recorded preview rows:
 

@@ -58,6 +58,9 @@ the larger live-readiness evidence file.
 Whole-share paper previews require an explicit price map and floor quantities to
 whole shares. This intentionally surfaces size variance and cash drag instead of
 letting Alpaca fractional/notional behavior hide live-broker constraints.
+`longterm_paper_price_map.py` can build that map from a dry-run action plan via
+read-only Alpaca paper quotes; the resulting map is still operator evidence, not
+authorization to submit orders.
 
 `longterm_live_readiness.py` can merge a base observed file with one or more
 `--observed-fragment` files. Later fragments override earlier values, which
