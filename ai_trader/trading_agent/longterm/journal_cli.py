@@ -58,6 +58,17 @@ def build_parser() -> argparse.ArgumentParser:
     thesis_review_list.add_argument("--journal-db", default=None)
     thesis_review_list.add_argument("--limit", type=int, default=20)
 
+    feedback_rebuild = subparsers.add_parser(
+        "symbol-feedback-rebuild", help="Rebuild durable symbol feedback profiles."
+    )
+    feedback_rebuild.add_argument("--journal-db", default=None)
+
+    feedback_show = subparsers.add_parser(
+        "symbol-feedback-show", help="Show one durable symbol feedback profile."
+    )
+    feedback_show.add_argument("--journal-db", default=None)
+    feedback_show.add_argument("--symbol", required=True)
+
     update = subparsers.add_parser("update-outcome", help="Update active-vs-benchmark outcome.")
     update.add_argument("--journal-db", default=None)
     update.add_argument("--decision-id", required=True)
@@ -136,6 +147,15 @@ def run_cli(args: argparse.Namespace) -> int:
 
     if args.command == "thesis-review-list":
         print(json.dumps(journal.list_thesis_reviews(limit=args.limit), indent=2, sort_keys=True))
+        return 0
+
+    if args.command == "symbol-feedback-rebuild":
+        print(json.dumps(journal.rebuild_symbol_feedback_profiles(), indent=2, sort_keys=True))
+        return 0
+
+    if args.command == "symbol-feedback-show":
+        profile = journal.get_symbol_feedback_profile(args.symbol)
+        print(json.dumps(profile or {}, indent=2, sort_keys=True))
         return 0
 
     if args.command == "update-outcome":

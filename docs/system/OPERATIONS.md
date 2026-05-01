@@ -38,6 +38,20 @@ while incrementing `Times Rec'd`. If a repeat packet includes source notes marke
 report surfaces those notes in `New Info` so the stock profile can be enriched
 before future research or paper-action decisions.
 
+Durable symbol feedback profiles can be rebuilt from the journal and inspected
+directly:
+
+```powershell
+python scripts/longterm_journal.py symbol-feedback-rebuild --journal-db path\to\journal.db
+python scripts/longterm_journal.py symbol-feedback-show --journal-db path\to\journal.db --symbol NVDA
+```
+
+These profiles are research memory only. They track repeat recommendation count,
+latest thesis, thesis-history changes, and new-information notes. The one-cycle
+orchestration can inject that context into future same-symbol research packets,
+but it does not change ranking weights, sizing, paper preview eligibility, or
+broker behavior.
+
 Review status is layered onto the same table with `ReviewStatusBuilder`. It reads stored packet JSON from the journal, applies the configured review cadence through `ThesisMonitor`, and returns `review_due`, `days_since_review`, and `thesis_state` fields for reports and next-action markdown.
 
 Record a completed thesis review after checking earnings, business evidence, or portfolio context:

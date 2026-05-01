@@ -216,3 +216,83 @@ def test_decision_journal_records_thesis_review_events_with_traceability(tmp_pat
     assert reviews[0]["current_market_value"] == 5200.0
     assert reviews[0]["evidence"] == ["Azure growth remains durable."]
     assert latest["MSFT"]["review_id"] == review_id
+
+
+def test_decision_journal_builds_symbol_feedback_profile_from_repeat_recommendations(tmp_path):
+    db_path = tmp_path / "longterm_decisions.db"
+    journal = LongTermDecisionJournal(db_path)
+
+    first_id = journal.record_decision(
+        create_research_packet_from_idea(
+            {
+                "symbol": "NVDA",
+                "company_name": "Nvidia",
+                "idea_source": "motley_fool",
+                "business_summary": "AI accelerator platform.",
+                "source_notes": ["Initial Stock Advisor recommendation."],
+            }
+        ),
+        decision={
+            "recommendation": "BUY",
+            "confidence": 88,
+            "suggested_size_pct": 6,
+            "key_thesis": "AI data center demand remains durable.",
+        },
+    )
+    second_id = journal.record_decision(
+        create_research_packet_from_idea(
+            {
+                "symbol": "NVDA",
+                "company_name": "Nvidia",
+                "idea_source": "motley_fool",
+                "business_summary": "AI accelerator platform.",
+                "source_notes": [
+                    "New information: Blackwell supply commentary improved.",
+                    "New information: management raised data-center margin outlook.",
+                ],
+            }
+        ),
+        decision={
+            "recommendation": "BUY",
+            "confidence": 92,
+            "suggested_size_pct": 8,
+            "key_thesis": "Blackwell ramp improves long-term earnings power.",
+        },
+    )
+
+    profile = journal.get_symbol_feedback_profile("nvda")
+
+    assert first_id
+    assert profile["symbol"] == "NVDA"
+    assert profile["company_name"] == "Nvidia"
+    assert profile["recommendation_count"] == 2
+    assert profile["new_information_count"] == 2
+    assert profile["latest_decision_id"] == second_id
+    assert profile["latest_recommendation"] == "BUY"
+    assert profile["latest_thesis"] == "Blackwell ramp improves long-term earnings power."
+    assert profile["latest_confidence"] == 92
+    assert profile["latest_suggested_size_pct"] == 8.0
+    assert "Blackwell supply commentary improved" in profile["new_information"][0]
+    assert profile["thesis_history"][0]["thesis"] == "AI data center demand remains durable."
+    assert profile["thesis_history"][1]["thesis"] == "Blackwell ramp improves long-term earnings power."
+    assert profile["profile_json"]["schema_version"] == 1
+
+    rebuilt = journal.rebuild_symbol_feedback_profiles()
+    rebuilt_again = journal.rebuild_symbol_feedback_profiles()
+
+    assert rebuilt["profiles_rebuilt"] == 1
+    assert rebuilt_again["profiles_rebuilt"] == 1
+    assert journal.get_symbol_feedback_profile("NVDA")["recommendation_count"] == 2
+
+
+def test_decision_journal_symbol_feedback_ignores_non_recommendation_rows(tmp_path):
+    db_path = tmp_path / "longterm_decisions.db"
+    journal = LongTermDecisionJournal(db_path)
+
+    journal.record_decision(
+        create_research_packet_from_idea({"symbol": "AAPL", "company_name": "Apple"}),
+        decision={"recommendation": "SELL", "confidence": 85, "key_thesis": "Valuation stretched."},
+    )
+
+    assert journal.get_symbol_feedback_profile("AAPL") is None
+    assert journal.rebuild_symbol_feedback_profiles()["profiles_rebuilt"] == 0

@@ -10,6 +10,7 @@ from longterm.orchestration_cli import build_parser, run_cli
 from longterm.orchestration import run_longterm_cycle
 from longterm.portfolio_state import PortfolioState
 from portfolio.portfolio_profile import PortfolioProfile
+from research.intake import create_research_packet_from_idea
 
 
 def _build_profile() -> PortfolioProfile:
@@ -102,6 +103,77 @@ def test_cycle_reports_login_required_when_enabled_but_cookie_missing(tmp_path):
     assert result.profile_dir == settings.profile_dir
     assert result.decision_ids == ["decision-MSFT"]
     assert runner.symbols == ["MSFT"]
+
+
+def test_cycle_enriches_repeat_research_packets_with_symbol_feedback(tmp_path):
+    journal_db_path = tmp_path / "journal.db"
+    journal = LongTermDecisionJournal(journal_db_path)
+    journal.record_decision(
+        create_research_packet_from_idea(
+            {
+                "symbol": "NVDA",
+                "company_name": "Nvidia",
+                "idea_source": "motley_fool",
+                "business_summary": "AI accelerator platform.",
+                "source_notes": ["Initial recommendation."],
+            }
+        ),
+        decision={
+            "recommendation": "BUY",
+            "confidence": 88,
+            "suggested_size_pct": 6,
+            "key_thesis": "AI data center demand remains durable.",
+        },
+    )
+    journal.record_decision(
+        create_research_packet_from_idea(
+            {
+                "symbol": "NVDA",
+                "company_name": "Nvidia",
+                "idea_source": "motley_fool",
+                "business_summary": "AI accelerator platform.",
+                "source_notes": ["New information: Blackwell supply commentary improved."],
+            }
+        ),
+        decision={
+            "recommendation": "BUY",
+            "confidence": 92,
+            "suggested_size_pct": 8,
+            "key_thesis": "Blackwell ramp improves long-term earnings power.",
+        },
+    )
+
+    class FakeRunner:
+        def __init__(self):
+            self.packets = []
+
+        def run_and_record(self, packet, **kwargs):
+            self.packets.append(packet)
+            return f"decision-{packet.symbol}"
+
+    runner = FakeRunner()
+
+    result = run_longterm_cycle(
+        profile=_build_profile(),
+        manual_ideas=[
+            {
+                "symbol": "NVDA",
+                "company_name": "Nvidia",
+                "idea_source": "manual_followup",
+                "business_summary": "AI accelerator platform.",
+            }
+        ],
+        motley_fool_settings=MotleyFoolCaptureSettings(enabled=False, cookie_ready=False),
+        runner=runner,
+        journal_db_path=journal_db_path,
+        report_builder_func=lambda journal, *, limit: "",
+    )
+
+    notes = runner.packets[0].source_notes
+    assert result.decision_ids == ["decision-NVDA"]
+    assert any("Long-term feedback profile: recommended 2 times." in note for note in notes)
+    assert any("Latest thesis: Blackwell ramp improves long-term earnings power." in note for note in notes)
+    assert any("New information: Blackwell supply commentary improved." in note for note in notes)
 
 
 def test_cycle_can_launch_motley_fool_setup_then_capture(tmp_path):

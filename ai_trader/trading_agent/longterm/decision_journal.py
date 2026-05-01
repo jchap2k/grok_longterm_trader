@@ -145,6 +145,32 @@ class LongTermDecisionJournal:
                 ON longterm_thesis_review_journal (symbol, timestamp)
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS longterm_symbol_feedback_profile (
+                    symbol TEXT PRIMARY KEY,
+                    company_name TEXT,
+                    first_seen_at TEXT NOT NULL,
+                    last_updated_at TEXT NOT NULL,
+                    recommendation_count INTEGER NOT NULL,
+                    new_information_count INTEGER NOT NULL,
+                    latest_decision_id TEXT,
+                    latest_recommendation TEXT,
+                    latest_thesis TEXT,
+                    latest_confidence INTEGER,
+                    latest_suggested_size_pct REAL,
+                    new_information_json TEXT NOT NULL,
+                    thesis_history_json TEXT NOT NULL,
+                    profile_json TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_longterm_symbol_feedback_updated
+                ON longterm_symbol_feedback_profile (last_updated_at)
+                """
+            )
             conn.commit()
         finally:
             conn.close()
@@ -198,6 +224,7 @@ class LongTermDecisionJournal:
             conn.commit()
         finally:
             conn.close()
+        self.refresh_symbol_feedback_profile(packet.symbol)
         return decision_id
 
     def update_outcome(
@@ -720,6 +747,170 @@ class LongTermDecisionJournal:
                 latest[symbol] = record
         return latest
 
+    def rebuild_symbol_feedback_profiles(self) -> dict[str, Any]:
+        """Rebuild durable per-symbol feedback profiles from decision history."""
+        rows_by_symbol = self._symbol_feedback_source_rows()
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute("DELETE FROM longterm_symbol_feedback_profile")
+            rebuilt = 0
+            for symbol, rows in rows_by_symbol.items():
+                profile = _build_symbol_feedback_profile(symbol, rows)
+                if profile is None:
+                    continue
+                self._upsert_symbol_feedback_profile(conn, profile)
+                rebuilt += 1
+            conn.commit()
+        finally:
+            conn.close()
+        return {
+            "profiles_rebuilt": rebuilt,
+            "symbols": sorted(rows_by_symbol.keys()),
+        }
+
+    def refresh_symbol_feedback_profile(self, symbol: str) -> dict[str, Any] | None:
+        """Refresh one symbol profile after a decision write."""
+        normalized_symbol = str(symbol or "").upper()
+        if not normalized_symbol:
+            return None
+        rows_by_symbol = self._symbol_feedback_source_rows(symbol=normalized_symbol)
+        profile = _build_symbol_feedback_profile(
+            normalized_symbol,
+            rows_by_symbol.get(normalized_symbol, []),
+        )
+        conn = sqlite3.connect(self.db_path)
+        try:
+            if profile is None:
+                conn.execute(
+                    "DELETE FROM longterm_symbol_feedback_profile WHERE symbol = ?",
+                    (normalized_symbol,),
+                )
+            else:
+                self._upsert_symbol_feedback_profile(conn, profile)
+            conn.commit()
+        finally:
+            conn.close()
+        return profile
+
+    def get_symbol_feedback_profile(self, symbol: str) -> dict[str, Any] | None:
+        """Return durable research-memory feedback for one symbol."""
+        normalized_symbol = str(symbol or "").upper()
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            row = conn.execute(
+                """
+                SELECT symbol, company_name, first_seen_at, last_updated_at,
+                       recommendation_count, new_information_count,
+                       latest_decision_id, latest_recommendation, latest_thesis,
+                       latest_confidence, latest_suggested_size_pct,
+                       new_information_json, thesis_history_json, profile_json
+                FROM longterm_symbol_feedback_profile
+                WHERE symbol = ?
+                """,
+                (normalized_symbol,),
+            ).fetchone()
+        finally:
+            conn.close()
+        if row is None:
+            return None
+        return _hydrate_symbol_feedback_profile(dict(row))
+
+    def enrich_idea_with_symbol_feedback(self, idea: Mapping[str, Any]) -> dict[str, Any]:
+        """Add durable symbol feedback memory to an idea before deep research.
+
+        This enriches research context only. It does not change recommendation
+        scores, suggested size, paper-preview eligibility, or broker behavior.
+        """
+        payload = dict(idea)
+        symbol = str(payload.get("symbol") or "").upper()
+        profile = self.get_symbol_feedback_profile(symbol) if symbol else None
+        if profile is None:
+            return payload
+
+        notes = [str(note) for note in (payload.get("source_notes") or []) if str(note).strip()]
+        recommendation_count = int(profile.get("recommendation_count") or 0)
+        if recommendation_count:
+            notes.append(f"Long-term feedback profile: recommended {recommendation_count} times.")
+        latest_thesis = str(profile.get("latest_thesis") or "").strip()
+        if latest_thesis:
+            notes.append(f"Latest thesis: {latest_thesis}")
+        for note in profile.get("new_information") or []:
+            notes.append(str(note))
+        payload["source_notes"] = _dedupe_preserve_order(notes)
+        return payload
+
+    def _symbol_feedback_source_rows(
+        self,
+        *,
+        symbol: str | None = None,
+    ) -> dict[str, list[dict[str, Any]]]:
+        where_symbol = "AND symbol = ?" if symbol else ""
+        params = (str(symbol).upper(),) if symbol else ()
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                f"""
+                SELECT rowid, decision_id, timestamp, symbol, company_name,
+                       recommendation, confidence, suggested_size_pct,
+                       key_thesis, packet_json, decision_json
+                FROM longterm_decision_journal
+                WHERE recommendation IN ('BUY', 'ADD', 'HOLD')
+                {where_symbol}
+                ORDER BY symbol ASC, timestamp ASC, rowid ASC
+                """,
+                params,
+            ).fetchall()
+        finally:
+            conn.close()
+
+        rows_by_symbol: dict[str, list[dict[str, Any]]] = {}
+        for row in rows:
+            record = dict(row)
+            normalized_symbol = str(record.get("symbol") or "").upper()
+            if not normalized_symbol:
+                continue
+            rows_by_symbol.setdefault(normalized_symbol, []).append(record)
+        return rows_by_symbol
+
+    @staticmethod
+    def _upsert_symbol_feedback_profile(
+        conn: sqlite3.Connection,
+        profile: Mapping[str, Any],
+    ) -> None:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO longterm_symbol_feedback_profile (
+                symbol, company_name, first_seen_at, last_updated_at,
+                recommendation_count, new_information_count,
+                latest_decision_id, latest_recommendation, latest_thesis,
+                latest_confidence, latest_suggested_size_pct,
+                new_information_json, thesis_history_json, profile_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                profile["symbol"],
+                profile.get("company_name"),
+                profile["first_seen_at"],
+                profile["last_updated_at"],
+                int(profile.get("recommendation_count") or 0),
+                int(profile.get("new_information_count") or 0),
+                profile.get("latest_decision_id"),
+                profile.get("latest_recommendation"),
+                profile.get("latest_thesis"),
+                int(profile["latest_confidence"]) if profile.get("latest_confidence") is not None else None,
+                (
+                    float(profile["latest_suggested_size_pct"])
+                    if profile.get("latest_suggested_size_pct") is not None
+                    else None
+                ),
+                json.dumps(profile.get("new_information") or [], sort_keys=True),
+                json.dumps(profile.get("thesis_history") or [], sort_keys=True),
+                json.dumps(profile.get("profile_json") or {}, sort_keys=True),
+            ),
+        )
+
     def summarize_benchmark_performance(self) -> dict[str, Any]:
         """Summarize decisions that have both active and benchmark outcomes."""
         conn = sqlite3.connect(self.db_path)
@@ -826,6 +1017,87 @@ def _dedupe_preserve_order(values: list[str]) -> list[str]:
     return result
 
 
+def _build_symbol_feedback_profile(
+    symbol: str,
+    rows: list[Mapping[str, Any]],
+) -> dict[str, Any] | None:
+    """Build research-memory feedback for one symbol from actionable decisions."""
+    if not rows:
+        return None
+    normalized_symbol = str(symbol or rows[-1].get("symbol") or "").upper()
+    latest = rows[-1]
+    new_information: list[str] = []
+    thesis_history: list[dict[str, Any]] = []
+    seen_theses: set[str] = set()
+
+    for row in rows:
+        packet = _safe_json_loads(row.get("packet_json"), default={})
+        for note in packet.get("source_notes") or []:
+            note_text = str(note).strip()
+            if "new information" in note_text.lower():
+                new_information.append(note_text)
+
+        thesis = str(row.get("key_thesis") or "").strip()
+        if thesis and thesis not in seen_theses:
+            seen_theses.add(thesis)
+            thesis_history.append(
+                {
+                    "decision_id": row.get("decision_id"),
+                    "timestamp": row.get("timestamp"),
+                    "recommendation": row.get("recommendation"),
+                    "thesis": thesis,
+                }
+            )
+
+    new_information = _dedupe_preserve_order(new_information)
+    thesis_history = _dedupe_thesis_history(thesis_history)
+    profile_json = {
+        "schema_version": 1,
+        "symbol": normalized_symbol,
+        "research_memory_only": True,
+        "trade_authority": "none",
+        "recommendation_count": len(rows),
+        "new_information_count": len(new_information),
+        "new_information": new_information,
+        "thesis_history": thesis_history,
+    }
+    return {
+        "symbol": normalized_symbol,
+        "company_name": latest.get("company_name") or normalized_symbol,
+        "first_seen_at": rows[0].get("timestamp"),
+        "last_updated_at": latest.get("timestamp"),
+        "recommendation_count": len(rows),
+        "new_information_count": len(new_information),
+        "latest_decision_id": latest.get("decision_id"),
+        "latest_recommendation": latest.get("recommendation"),
+        "latest_thesis": latest.get("key_thesis") or "",
+        "latest_confidence": latest.get("confidence"),
+        "latest_suggested_size_pct": latest.get("suggested_size_pct"),
+        "new_information": new_information,
+        "thesis_history": thesis_history,
+        "profile_json": profile_json,
+    }
+
+
+def _dedupe_thesis_history(values: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen = set()
+    result = []
+    for value in values:
+        thesis = str(value.get("thesis") or "")
+        if thesis in seen:
+            continue
+        seen.add(thesis)
+        result.append(value)
+    return result
+
+
+def _hydrate_symbol_feedback_profile(record: dict[str, Any]) -> dict[str, Any]:
+    record["new_information"] = _safe_json_loads(record.pop("new_information_json"), default=[])
+    record["thesis_history"] = _safe_json_loads(record.pop("thesis_history_json"), default=[])
+    record["profile_json"] = _safe_json_loads(record.get("profile_json"), default={})
+    return record
+
+
 def _normalize_missing_fields(value: Any) -> list[str]:
     if isinstance(value, list):
         return [str(item) for item in value]
@@ -851,6 +1123,13 @@ def _packet_payload_json(packet: ResearchPacket | Mapping[str, Any] | None) -> s
     if isinstance(packet, ResearchPacket):
         return json.dumps(packet.to_dict(), sort_keys=True)
     return json.dumps(dict(packet), sort_keys=True)
+
+
+def _safe_json_loads(value: Any, *, default: Any) -> Any:
+    try:
+        return json.loads(str(value or ""))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return default
 
 
 def _hydrate_thesis_review_row(record: dict[str, Any]) -> dict[str, Any]:

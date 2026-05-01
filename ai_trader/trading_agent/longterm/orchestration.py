@@ -164,14 +164,20 @@ def run_longterm_cycle(
             verbose=verbose,
         )
 
+    journal = journal_factory(journal_db_path) if journal_db_path else None
     decision_ids: list[str] = []
     packet_completeness_warnings: list[str] = []
     skipped_idea_count = 0
     skipped_ideas: list[dict[str, str]] = []
     deferred_research_queue: list[dict[str, Any]] = []
     for idea in all_ideas:
+        enriched_idea = (
+            journal.enrich_idea_with_symbol_feedback(idea)
+            if journal is not None and hasattr(journal, "enrich_idea_with_symbol_feedback")
+            else idea
+        )
         packet_idea = {
-            key: value for key, value in idea.items() if not str(key).startswith("_")
+            key: value for key, value in enriched_idea.items() if not str(key).startswith("_")
         }
         packet = create_research_packet_from_idea(
             packet_idea,
@@ -215,7 +221,7 @@ def run_longterm_cycle(
     report_generated = False
     next_actions_generated = False
     if journal_db_path:
-        journal = journal_factory(journal_db_path)
+        journal = journal or journal_factory(journal_db_path)
         if hasattr(journal, "record_deferred_research_item"):
             for item in deferred_research_queue:
                 journal.record_deferred_research_item(item)

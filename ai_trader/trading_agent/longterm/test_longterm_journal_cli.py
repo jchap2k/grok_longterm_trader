@@ -212,6 +212,55 @@ def test_journal_cli_records_and_lists_thesis_reviews(tmp_path, capsys):
     assert payload[0]["evidence"] == ["Services revenue still growing."]
 
 
+def test_journal_cli_rebuilds_and_shows_symbol_feedback_profile(tmp_path, capsys):
+    db_path = tmp_path / "journal.db"
+    journal = LongTermDecisionJournal(db_path)
+    journal.record_decision(
+        create_research_packet_from_idea(
+            {
+                "symbol": "NVDA",
+                "company_name": "Nvidia",
+                "source_notes": ["Initial recommendation."],
+            }
+        ),
+        decision={"recommendation": "BUY", "confidence": 88, "key_thesis": "AI demand durable."},
+    )
+    journal.record_decision(
+        create_research_packet_from_idea(
+            {
+                "symbol": "NVDA",
+                "company_name": "Nvidia",
+                "source_notes": ["New information: Blackwell supply commentary improved."],
+            }
+        ),
+        decision={
+            "recommendation": "BUY",
+            "confidence": 92,
+            "key_thesis": "Blackwell ramp improves earnings power.",
+        },
+    )
+    parser = build_parser()
+
+    rebuild_args = parser.parse_args(["symbol-feedback-rebuild", "--journal-db", str(db_path)])
+    rebuild_exit_code = run_cli(rebuild_args)
+    rebuild_payload = json.loads(capsys.readouterr().out)
+
+    assert rebuild_exit_code == 0
+    assert rebuild_payload["profiles_rebuilt"] == 1
+
+    show_args = parser.parse_args(
+        ["symbol-feedback-show", "--journal-db", str(db_path), "--symbol", "nvda"]
+    )
+    show_exit_code = run_cli(show_args)
+    show_payload = json.loads(capsys.readouterr().out)
+
+    assert show_exit_code == 0
+    assert show_payload["symbol"] == "NVDA"
+    assert show_payload["recommendation_count"] == 2
+    assert show_payload["new_information_count"] == 1
+    assert "Blackwell supply commentary improved" in show_payload["new_information"][0]
+
+
 def test_capital_alert_cli_outputs_markdown_without_sending(tmp_path, capsys):
     db_path = tmp_path / "journal.db"
     journal = LongTermDecisionJournal(db_path)

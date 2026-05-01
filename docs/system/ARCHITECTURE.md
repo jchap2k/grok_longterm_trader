@@ -69,10 +69,12 @@ Marks review status as `healthy`, `stale`, `weakening`, or `broken` from review 
 Builds operator thesis-review checklists from `ResearchPacket`, review status, evidence, decision IDs, and a compact excerpt of `active_rules.txt`. This keeps human review prompts aligned with quality durability, valuation discipline, thesis breakers, and FXAIX benchmark accountability.
 
 `longterm/decision_journal.py`
-Stores decisions, structured packets, raw responses, benchmark start prices, outcome updates, recommendation table rows, review candidates, durable thesis review events, dry-run account action plans, persisted deferred research items, and recommendation rank snapshots for future paper/live reconciliation.
+Stores decisions, structured packets, raw responses, benchmark start prices, outcome updates, recommendation table rows, review candidates, durable thesis review events, dry-run account action plans, persisted deferred research items, recommendation rank snapshots, and durable symbol feedback profiles for future paper/live reconciliation.
 
 `longterm/report_builder.py`
 Creates a markdown decision report with benchmark outcomes and a Motley-Fool-style recommendation table. `RecommendationTableBuilder` is the preferred seam for report/next-action rows: it starts from `DecisionJournal` rows, optionally hydrates volatile fields, carries shortened decision IDs for traceability, includes previous-rank / rank-movement context when snapshots exist, counts repeat recommendations by symbol, surfaces new-information notes from repeat recommendations for later profile enrichment, and does not write enrichment back into the journal.
+
+Symbol feedback profiles are research memory, not trade authority. The journal can rebuild them deterministically from prior `BUY` / `ADD` / `HOLD` rows, auto-refresh them after new decisions, and enrich future same-symbol research ideas with repeat-count, latest-thesis, and new-information notes before LLM review.
 
 `longterm/recommendation_enrichment.py`
 Provides `CachedRecommendationEnricher`, a daily cache wrapper for recommendation-table enrichment such as current price, daily change, market cap, revenue growth, estimated return range, and max drawdown. This keeps external data calls out of core journal storage and avoids repeated fetches during report generation.
