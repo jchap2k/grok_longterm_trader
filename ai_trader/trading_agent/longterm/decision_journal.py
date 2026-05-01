@@ -860,6 +860,32 @@ class LongTermDecisionJournal:
             "symbols": sorted(updated_symbols),
         }
 
+    def apply_paper_execution_feedback(
+        self,
+        status_by_symbol: Mapping[str, Mapping[str, Any]],
+    ) -> dict[str, Any]:
+        """Merge paper execution status into existing symbol feedback profiles."""
+        updated_symbols: list[str] = []
+        for symbol, status in status_by_symbol.items():
+            normalized_symbol = str(symbol or "").upper()
+            if not normalized_symbol:
+                continue
+            profile = self.get_symbol_feedback_profile(normalized_symbol)
+            if profile is None:
+                continue
+            _merge_paper_execution_feedback(profile, status)
+            conn = sqlite3.connect(self.db_path)
+            try:
+                self._upsert_symbol_feedback_profile(conn, profile)
+                conn.commit()
+            finally:
+                conn.close()
+            updated_symbols.append(normalized_symbol)
+        return {
+            "profiles_updated": len(updated_symbols),
+            "symbols": sorted(updated_symbols),
+        }
+
     def apply_paper_reconciliation_feedback(
         self,
         reconciliation: Mapping[str, Any],
@@ -934,6 +960,9 @@ class LongTermDecisionJournal:
         paper_note = _paper_preview_feedback_note(profile)
         if paper_note:
             notes.append(paper_note)
+        execution_note = _paper_execution_feedback_note(profile)
+        if execution_note:
+            notes.append(execution_note)
         blocked_reasons = profile.get("paper_preview_blocked_reasons") or []
         if blocked_reasons:
             notes.append(f"Paper preview blocked reasons: {'; '.join(blocked_reasons)}.")
@@ -1223,6 +1252,7 @@ def _hydrate_symbol_feedback_profile(record: dict[str, Any]) -> dict[str, Any]:
     record["thesis_history"] = _safe_json_loads(record.pop("thesis_history_json"), default=[])
     record["profile_json"] = _safe_json_loads(record.get("profile_json"), default={})
     _hydrate_paper_preview_feedback(record)
+    _hydrate_paper_execution_feedback(record)
     _hydrate_paper_reconciliation_feedback(record)
     return record
 
@@ -1281,6 +1311,39 @@ def _paper_preview_feedback_note(profile: Mapping[str, Any]) -> str:
         f"Paper preview feedback: ready={ready}, blocked={blocked}, "
         f"no_order={no_order}; latest={latest or 'unknown'}."
     )
+
+
+def _merge_paper_execution_feedback(profile: dict[str, Any], status: Mapping[str, Any]) -> None:
+    existing_json = dict(profile.get("profile_json") or {})
+    payload = {
+        "latest_status": str(status.get("paper_execution_latest_status") or status.get("paper_execution_status") or ""),
+        "broker_order_id": str(status.get("paper_execution_broker_order_id") or ""),
+        "filled_count": int(status.get("paper_execution_filled_count") or 0),
+        "rejected_count": int(status.get("paper_execution_rejected_count") or 0),
+        "error_count": int(status.get("paper_execution_error_count") or 0),
+    }
+    existing_json["paper_execution_feedback"] = payload
+    profile["profile_json"] = existing_json
+    _hydrate_paper_execution_feedback(profile)
+
+
+def _hydrate_paper_execution_feedback(record: dict[str, Any]) -> None:
+    feedback = (record.get("profile_json") or {}).get("paper_execution_feedback") or {}
+    record["latest_paper_execution_status"] = str(feedback.get("latest_status") or "")
+    record["latest_paper_broker_order_id"] = str(feedback.get("broker_order_id") or "")
+    record["paper_execution_filled_count"] = int(feedback.get("filled_count") or 0)
+    record["paper_execution_rejected_count"] = int(feedback.get("rejected_count") or 0)
+    record["paper_execution_error_count"] = int(feedback.get("error_count") or 0)
+
+
+def _paper_execution_feedback_note(profile: Mapping[str, Any]) -> str:
+    latest = str(profile.get("latest_paper_execution_status") or "").strip()
+    filled = int(profile.get("paper_execution_filled_count") or 0)
+    rejected = int(profile.get("paper_execution_rejected_count") or 0)
+    errors = int(profile.get("paper_execution_error_count") or 0)
+    if not latest and filled == 0 and rejected == 0 and errors == 0:
+        return ""
+    return f"Paper execution feedback: latest={latest or 'unknown'}, filled={filled}, rejected={rejected}, errors={errors}."
 
 
 def _reconciliation_rows(reconciliation: Mapping[str, Any]) -> list[Mapping[str, Any]]:

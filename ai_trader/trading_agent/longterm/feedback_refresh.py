@@ -11,6 +11,7 @@ from typing import Any, Mapping
 from longterm.benchmark_guard import BenchmarkGuard
 from longterm.decision_journal import LongTermDecisionJournal
 from longterm.paper_execution_eligibility import PaperExecutionEligibilityBuilder
+from longterm.paper_execution_status import PaperExecutionStatusBuilder
 from longterm.paper_preview_status import PaperPreviewStatusBuilder
 from longterm.paper_trade_ledger import PaperTradeLedger
 from longterm.portfolio_state import PortfolioState
@@ -42,9 +43,12 @@ def run_feedback_refresh(
     current = today or datetime.now(UTC)
     profile_rebuild = journal.rebuild_symbol_feedback_profiles()
     preview_feedback = {"profiles_updated": 0, "symbols": []}
+    execution_feedback = {"profiles_updated": 0, "symbols": []}
     if paper_ledger is not None:
         preview_status = PaperPreviewStatusBuilder(paper_ledger).build()
         preview_feedback = journal.apply_paper_preview_feedback(preview_status.by_symbol)
+        execution_status = PaperExecutionStatusBuilder(paper_ledger).build()
+        execution_feedback = journal.apply_paper_execution_feedback(execution_status.by_symbol)
     reconciliation_feedback = {"profiles_updated": 0, "symbols": []}
     if reconciliation:
         reconciliation_feedback = journal.apply_paper_reconciliation_feedback(reconciliation)
@@ -86,6 +90,7 @@ def run_feedback_refresh(
         "warnings": warnings,
         "profile_rebuild": profile_rebuild,
         "paper_preview_feedback": preview_feedback,
+        "paper_execution_feedback": execution_feedback,
         "reconciliation_feedback": reconciliation_feedback,
         "outcome_refresh": outcome_refresh,
         "outcome_freshness": freshness,
@@ -167,6 +172,10 @@ def build_feedback_tuning_inputs(
                 "new_information_count": profile.get("new_information_count", row.get("new_information_count")),
                 "paper_preview_blocked_count": profile.get("paper_preview_blocked_count", 0),
                 "paper_preview_blocked_reasons": profile.get("paper_preview_blocked_reasons", []),
+                "paper_execution_latest_status": profile.get("latest_paper_execution_status", ""),
+                "paper_execution_filled_count": profile.get("paper_execution_filled_count", 0),
+                "paper_execution_rejected_count": profile.get("paper_execution_rejected_count", 0),
+                "paper_execution_error_count": profile.get("paper_execution_error_count", 0),
                 "paper_reconciliation_mismatch_count": profile.get("paper_reconciliation_mismatch_count", 0),
                 "outcome_freshness": freshness_by_symbol.get(symbol, {}),
                 "review_status": dict(review_status_by_symbol.get(symbol, {})),

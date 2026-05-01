@@ -395,15 +395,18 @@ python scripts/longterm_feedback_refresh.py --journal-db path\to\journal.db --pa
 ```
 
 Feedback refresh is still dry-run maintenance. It can rebuild symbol profiles,
-apply paper-preview and reconciliation feedback, refresh outcomes only from an
-explicit price map, compute outcome freshness, summarize review status and
-benchmark guard state, and persist idempotent eligibility evaluation events.
+apply paper-preview, paper execution, and reconciliation feedback, refresh
+outcomes only from an explicit price map, compute outcome freshness, summarize
+review status and benchmark guard state, and persist idempotent eligibility
+evaluation events.
 Eligibility events include `requires_revalidation=true`; they are audit records,
 not authorization to submit.
 
 The generated `feedback_tuning_inputs` payload is explicitly analysis-only. It
 may inform human review and future LLM planning, but it must not mutate
 recommendation ranks, rebalance weights, position sizing, or action planning.
+It can include paper execution counts/status so research follow-ups know whether
+a recommendation has been filled, rejected, or hit a status-refresh error.
 
 ## Position Intelligence Report
 
