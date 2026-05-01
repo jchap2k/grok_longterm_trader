@@ -261,6 +261,71 @@ def test_journal_cli_rebuilds_and_shows_symbol_feedback_profile(tmp_path, capsys
     assert "Blackwell supply commentary improved" in show_payload["new_information"][0]
 
 
+def test_journal_cli_applies_paper_preview_feedback_to_symbol_profiles(tmp_path, capsys):
+    from longterm.paper_trade_ledger import PaperTradeLedger
+
+    db_path = tmp_path / "journal.db"
+    journal = LongTermDecisionJournal(db_path)
+    decision_id = journal.record_decision(
+        create_research_packet_from_idea(
+            {
+                "symbol": "NVDA",
+                "company_name": "Nvidia",
+                "idea_source": "manual",
+                "business_summary": "AI accelerator platform.",
+            }
+        ),
+        decision={"recommendation": "BUY", "confidence": 90, "key_thesis": "AI demand durable."},
+    )
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    ledger.record_preview(
+        {
+            "plan_id": "plan-1",
+            "order_submission_enabled": False,
+            "previews": [
+                {
+                    "preview_id": "preview-nvda",
+                    "plan_id": "plan-1",
+                    "decision_id": decision_id,
+                    "symbol": "NVDA",
+                    "side": "buy",
+                    "order_type": "market_notional_preview",
+                    "notional": 1000,
+                    "allowed": False,
+                    "blocked_reasons": ["cash shortfall"],
+                }
+            ],
+        }
+    )
+    parser = build_parser()
+
+    apply_args = parser.parse_args(
+        [
+            "symbol-feedback-apply-paper-preview",
+            "--journal-db",
+            str(db_path),
+            "--paper-ledger-db",
+            str(ledger.db_path),
+        ]
+    )
+    apply_exit_code = run_cli(apply_args)
+    apply_payload = json.loads(capsys.readouterr().out)
+
+    assert apply_exit_code == 0
+    assert apply_payload["profiles_updated"] == 1
+
+    show_args = parser.parse_args(
+        ["symbol-feedback-show", "--journal-db", str(db_path), "--symbol", "NVDA"]
+    )
+    show_exit_code = run_cli(show_args)
+    show_payload = json.loads(capsys.readouterr().out)
+
+    assert show_exit_code == 0
+    assert show_payload["latest_paper_preview_status"] == "blocked"
+    assert show_payload["paper_preview_blocked_count"] == 1
+    assert show_payload["paper_preview_blocked_reasons"] == ["cash shortfall"]
+
+
 def test_capital_alert_cli_outputs_markdown_without_sending(tmp_path, capsys):
     db_path = tmp_path / "journal.db"
     journal = LongTermDecisionJournal(db_path)

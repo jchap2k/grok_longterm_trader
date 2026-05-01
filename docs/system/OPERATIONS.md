@@ -44,13 +44,14 @@ directly:
 ```powershell
 python scripts/longterm_journal.py symbol-feedback-rebuild --journal-db path\to\journal.db
 python scripts/longterm_journal.py symbol-feedback-show --journal-db path\to\journal.db --symbol NVDA
+python scripts/longterm_journal.py symbol-feedback-apply-paper-preview --journal-db path\to\journal.db --paper-ledger-db path\to\paper_ledger.db
 ```
 
 These profiles are research memory only. They track repeat recommendation count,
-latest thesis, thesis-history changes, and new-information notes. The one-cycle
-orchestration can inject that context into future same-symbol research packets,
-but it does not change ranking weights, sizing, paper preview eligibility, or
-broker behavior.
+latest thesis, thesis-history changes, new-information notes, and paper-preview
+readiness/blocker feedback. The one-cycle orchestration can inject that context
+into future same-symbol research packets, but it does not change ranking weights,
+sizing, paper preview eligibility, or broker behavior.
 
 Review status is layered onto the same table with `ReviewStatusBuilder`. It reads stored packet JSON from the journal, applies the configured review cadence through `ThesisMonitor`, and returns `review_due`, `days_since_review`, and `thesis_state` fields for reports and next-action markdown.
 

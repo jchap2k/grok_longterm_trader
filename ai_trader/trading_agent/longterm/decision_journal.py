@@ -749,6 +749,7 @@ class LongTermDecisionJournal:
 
     def rebuild_symbol_feedback_profiles(self) -> dict[str, Any]:
         """Rebuild durable per-symbol feedback profiles from decision history."""
+        existing_feedback = self._paper_preview_feedback_by_symbol()
         rows_by_symbol = self._symbol_feedback_source_rows()
         conn = sqlite3.connect(self.db_path)
         try:
@@ -758,6 +759,9 @@ class LongTermDecisionJournal:
                 profile = _build_symbol_feedback_profile(symbol, rows)
                 if profile is None:
                     continue
+                feedback = existing_feedback.get(symbol)
+                if feedback:
+                    _merge_paper_preview_feedback(profile, feedback)
                 self._upsert_symbol_feedback_profile(conn, profile)
                 rebuilt += 1
             conn.commit()
@@ -791,6 +795,32 @@ class LongTermDecisionJournal:
         finally:
             conn.close()
         return profile
+
+    def apply_paper_preview_feedback(
+        self,
+        status_by_symbol: Mapping[str, Mapping[str, Any]],
+    ) -> dict[str, Any]:
+        """Merge paper-preview status into existing symbol feedback profiles."""
+        updated_symbols: list[str] = []
+        for symbol, status in status_by_symbol.items():
+            normalized_symbol = str(symbol or "").upper()
+            if not normalized_symbol:
+                continue
+            profile = self.get_symbol_feedback_profile(normalized_symbol)
+            if profile is None:
+                continue
+            _merge_paper_preview_feedback(profile, _paper_preview_feedback_payload(status))
+            conn = sqlite3.connect(self.db_path)
+            try:
+                self._upsert_symbol_feedback_profile(conn, profile)
+                conn.commit()
+            finally:
+                conn.close()
+            updated_symbols.append(normalized_symbol)
+        return {
+            "profiles_updated": len(updated_symbols),
+            "symbols": sorted(updated_symbols),
+        }
 
     def get_symbol_feedback_profile(self, symbol: str) -> dict[str, Any] | None:
         """Return durable research-memory feedback for one symbol."""
@@ -837,8 +867,35 @@ class LongTermDecisionJournal:
             notes.append(f"Latest thesis: {latest_thesis}")
         for note in profile.get("new_information") or []:
             notes.append(str(note))
+        paper_note = _paper_preview_feedback_note(profile)
+        if paper_note:
+            notes.append(paper_note)
+        blocked_reasons = profile.get("paper_preview_blocked_reasons") or []
+        if blocked_reasons:
+            notes.append(f"Paper preview blocked reasons: {'; '.join(blocked_reasons)}.")
         payload["source_notes"] = _dedupe_preserve_order(notes)
         return payload
+
+    def _paper_preview_feedback_by_symbol(self) -> dict[str, dict[str, Any]]:
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                """
+                SELECT symbol, profile_json
+                FROM longterm_symbol_feedback_profile
+                """
+            ).fetchall()
+        finally:
+            conn.close()
+
+        feedback: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            profile_json = _safe_json_loads(row["profile_json"], default={})
+            paper_feedback = profile_json.get("paper_preview_feedback")
+            if paper_feedback:
+                feedback[str(row["symbol"]).upper()] = dict(paper_feedback)
+        return feedback
 
     def _symbol_feedback_source_rows(
         self,
@@ -1095,7 +1152,64 @@ def _hydrate_symbol_feedback_profile(record: dict[str, Any]) -> dict[str, Any]:
     record["new_information"] = _safe_json_loads(record.pop("new_information_json"), default=[])
     record["thesis_history"] = _safe_json_loads(record.pop("thesis_history_json"), default=[])
     record["profile_json"] = _safe_json_loads(record.get("profile_json"), default={})
+    _hydrate_paper_preview_feedback(record)
     return record
+
+
+def _paper_preview_feedback_payload(status: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "ready_count": int(status.get("paper_preview_ready_count") or 0),
+        "blocked_count": int(status.get("paper_preview_blocked_count") or 0),
+        "no_order_count": int(status.get("paper_preview_no_order_count") or 0),
+        "latest_status": str(status.get("paper_preview_status") or ""),
+        "latest_preview_log_id": str(status.get("paper_preview_log_id") or ""),
+        "latest_preview_id": str(status.get("paper_preview_id") or ""),
+        "blocked_reasons": _dedupe_preserve_order(
+            [str(reason) for reason in (status.get("paper_preview_blocked_reasons") or []) if str(reason).strip()]
+        ),
+    }
+
+
+def _merge_paper_preview_feedback(profile: dict[str, Any], feedback: Mapping[str, Any]) -> None:
+    existing_json = dict(profile.get("profile_json") or {})
+    payload = {
+        "ready_count": int(feedback.get("ready_count") or 0),
+        "blocked_count": int(feedback.get("blocked_count") or 0),
+        "no_order_count": int(feedback.get("no_order_count") or 0),
+        "latest_status": str(feedback.get("latest_status") or ""),
+        "latest_preview_log_id": str(feedback.get("latest_preview_log_id") or ""),
+        "latest_preview_id": str(feedback.get("latest_preview_id") or ""),
+        "blocked_reasons": _dedupe_preserve_order(
+            [str(reason) for reason in (feedback.get("blocked_reasons") or []) if str(reason).strip()]
+        ),
+    }
+    existing_json["paper_preview_feedback"] = payload
+    profile["profile_json"] = existing_json
+    _hydrate_paper_preview_feedback(profile)
+
+
+def _hydrate_paper_preview_feedback(record: dict[str, Any]) -> None:
+    feedback = (record.get("profile_json") or {}).get("paper_preview_feedback") or {}
+    record["paper_preview_ready_count"] = int(feedback.get("ready_count") or 0)
+    record["paper_preview_blocked_count"] = int(feedback.get("blocked_count") or 0)
+    record["paper_preview_no_order_count"] = int(feedback.get("no_order_count") or 0)
+    record["latest_paper_preview_status"] = str(feedback.get("latest_status") or "")
+    record["latest_paper_preview_log_id"] = str(feedback.get("latest_preview_log_id") or "")
+    record["latest_paper_preview_id"] = str(feedback.get("latest_preview_id") or "")
+    record["paper_preview_blocked_reasons"] = list(feedback.get("blocked_reasons") or [])
+
+
+def _paper_preview_feedback_note(profile: Mapping[str, Any]) -> str:
+    ready = int(profile.get("paper_preview_ready_count") or 0)
+    blocked = int(profile.get("paper_preview_blocked_count") or 0)
+    no_order = int(profile.get("paper_preview_no_order_count") or 0)
+    latest = str(profile.get("latest_paper_preview_status") or "").strip()
+    if ready == 0 and blocked == 0 and no_order == 0 and not latest:
+        return ""
+    return (
+        f"Paper preview feedback: ready={ready}, blocked={blocked}, "
+        f"no_order={no_order}; latest={latest or 'unknown'}."
+    )
 
 
 def _normalize_missing_fields(value: Any) -> list[str]:

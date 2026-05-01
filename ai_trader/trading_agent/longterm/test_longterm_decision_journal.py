@@ -296,3 +296,96 @@ def test_decision_journal_symbol_feedback_ignores_non_recommendation_rows(tmp_pa
 
     assert journal.get_symbol_feedback_profile("AAPL") is None
     assert journal.rebuild_symbol_feedback_profiles()["profiles_rebuilt"] == 0
+
+
+def test_symbol_feedback_profile_applies_paper_preview_feedback_without_schema_change(tmp_path):
+    db_path = tmp_path / "longterm_decisions.db"
+    journal = LongTermDecisionJournal(db_path)
+    journal.record_decision(
+        create_research_packet_from_idea(
+            {
+                "symbol": "NVDA",
+                "company_name": "Nvidia",
+                "idea_source": "manual",
+                "business_summary": "AI accelerator platform.",
+            }
+        ),
+        decision={
+            "recommendation": "BUY",
+            "confidence": 90,
+            "suggested_size_pct": 8,
+            "key_thesis": "AI demand durable.",
+        },
+    )
+
+    result = journal.apply_paper_preview_feedback(
+        {
+            "NVDA": {
+                "paper_preview_status": "blocked",
+                "paper_preview_log_id": "log-1",
+                "paper_preview_id": "preview-nvda",
+                "paper_preview_ready_count": 1,
+                "paper_preview_blocked_count": 2,
+                "paper_preview_no_order_count": 0,
+                "paper_preview_blocked_reasons": ["cash shortfall", "cash shortfall", "benchmark gate"],
+            }
+        }
+    )
+    profile = journal.get_symbol_feedback_profile("NVDA")
+
+    assert result == {"profiles_updated": 1, "symbols": ["NVDA"]}
+    assert profile["paper_preview_ready_count"] == 1
+    assert profile["paper_preview_blocked_count"] == 2
+    assert profile["paper_preview_no_order_count"] == 0
+    assert profile["latest_paper_preview_status"] == "blocked"
+    assert profile["latest_paper_preview_log_id"] == "log-1"
+    assert profile["latest_paper_preview_id"] == "preview-nvda"
+    assert profile["paper_preview_blocked_reasons"] == ["cash shortfall", "benchmark gate"]
+
+    journal.rebuild_symbol_feedback_profiles()
+
+    rebuilt_profile = journal.get_symbol_feedback_profile("NVDA")
+    assert rebuilt_profile["paper_preview_blocked_count"] == 2
+    assert rebuilt_profile["paper_preview_blocked_reasons"] == ["cash shortfall", "benchmark gate"]
+
+
+def test_symbol_feedback_enrichment_includes_paper_preview_context(tmp_path):
+    db_path = tmp_path / "longterm_decisions.db"
+    journal = LongTermDecisionJournal(db_path)
+    journal.record_decision(
+        create_research_packet_from_idea(
+            {
+                "symbol": "NVDA",
+                "company_name": "Nvidia",
+                "idea_source": "manual",
+                "business_summary": "AI accelerator platform.",
+            }
+        ),
+        decision={"recommendation": "BUY", "confidence": 90, "key_thesis": "AI demand durable."},
+    )
+    journal.apply_paper_preview_feedback(
+        {
+            "NVDA": {
+                "paper_preview_status": "blocked",
+                "paper_preview_ready_count": 0,
+                "paper_preview_blocked_count": 1,
+                "paper_preview_no_order_count": 0,
+                "paper_preview_blocked_reasons": ["cash shortfall"],
+            }
+        }
+    )
+
+    enriched = journal.enrich_idea_with_symbol_feedback(
+        {
+            "symbol": "NVDA",
+            "company_name": "Nvidia",
+            "idea_source": "manual_followup",
+            "business_summary": "AI accelerator platform.",
+        }
+    )
+
+    assert any(
+        "Paper preview feedback: ready=0, blocked=1, no_order=0; latest=blocked." in note
+        for note in enriched["source_notes"]
+    )
+    assert "Paper preview blocked reasons: cash shortfall." in enriched["source_notes"]

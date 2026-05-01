@@ -69,6 +69,13 @@ def build_parser() -> argparse.ArgumentParser:
     feedback_show.add_argument("--journal-db", default=None)
     feedback_show.add_argument("--symbol", required=True)
 
+    feedback_apply_preview = subparsers.add_parser(
+        "symbol-feedback-apply-paper-preview",
+        help="Apply paper preview status feedback to symbol profiles.",
+    )
+    feedback_apply_preview.add_argument("--journal-db", default=None)
+    feedback_apply_preview.add_argument("--paper-ledger-db", required=True)
+
     update = subparsers.add_parser("update-outcome", help="Update active-vs-benchmark outcome.")
     update.add_argument("--journal-db", default=None)
     update.add_argument("--decision-id", required=True)
@@ -156,6 +163,17 @@ def run_cli(args: argparse.Namespace) -> int:
     if args.command == "symbol-feedback-show":
         profile = journal.get_symbol_feedback_profile(args.symbol)
         print(json.dumps(profile or {}, indent=2, sort_keys=True))
+        return 0
+
+    if args.command == "symbol-feedback-apply-paper-preview":
+        status = PaperPreviewStatusBuilder(PaperTradeLedger(args.paper_ledger_db)).build()
+        print(
+            json.dumps(
+                journal.apply_paper_preview_feedback(status.by_symbol),
+                indent=2,
+                sort_keys=True,
+            )
+        )
         return 0
 
     if args.command == "update-outcome":
