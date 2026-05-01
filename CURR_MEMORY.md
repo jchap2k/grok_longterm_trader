@@ -4,7 +4,7 @@ Last updated: 2026-05-01
 Repo: `S:\LLM_files\grok_longterm_trader`
 Remote: `https://github.com/jchap2k/grok_longterm_trader.git`
 Branch: `main`
-Latest feature commit: `9051a13 Surface deferred research in next actions`
+Latest feature commit: `4c701d8 Persist deferred research queue`
 
 This file is a temporary handoff document for another Codex instance. It is meant to explain:
 - what this project is
@@ -75,6 +75,7 @@ Additional continuation work completed on 2026-04-30:
 - added a minimum `ResearchPacket` completeness gate so thin ticker stubs are skipped before LLM research; skipped ideas are counted and preserved in cycle/scheduler artifacts
 - added a structured `deferred_research_queue` for skipped research packets with missing fields, provenance bucket, next-step guidance, and a suggested enrichment command
 - surfaced `deferred_research_queue` in next-actions markdown so skipped/incomplete ideas become operator-visible enrichment tasks instead of hidden JSON-only artifacts
+- persisted deferred research queue rows into the decision journal, with CLI commands to list and resolve enrichment tasks across runs
 
 What those changes accomplished:
 
@@ -109,7 +110,7 @@ What those changes accomplished:
 ### Research and decision pipeline
 - Raw ideas can be normalized into canonical `ResearchPacket` objects.
 - `ResearchPacket` now owns the minimum completeness rule for deep research: company name, idea source, and at least one research-context field (`business_summary`, `thesis_summary`, or `source_notes`). Incomplete packets are skipped before `runner.run_and_record(...)`.
-- Skipped packets now also appear in `deferred_research_queue`, turning thin ticker stubs into explicit enrichment work for a later cycle. When the cycle builds next-actions markdown, those deferred items can now render as a dedicated operator-facing enrichment section with missing fields and suggested commands.
+- Skipped packets now also appear in `deferred_research_queue`, turning thin ticker stubs into explicit enrichment work for a later cycle. When the cycle builds next-actions markdown, those deferred items can now render as a dedicated operator-facing enrichment section with missing fields and suggested commands. When `journal_db_path` is configured, deferred rows are also persisted so enrichment follow-up survives across runs.
 - Deterministic local reviewers ground the decision with business-story, balance-sheet, quality-durability, and quality-at-reasonable-price context.
 - The long-term CGH committee then produces the actual structured decision.
 - That decision is persisted into the journal for later reporting and benchmarking.
@@ -125,6 +126,7 @@ What those changes accomplished:
 - A dry-run action planner can translate a structured decision into a proposed `BUY`, `SELL`, or `NONE`.
 - A structured account action plan now aggregates recommendation rows, portfolio state, benchmark gate, capital-shortfall suppression, review status, and rebalance proposals into JSON-compatible dry-run intents.
 - The decision journal now has a `longterm_action_plan_journal` table for storing generated dry-run action plans.
+- The decision journal now has a `longterm_deferred_research_queue` table for open/resolved deferred enrichment tasks.
 - Portfolio state can be loaded as read-only context.
 - Protected holdings are separated from active holdings.
 - The benchmark guard can pause new buys if active results lag `FXAIX`.
@@ -227,6 +229,7 @@ What those changes accomplished:
 - Account action plans are dry-run only and are the future paper/live execution contract, not broker orders.
 - Stored action plans are audit records only; they do not imply execution.
 - Next-actions markdown now includes deferred research rows when supplied by the cycle, making enrichment work visible in the same operator artifact as buy/review/capital-needed actions.
+- Deferred research rows can be listed and resolved through `python scripts/longterm_journal.py deferred-list ...` and `deferred-resolve ...`.
 - Scheduler can write the structured JSON summary to disk:
   - `python scripts/run_longterm_scheduler.py --run-once --summary-output path\to\scheduler_summary.json ...`
 
@@ -341,6 +344,12 @@ Additional automated validation completed on 2026-04-30:
   - works
 - `python -m pytest ai_trader/trading_agent/longterm -q`
   - now passes with `158 passed`
+- Grok plan review for persisted deferred research queue
+  - returned `proceed_with_notes` at 87% confidence; V1 implemented the useful operator visibility, nullable trace fields, indexes, status, priority score, list/resolve API, and CLI surface while deferring deeper ReviewStatus/ThesisMonitor integration.
+- `python -m py_compile ai_trader/trading_agent/longterm/decision_journal.py ai_trader/trading_agent/longterm/orchestration.py ai_trader/trading_agent/longterm/journal_cli.py`
+  - works
+- `python -m pytest ai_trader/trading_agent/longterm -q`
+  - now passes with `161 passed`
 
 ## 4. Critical Guardrails
 
@@ -468,6 +477,7 @@ What is already done in Phase 1:
 - the cycle can now emit next-actions markdown when given portfolio state
 - the cycle can now emit dry-run capital-alert markdown when active sleeve/cash inputs are supplied
 - the cycle can now pass deferred research items into next-actions markdown so incomplete ideas appear as visible enrichment tasks
+- the cycle can now persist deferred research items to the decision journal when `journal_db_path` is supplied
 - scheduler summary output can now be written to disk
 
 What is not done yet in Phase 1:
@@ -676,10 +686,11 @@ This first deliverable is now partially complete:
 - login/setup automation now exists behind `--launch-login-if-needed`
 - bounded recurring dry-run scheduler wrapper now exists and reloads per-cycle context
 - deferred research queue rows are now visible in cycle-generated next-actions markdown
+- deferred research queue rows now persist in the decision journal and can be listed/resolved with `longterm_journal.py`
 
-The next best small milestone is to decide whether enrichment snapshots and/or
-deferred research queue rows should be persisted in the decision journal so
-operator follow-up work survives across runs and can be reconciled later.
+The next best small milestone is to decide whether persisted deferred rows should
+feed `longterm_next_actions.py` even outside the same cycle, or whether to add
+rank-movement/history to the recommendation table first.
 
 ## 8. Practical Notes For Another Codex
 
@@ -688,6 +699,8 @@ From `ai_trader/trading_agent`:
 - `python -m pytest longterm -q`
 - `python scripts/run_longterm_research.py --symbol AAPL --company-name Apple --thesis "Services and ecosystem durability." --business-summary "Consumer technology platform." --dry-run`
 - `python scripts/longterm_journal.py report --limit 10`
+- `python scripts/longterm_journal.py deferred-list --journal-db path\\to\\journal.db`
+- `python scripts/longterm_journal.py deferred-resolve --journal-db path\\to\\journal.db --deferred-id <id> --notes "Enriched from fundamentals cache."`
 - `python scripts/longterm_next_actions.py --portfolio-state path\\to\\portfolio.json --limit 10`
 - `python scripts/longterm_motley_fool_capture.py --source dashboard`
 - `python scripts/longterm_motley_fool_setup.py`
