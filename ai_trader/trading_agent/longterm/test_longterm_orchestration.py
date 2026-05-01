@@ -370,6 +370,19 @@ def test_cycle_surfaces_packet_completeness_warnings(tmp_path):
     ]
     assert result.skipped_idea_count == 1
     assert result.skipped_ideas == [{"symbol": "TSLA", "reason": "incomplete_research_packet"}]
+    assert result.deferred_research_queue == [
+        {
+            "symbol": "TSLA",
+            "reason": "incomplete_research_packet",
+            "missing_fields": ["company_name", "idea_source", "research_context"],
+            "provenance_bucket": "manual",
+            "suggested_next_step": "enrich_candidate_before_research",
+            "suggested_enrichment_command": (
+                "python scripts/run_longterm_discovery.py --candidates path\\to\\candidates.json "
+                "--enrichment-file path\\to\\fundamentals.json --enrichment-source fundamentals_cache"
+            ),
+        }
+    ]
     assert result.decision_ids == []
     assert runner.symbols == []
 
@@ -406,6 +419,7 @@ def test_cycle_allows_discovery_ideas_with_source_notes_as_research_context(tmp_
     assert recorded_symbols == ["MSFT"]
     assert result.skipped_idea_count == 0
     assert result.skipped_ideas == []
+    assert result.deferred_research_queue == []
     assert result.packet_completeness_warnings == []
 
 

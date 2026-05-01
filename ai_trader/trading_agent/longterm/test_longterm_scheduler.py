@@ -109,6 +109,16 @@ def test_scheduler_run_once_records_explicit_outputs(tmp_path):
             "total_idea_count": 1,
             "skipped_idea_count": 1,
             "skipped_ideas": [{"symbol": "TSLA", "reason": "incomplete_research_packet"}],
+            "deferred_research_queue": [
+                {
+                    "symbol": "TSLA",
+                    "reason": "incomplete_research_packet",
+                    "missing_fields": ["company_name", "idea_source", "research_context"],
+                    "provenance_bucket": "manual",
+                    "suggested_next_step": "enrich_candidate_before_research",
+                    "suggested_enrichment_command": "python scripts/run_longterm_discovery.py ...",
+                }
+            ],
             "recommendation_report_markdown": "# report\n",
             "next_actions_markdown": "# actions\n",
             "capital_alert_markdown": "# capital\n",
@@ -132,6 +142,12 @@ def test_scheduler_run_once_records_explicit_outputs(tmp_path):
     assert summary.runs[0].decision_ids == ["decision-AAPL"]
     assert summary.runs[0].skipped_idea_count == 1
     assert summary.runs[0].skipped_ideas == [{"symbol": "TSLA", "reason": "incomplete_research_packet"}]
+    assert summary.runs[0].deferred_research_queue[0]["symbol"] == "TSLA"
+    assert summary.runs[0].deferred_research_queue[0]["missing_fields"] == [
+        "company_name",
+        "idea_source",
+        "research_context",
+    ]
     assert summary.runs[0].recommendation_report_markdown == "# report\n"
     assert summary.runs[0].next_actions_markdown == "# actions\n"
     assert summary.runs[0].capital_alert_markdown == "# capital\n"

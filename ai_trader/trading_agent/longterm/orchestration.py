@@ -44,6 +44,7 @@ class LongTermCycleResult:
     total_idea_count: int
     skipped_idea_count: int = 0
     skipped_ideas: list[dict[str, str]] = field(default_factory=list)
+    deferred_research_queue: list[dict[str, Any]] = field(default_factory=list)
     decision_ids: list[str] = field(default_factory=list)
     capture_sources_run: list[str] = field(default_factory=list)
     discovery_summary: dict[str, int] = field(default_factory=dict)
@@ -166,6 +167,7 @@ def run_longterm_cycle(
     packet_completeness_warnings: list[str] = []
     skipped_idea_count = 0
     skipped_ideas: list[dict[str, str]] = []
+    deferred_research_queue: list[dict[str, Any]] = []
     for idea in all_ideas:
         packet_idea = {
             key: value for key, value in idea.items() if not str(key).startswith("_")
@@ -185,6 +187,13 @@ def run_longterm_cycle(
                     "symbol": packet.symbol or "UNKNOWN",
                     "reason": "incomplete_research_packet",
                 }
+            )
+            deferred_research_queue.append(
+                _deferred_research_item(
+                    packet,
+                    idea=idea,
+                    warnings=assessment["warnings"],
+                )
             )
             continue
         decision_ids.append(
@@ -260,6 +269,7 @@ def run_longterm_cycle(
         total_idea_count=len(all_ideas),
         skipped_idea_count=skipped_idea_count,
         skipped_ideas=skipped_ideas,
+        deferred_research_queue=deferred_research_queue,
         decision_ids=decision_ids,
         capture_sources_run=capture_sources_run,
         discovery_summary=discovery_summary,
@@ -314,6 +324,36 @@ def _packet_completeness_assessment(packet) -> dict[str, Any]:
         "warnings": warnings,
         "block_research": bool(warnings),
     }
+
+
+def _deferred_research_item(packet, *, idea: Mapping[str, Any], warnings: list[str]) -> dict[str, Any]:
+    return {
+        "symbol": packet.symbol or "UNKNOWN",
+        "reason": "incomplete_research_packet",
+        "missing_fields": _missing_fields_from_warnings(warnings),
+        "provenance_bucket": str(
+            idea.get("_provenance_bucket")
+            or packet.idea_source
+            or "manual"
+        ),
+        "suggested_next_step": "enrich_candidate_before_research",
+        "suggested_enrichment_command": (
+            "python scripts/run_longterm_discovery.py --candidates path\\to\\candidates.json "
+            "--enrichment-file path\\to\\fundamentals.json --enrichment-source fundamentals_cache"
+        ),
+    }
+
+
+def _missing_fields_from_warnings(warnings: list[str]) -> list[str]:
+    missing_fields = []
+    for warning in warnings:
+        if "missing company_name" in warning:
+            missing_fields.append("company_name")
+        elif "missing idea_source" in warning:
+            missing_fields.append("idea_source")
+        elif "missing research context" in warning:
+            missing_fields.append("research_context")
+    return missing_fields
 
 
 def _rebalance_markdown(proposal) -> str:

@@ -88,6 +88,9 @@ Before any idea reaches the LLM research runner, the cycle applies a minimum
 source, and research context from `business_summary`, `thesis_summary`, or
 `source_notes`. Thin ticker stubs are skipped, counted in `skipped_idea_count`,
 and listed in `skipped_ideas` instead of consuming research calls.
+The richer `deferred_research_queue` lists the missing fields and includes a
+suggested `run_longterm_discovery.py --enrichment-file ...` command so those
+ideas can be enriched before a later research run.
 
 ## Dry-Run Action Plan
 

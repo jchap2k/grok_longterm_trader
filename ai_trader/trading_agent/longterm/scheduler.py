@@ -57,6 +57,7 @@ class LongTermSchedulerRunRecord:
     total_idea_count: int = 0
     skipped_idea_count: int = 0
     skipped_ideas: list[dict[str, str]] = field(default_factory=list)
+    deferred_research_queue: list[dict[str, Any]] = field(default_factory=list)
     decision_ids: list[str] = field(default_factory=list)
     recommendation_report_markdown: str = ""
     next_actions_markdown: str = ""
@@ -202,6 +203,7 @@ def _record_from_result(
         total_idea_count=int(payload.get("total_idea_count") or 0),
         skipped_idea_count=int(payload.get("skipped_idea_count") or 0),
         skipped_ideas=[dict(item) for item in (payload.get("skipped_ideas") or [])],
+        deferred_research_queue=[dict(item) for item in (payload.get("deferred_research_queue") or [])],
         decision_ids=list(payload.get("decision_ids") or []),
         recommendation_report_markdown=str(payload.get("recommendation_report_markdown") or ""),
         next_actions_markdown=str(payload.get("next_actions_markdown") or ""),
