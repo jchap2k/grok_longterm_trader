@@ -4,7 +4,7 @@ Last updated: 2026-05-01
 Repo: `S:\LLM_files\grok_longterm_trader`
 Remote: `https://github.com/jchap2k/grok_longterm_trader.git`
 Branch: `main`
-Latest feature commit: `24bca99 Advance long-term operator workflows`
+Latest feature commit: `9ded86f Add thesis challenge and risk review`
 
 This file is a temporary handoff document for another Codex instance. It is meant to explain:
 - what this project is
@@ -79,6 +79,7 @@ Additional continuation work completed on 2026-04-30:
 - made standalone next-actions reports include persisted open deferred research rows from the journal
 - added recommendation rank-history snapshots so reports can show previous rank and rank movement
 - hardened thesis/review states to distinguish `healthy`, `stale`, `weakening`, and `broken`
+- added deterministic bull/bear thesis challenge context and per-intent risk-review artifacts inspired by the multi-agent trading architecture article, without adding extra LLM calls or live execution
 
 What those changes accomplished:
 
@@ -115,6 +116,7 @@ What those changes accomplished:
 - `ResearchPacket` now owns the minimum completeness rule for deep research: company name, idea source, and at least one research-context field (`business_summary`, `thesis_summary`, or `source_notes`). Incomplete packets are skipped before `runner.run_and_record(...)`.
 - Skipped packets now also appear in `deferred_research_queue`, turning thin ticker stubs into explicit enrichment work for a later cycle. When the cycle builds next-actions markdown, those deferred items can now render as a dedicated operator-facing enrichment section with missing fields and suggested commands. When `journal_db_path` is configured, deferred rows are also persisted so enrichment follow-up survives across runs.
 - Deterministic local reviewers ground the decision with business-story, balance-sheet, quality-durability, and quality-at-reasonable-price context.
+- A deterministic `ThesisChallengeReviewer` now turns reviewer support, reviewer objections, invalidation conditions, and risk flags into an explicit bull case, bear case, key risks, and kill criteria for the CGH decision context.
 - The long-term CGH committee then produces the actual structured decision.
 - That decision is persisted into the journal for later reporting and benchmarking.
 
@@ -129,6 +131,7 @@ What those changes accomplished:
 ### Next-actions / portfolio-aware planning
 - A dry-run action planner can translate a structured decision into a proposed `BUY`, `SELL`, or `NONE`.
 - A structured account action plan now aggregates recommendation rows, portfolio state, benchmark gate, capital-shortfall suppression, review status, and rebalance proposals into JSON-compatible dry-run intents.
+- A deterministic `RiskReviewBuilder` now reviews dry-run account-action intents for protected-symbol vetoes, benchmark-gate pauses, stale/weakening/broken thesis status, oversized suggested positions, and cash warnings.
 - The decision journal now has a `longterm_action_plan_journal` table for storing generated dry-run action plans.
 - The decision journal now has a `longterm_deferred_research_queue` table for open/resolved deferred enrichment tasks.
 - Portfolio state can be loaded as read-only context.
@@ -231,6 +234,7 @@ What those changes accomplished:
 - Capital-alert markdown is dry-run only and uses the existing capital alert suppression logic.
 - Rebalance markdown is dry-run only and uses the existing `RebalancePlanner`; protected holdings remain excluded. It now includes source/target rank context, sell-down sizing details, decision IDs when recommendation rows provide them, optional review/thesis context, and the benchmark gate reason.
 - Account action plans are dry-run only and are the future paper/live execution contract, not broker orders.
+- Account action plans now include `risk_review` on each intent, keeping the article-inspired risk-panel idea machine-readable but still dry-run only.
 - Stored action plans are audit records only; they do not imply execution.
 - Next-actions markdown now includes deferred research rows when supplied by the cycle, making enrichment work visible in the same operator artifact as buy/review/capital-needed actions.
 - Deferred research rows can be listed and resolved through `python scripts/longterm_journal.py deferred-list ...` and `deferred-resolve ...`.
@@ -361,6 +365,12 @@ Additional automated validation completed on 2026-04-30:
   - works
 - `python -m pytest ai_trader/trading_agent/longterm -q`
   - now passes with `165 passed`
+- Grok plan review for thesis challenge / risk review
+  - returned `revise_first` at 82% confidence; V1 addressed the useful concern by staying deterministic, grounding risk in existing rules/guardrails, avoiding new journal schema, and attaching risk review only to dry-run action-plan intents
+- `python -m py_compile ai_trader/trading_agent/longterm/thesis_challenge.py ai_trader/trading_agent/longterm/risk_review.py ai_trader/trading_agent/longterm/research_runner.py ai_trader/trading_agent/longterm/account_action_plan.py`
+  - works
+- `python -m pytest ai_trader/trading_agent/longterm -q`
+  - now passes with `168 passed`
 
 ## 4. Critical Guardrails
 
@@ -426,6 +436,8 @@ Keep these local and ignored:
 - `ai_trader/trading_agent/longterm/recommendation_enrichment.py`
 - `ai_trader/trading_agent/longterm/review_status.py`
 - `ai_trader/trading_agent/longterm/thesis_monitor.py`
+- `ai_trader/trading_agent/longterm/thesis_challenge.py`
+- `ai_trader/trading_agent/longterm/risk_review.py`
 - `ai_trader/trading_agent/longterm/next_actions.py`
 
 ### Portfolio-aware planning and guards
@@ -492,6 +504,8 @@ What is already done in Phase 1:
 - standalone next-actions can now pull persisted deferred research rows from the journal
 - recommendation reports now include previous-rank/rank-movement context once snapshots exist
 - review/thesis status now distinguishes stale, weakening, and broken states
+- CGH research context now includes an explicit deterministic bull/bear thesis challenge
+- account action plans now include deterministic per-intent risk reviews
 - scheduler summary output can now be written to disk
 
 What is not done yet in Phase 1:
@@ -704,6 +718,8 @@ This first deliverable is now partially complete:
 - standalone next-actions now surfaces persisted deferred research rows
 - recommendation rank snapshots and rank movement now exist
 - thesis monitoring now has `healthy`, `stale`, `weakening`, and `broken` states
+- research decisions now receive an explicit deterministic bull/bear thesis challenge
+- dry-run account action intents now carry machine-readable risk reviews
 
 The next best small milestone is Phase 2 scheduler operating model design:
 decide the daily/weekly cadence for discovery refreshes, research runs, thesis
