@@ -26,6 +26,9 @@ Reads candidate JSON or local source files, optionally applies local enrichment,
 `longterm/research_universe.py`
 Splits research-ready universe ideas into stable batch files so the operator can work through a broad stock universe in small long-term research waves instead of sending hundreds of symbols into one cycle.
 
+`longterm/research_campaign.py`
+Tracks multi-batch research campaigns after universe batching. It creates a manifest from `research-batch-*.json` files, records pending/completed/deferred/failed/skipped status, and emits the exact supervised `run_longterm_cycle.py --idea-batch ...` command for the next pending batch. It does not run research automatically.
+
 `longterm/research_runner.py`
 Builds context sections and runs the CGH decision committee through `CheapGrokHeavy`. It now includes a deterministic thesis challenge section so the final decision sees an explicit bull case, bear case, key risks, and kill criteria before producing a recommendation.
 
@@ -140,7 +143,7 @@ Checks review due dates and whether current evidence matches invalidation condit
 
 ## Decision Flow
 
-Universe sources -> discovery queue -> research batches -> `ResearchPacket` completeness gate -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> rebalance outcome analysis -> Alpaca paper/read-only portfolio snapshot -> benchmark guard -> dry-run account action plan -> next-actions/report artifacts.
+Universe sources -> discovery queue -> research batches -> research campaign manifest -> `ResearchPacket` completeness gate -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> rebalance outcome analysis -> Alpaca paper/read-only portfolio snapshot -> benchmark guard -> dry-run account action plan -> next-actions/report artifacts.
 
 ## Data Flow Safety
 

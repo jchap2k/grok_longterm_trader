@@ -98,6 +98,19 @@ python scripts/longterm_research_universe.py --research-ideas path\to\research_i
 python scripts/run_longterm_cycle.py --idea-batch path\to\research_batches\research-batch-001.json --journal-db path\to\journal.db
 ```
 
+Track a multi-batch research campaign so broad-universe work survives across
+runs:
+
+```powershell
+python scripts/longterm_research_campaign.py init --batch-dir path\to\research_batches --manifest-output path\to\research_campaign.json
+python scripts/longterm_research_campaign.py next --manifest path\to\research_campaign.json --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json
+python scripts/longterm_research_campaign.py mark --manifest path\to\research_campaign.json --batch-id research-batch-001 --status completed --notes "Processed and journaled."
+```
+
+The campaign command does not run research automatically. It tracks operator
+progress and prints the supervised `run_longterm_cycle.py --idea-batch ...`
+command for the next pending batch.
+
 Or let a cycle build the discovery queue directly before research:
 
 ```powershell
