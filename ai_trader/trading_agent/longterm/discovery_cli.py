@@ -8,6 +8,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from longterm.discovery import DiscoveryEngine
+from longterm.discovery_enrichment import apply_discovery_enrichment, load_discovery_enrichment_file
 from longterm.discovery_sources import load_candidate_source_file
 
 
@@ -16,6 +17,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--candidates", default="", help="JSON file containing a list of raw discovery candidates.")
     parser.add_argument("--source-file", default="", help="Local CSV or NasdaqTrader pipe file to load as candidates.")
     parser.add_argument("--source", default="", help="Source label to attach when loading --source-file.")
+    parser.add_argument("--enrichment-file", default="", help="Optional local JSON/CSV metrics file keyed by symbol.")
+    parser.add_argument("--enrichment-source", default="local_enrichment")
     parser.add_argument("--research-limit", type=int, default=25)
     parser.add_argument(
         "--research-ideas-output",
@@ -27,6 +30,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run_cli(args: argparse.Namespace, *, engine: DiscoveryEngine | None = None) -> int:
     payload = _load_candidates(args)
+    if args.enrichment_file:
+        payload = apply_discovery_enrichment(
+            payload,
+            load_discovery_enrichment_file(args.enrichment_file),
+            source=args.enrichment_source,
+        )
 
     result = (engine or DiscoveryEngine()).build_queue(
         payload,

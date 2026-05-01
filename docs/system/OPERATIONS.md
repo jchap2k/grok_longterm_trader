@@ -55,6 +55,13 @@ python scripts/run_longterm_discovery.py --source-file path\to\qqq_holdings.csv 
 python scripts/run_longterm_discovery.py --source-file path\to\nasdaqlisted.txt --source nasdaq_listed
 ```
 
+Optionally enrich those source rows from a local JSON/CSV metrics cache before
+scoring:
+
+```powershell
+python scripts/run_longterm_discovery.py --source-file path\to\sp500.csv --source sp500 --enrichment-file path\to\fundamentals.json --enrichment-source fundamentals_cache
+```
+
 Write research-ready candidates as an idea batch for the existing research
 cycle:
 
@@ -68,6 +75,7 @@ Or let a cycle build the discovery queue directly before research:
 ```powershell
 python scripts/run_longterm_cycle.py --discovery-candidates path\to\candidates.json --journal-db path\to\journal.db
 python scripts/run_longterm_cycle.py --discovery-source-file path\to\sp500.csv --discovery-source sp500 --journal-db path\to\journal.db
+python scripts/run_longterm_cycle.py --discovery-source-file path\to\sp500.csv --discovery-source sp500 --discovery-enrichment-file path\to\fundamentals.json --discovery-enrichment-source fundamentals_cache --journal-db path\to\journal.db
 ```
 
 Discovery buckets:
@@ -266,6 +274,7 @@ Run one scheduled cycle with a refreshed discovery-candidate file:
 ```powershell
 python scripts/run_longterm_scheduler.py --run-once --discovery-candidates path\to\candidates.json --journal-db path\to\journal.db --quiet
 python scripts/run_longterm_scheduler.py --run-once --discovery-source-file path\to\sp500.csv --discovery-source sp500 --journal-db path\to\journal.db --quiet
+python scripts/run_longterm_scheduler.py --run-once --discovery-source-file path\to\sp500.csv --discovery-source sp500 --discovery-enrichment-file path\to\fundamentals.json --discovery-enrichment-source fundamentals_cache --journal-db path\to\journal.db --quiet
 ```
 
 Run a bounded recurring dry-run:

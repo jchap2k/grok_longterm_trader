@@ -22,6 +22,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--discovery-candidates", default="")
     parser.add_argument("--discovery-source-file", default="")
     parser.add_argument("--discovery-source", default="")
+    parser.add_argument("--discovery-enrichment-file", default="")
+    parser.add_argument("--discovery-enrichment-source", default="local_enrichment")
     parser.add_argument("--profile-config", default=str(DEFAULT_PROFILE_PATH))
     parser.add_argument("--motley-fool-config", default=None)
     parser.add_argument("--journal-db", default=None)
@@ -52,6 +54,8 @@ def run_cli(
         discovery_candidates=Path(args.discovery_candidates) if args.discovery_candidates else None,
         discovery_source_file=Path(args.discovery_source_file) if args.discovery_source_file else None,
         discovery_source=args.discovery_source,
+        discovery_enrichment_file=Path(args.discovery_enrichment_file) if args.discovery_enrichment_file else None,
+        discovery_enrichment_source=args.discovery_enrichment_source,
         motley_fool_config=Path(args.motley_fool_config) if args.motley_fool_config else None,
         journal_db=Path(args.journal_db) if args.journal_db else None,
         portfolio_state=Path(args.portfolio_state) if args.portfolio_state else None,

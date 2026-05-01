@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
 
+from longterm.discovery_enrichment import apply_discovery_enrichment, load_discovery_enrichment_file
 from longterm.motley_fool_settings import load_motley_fool_capture_settings
 from longterm.orchestration import run_longterm_cycle
 from longterm.orchestration_cli import _load_manual_ideas
@@ -25,6 +26,8 @@ class LongTermSchedulerInputs:
     discovery_candidates: str | Path | None = None
     discovery_source_file: str | Path | None = None
     discovery_source: str = ""
+    discovery_enrichment_file: str | Path | None = None
+    discovery_enrichment_source: str = "local_enrichment"
     motley_fool_config: str | Path | None = None
     journal_db: str | Path | None = None
     portfolio_state: str | Path | None = None
@@ -83,6 +86,8 @@ def build_cycle_kwargs(inputs: LongTermSchedulerInputs) -> dict[str, Any]:
         inputs.discovery_candidates,
         source_file=inputs.discovery_source_file,
         source=inputs.discovery_source,
+        enrichment_file=inputs.discovery_enrichment_file,
+        enrichment_source=inputs.discovery_enrichment_source,
     )
     settings = load_motley_fool_capture_settings(inputs.motley_fool_config)
     portfolio_state = (
@@ -113,19 +118,29 @@ def _load_discovery_candidates(
     *,
     source_file: str | Path | None = None,
     source: str = "",
+    enrichment_file: str | Path | None = None,
+    enrichment_source: str = "local_enrichment",
 ) -> list[dict[str, Any]]:
     if path and source_file:
         raise ValueError("Use either discovery_candidates or discovery_source_file, not both.")
     if source_file:
         if not source:
             raise ValueError("discovery_source is required when using discovery_source_file.")
-        return load_candidate_source_file(source_file, source=source)
-    if not path:
-        return []
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
-    if not isinstance(payload, list):
-        raise ValueError("Discovery candidates file must contain a JSON list.")
-    return [dict(item) for item in payload]
+        candidates = load_candidate_source_file(source_file, source=source)
+    elif path:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        if not isinstance(payload, list):
+            raise ValueError("Discovery candidates file must contain a JSON list.")
+        candidates = [dict(item) for item in payload]
+    else:
+        candidates = []
+    if enrichment_file:
+        candidates = apply_discovery_enrichment(
+            candidates,
+            load_discovery_enrichment_file(enrichment_file),
+            source=enrichment_source,
+        )
+    return candidates
 
 
 def run_longterm_scheduler(

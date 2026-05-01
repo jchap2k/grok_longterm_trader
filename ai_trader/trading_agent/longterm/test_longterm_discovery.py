@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from longterm.discovery import DiscoveryCandidate, DiscoveryEngine
 from longterm.discovery_cli import build_parser, run_cli
+from longterm.discovery_enrichment import apply_discovery_enrichment, load_discovery_enrichment_file
 from longterm.discovery_sources import load_candidate_source_file
 
 
@@ -123,6 +124,30 @@ def test_discovery_to_research_ideas_maps_to_research_packet_fields():
     ]
 
 
+def test_discovery_to_research_ideas_carries_enrichment_metrics_when_enriched():
+    result = DiscoveryEngine().build_queue(
+        [
+            {
+                "symbol": "MSFT",
+                "company_name": "Microsoft",
+                "source": "sp500",
+                "notes": ["Enriched from fundamentals_cache."],
+                "revenue_growth_1y_pct": 16,
+                "earnings_growth_1y_pct": 20,
+                "return_on_capital_pct": 28,
+                "gross_margin_pct": 68,
+                "market_cap": 3_000_000_000_000,
+                "category_leader": True,
+            }
+        ]
+    )
+
+    ideas = DiscoveryEngine.to_research_ideas(result.research_queue)
+
+    assert "Enriched from fundamentals_cache." in ideas[0]["source_notes"]
+    assert "Discovery metrics: market cap 3000000000000; revenue growth 16%; earnings growth 20%; return on capital 28%; gross margin 68%." in ideas[0]["source_notes"]
+
+
 def test_discovery_module_stays_upstream_of_portfolio_and_benchmark_logic():
     source = Path(__file__).with_name("discovery.py").read_text(encoding="utf-8")
 
@@ -203,6 +228,120 @@ def test_discovery_cli_loads_local_source_file(tmp_path, capsys):
     assert exit_code == 0
     assert payload["watchlist"][0]["symbol"] == "MSFT"
     assert payload["watchlist"][0]["source"] == "sp500"
+
+
+def test_load_discovery_enrichment_json_normalizes_metric_fields(tmp_path):
+    path = tmp_path / "fundamentals.json"
+    path.write_text(
+        json.dumps(
+            {
+                "MSFT": {
+                    "marketCap": "3000000000000",
+                    "revenueGrowth": "16.5",
+                    "earningsGrowth": "20",
+                    "grossMargin": "68",
+                    "returnOnCapital": "28",
+                    "debtToEquity": "0.4",
+                    "priceTrend6m": "12",
+                    "categoryLeader": True,
+                    "valuation": "fair",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    rows = load_discovery_enrichment_file(path)
+
+    assert rows == {
+        "MSFT": {
+            "market_cap": 3_000_000_000_000.0,
+            "revenue_growth_1y_pct": 16.5,
+            "earnings_growth_1y_pct": 20.0,
+            "gross_margin_pct": 68.0,
+            "return_on_capital_pct": 28.0,
+            "debt_to_equity": 0.4,
+            "price_trend_6m_pct": 12.0,
+            "category_leader": True,
+            "valuation_label": "fair",
+        }
+    }
+
+
+def test_apply_discovery_enrichment_merges_by_symbol_without_changing_source():
+    candidates = [
+        {
+            "symbol": "MSFT",
+            "company_name": "Microsoft",
+            "source": "sp500",
+            "notes": ["GICS Sector: Information Technology."],
+        },
+        {"symbol": "BRK.B", "company_name": "Berkshire Hathaway", "source": "sp500"},
+    ]
+    enrichment = {
+        "msft": {
+            "market_cap": 3_000_000_000_000,
+            "revenue_growth_1y_pct": 16,
+            "category_leader": True,
+        }
+    }
+
+    enriched = apply_discovery_enrichment(candidates, enrichment, source="fundamentals_cache")
+
+    assert enriched[0]["source"] == "sp500"
+    assert enriched[0]["market_cap"] == 3_000_000_000_000.0
+    assert enriched[0]["revenue_growth_1y_pct"] == 16.0
+    assert enriched[0]["category_leader"] is True
+    assert enriched[0]["notes"] == [
+        "GICS Sector: Information Technology.",
+        "Enriched from fundamentals_cache.",
+    ]
+    assert "market_cap" not in enriched[1]
+
+
+def test_discovery_cli_applies_enrichment_file_before_scoring(tmp_path, capsys):
+    source_path = tmp_path / "sp500.csv"
+    enrichment_path = tmp_path / "fundamentals.json"
+    source_path.write_text(
+        "Symbol,Security,GICS Sector\nMSFT,Microsoft,Information Technology\n",
+        encoding="utf-8",
+    )
+    enrichment_path.write_text(
+        json.dumps(
+            {
+                "MSFT": {
+                    "market_cap": 3_000_000_000_000,
+                    "revenue_growth_1y_pct": 16,
+                    "earnings_growth_1y_pct": 20,
+                    "return_on_capital_pct": 28,
+                    "gross_margin_pct": 68,
+                    "price_trend_6m_pct": 12,
+                    "category_leader": True,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--source-file",
+            str(source_path),
+            "--source",
+            "sp500",
+            "--enrichment-file",
+            str(enrichment_path),
+            "--enrichment-source",
+            "fundamentals_cache",
+        ]
+    )
+
+    exit_code = run_cli(args)
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["research_queue"][0]["symbol"] == "MSFT"
+    assert "Enriched from fundamentals_cache." in payload["research_queue"][0]["notes"]
 
 
 def test_load_sp500_style_csv_candidates(tmp_path):

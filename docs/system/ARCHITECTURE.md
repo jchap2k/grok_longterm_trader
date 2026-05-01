@@ -17,8 +17,11 @@ Builds the upstream stock universe for research. It merges candidate rows from s
 `longterm/discovery_sources.py`
 Normalizes local universe source files into discovery candidate dictionaries. V1 supports CSV-style index/ETF files and NasdaqTrader-style pipe-delimited listings, preserving sector, market-category, and ETF/index weight notes while filtering ETF/test-issue listing rows before discovery scoring.
 
+`longterm/discovery_enrichment.py`
+Applies optional local/cacheable metric enrichment to discovery candidates before scoring. It normalizes JSON/CSV rows keyed by symbol into fields such as market cap, revenue growth, earnings growth, gross margin, return on capital, debt/equity, price trend, category leadership, valuation label, source rank, and source score. Enrichment preserves the original discovery source and remains upstream of portfolio, benchmark, account-action, and broker logic.
+
 `longterm/discovery_cli.py`
-Reads candidate JSON or local source files and emits the discovery buckets. It can also export the research-ready queue as idea-batch JSON for the existing research cycle.
+Reads candidate JSON or local source files, optionally applies local enrichment, and emits the discovery buckets. It can also export the research-ready queue as idea-batch JSON for the existing research cycle.
 
 `longterm/research_runner.py`
 Builds context sections and runs the CGH decision committee through `CheapGrokHeavy`.

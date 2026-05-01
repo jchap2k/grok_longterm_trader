@@ -130,17 +130,22 @@ class DiscoveryEngine:
         ideas = []
         for candidate in candidates:
             sources = ", ".join(candidate.source_metadata.get("sources") or [candidate.source])
+            source_notes = [
+                f"Discovery ID: {candidate.discovery_id}.",
+                f"Discovery source(s): {sources}.",
+                f"Discovery score: {candidate.discovery_score:.1f}.",
+                f"Discovery decision: {candidate.decision}.",
+            ]
+            source_notes.extend(candidate.notes)
+            metric_note = _enrichment_metric_note(candidate)
+            if metric_note:
+                source_notes.append(metric_note)
             ideas.append(
                 {
                     "symbol": candidate.symbol,
                     "company_name": candidate.company_name,
                     "idea_source": f"discovery_{candidate.source}",
-                    "source_notes": [
-                        f"Discovery ID: {candidate.discovery_id}.",
-                        f"Discovery source(s): {sources}.",
-                        f"Discovery score: {candidate.discovery_score:.1f}.",
-                        f"Discovery decision: {candidate.decision}.",
-                    ],
+                    "source_notes": source_notes,
                     "business_summary": (
                         f"Discovery candidate from {candidate.source}; requires independent research."
                     ),
@@ -318,6 +323,36 @@ def _debt_penalty(value: float | None) -> float:
     if value <= 4.0:
         return 12.0
     return 30.0
+
+
+def _enrichment_metric_note(candidate: DiscoveryCandidate) -> str:
+    if not any(str(note).startswith("Enriched from ") for note in candidate.notes):
+        return ""
+    parts = []
+    if candidate.market_cap is not None:
+        parts.append(f"market cap {_format_number(candidate.market_cap)}")
+    if candidate.revenue_growth_1y_pct is not None:
+        parts.append(f"revenue growth {_format_number(candidate.revenue_growth_1y_pct)}%")
+    if candidate.earnings_growth_1y_pct is not None:
+        parts.append(f"earnings growth {_format_number(candidate.earnings_growth_1y_pct)}%")
+    if candidate.return_on_capital_pct is not None:
+        parts.append(f"return on capital {_format_number(candidate.return_on_capital_pct)}%")
+    if candidate.gross_margin_pct is not None:
+        parts.append(f"gross margin {_format_number(candidate.gross_margin_pct)}%")
+    if candidate.debt_to_equity is not None:
+        parts.append(f"debt/equity {_format_number(candidate.debt_to_equity)}")
+    if candidate.price_trend_6m_pct is not None:
+        parts.append(f"6m price trend {_format_number(candidate.price_trend_6m_pct)}%")
+    if not parts:
+        return ""
+    return f"Discovery metrics: {'; '.join(parts)}."
+
+
+def _format_number(value: float | int) -> str:
+    number = float(value)
+    if number.is_integer():
+        return str(int(number))
+    return f"{number:g}"
 
 
 def _discovery_id(symbol: str, sources: list[str]) -> str:

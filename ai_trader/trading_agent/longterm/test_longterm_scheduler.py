@@ -69,6 +69,31 @@ def test_build_cycle_kwargs_loads_discovery_source_file(tmp_path):
     assert kwargs["discovery_candidates"][0]["source"] == "sp500"
 
 
+def test_build_cycle_kwargs_loads_discovery_enrichment_file(tmp_path):
+    profile_path = tmp_path / "profile.json"
+    _write_profile(profile_path)
+    source_path = tmp_path / "sp500.csv"
+    enrichment_path = tmp_path / "fundamentals.json"
+    source_path.write_text("Symbol,Security\nMSFT,Microsoft\n", encoding="utf-8")
+    enrichment_path.write_text(
+        '{"MSFT":{"market_cap":3000000000000,"revenue_growth_1y_pct":16}}',
+        encoding="utf-8",
+    )
+
+    inputs = LongTermSchedulerInputs(
+        profile_config=profile_path,
+        discovery_source_file=source_path,
+        discovery_source="sp500",
+        discovery_enrichment_file=enrichment_path,
+        discovery_enrichment_source="fundamentals_cache",
+    )
+
+    kwargs = build_cycle_kwargs(inputs)
+
+    assert kwargs["discovery_candidates"][0]["market_cap"] == 3_000_000_000_000.0
+    assert "Enriched from fundamentals_cache." in kwargs["discovery_candidates"][0]["notes"]
+
+
 def test_scheduler_run_once_records_explicit_outputs(tmp_path):
     profile_path = tmp_path / "profile.json"
     _write_profile(profile_path)
@@ -265,6 +290,45 @@ def test_scheduler_cli_forwards_discovery_source_file(tmp_path, capsys):
     assert inputs.discovery_source_file == source_path
     assert inputs.discovery_source == "sp500"
     assert config.max_runs == 1
+
+
+def test_scheduler_cli_forwards_discovery_enrichment_file(tmp_path, capsys):
+    profile_path = tmp_path / "profile.json"
+    _write_profile(profile_path)
+    enrichment_path = tmp_path / "fundamentals.json"
+    enrichment_path.write_text('{"MSFT":{"market_cap":3000000000000}}', encoding="utf-8")
+
+    scheduler_calls = []
+
+    def fake_scheduler(*, inputs, config):
+        scheduler_calls.append((inputs, config))
+        return {
+            "status": "completed",
+            "run_count": 1,
+            "success_count": 1,
+            "error_count": 0,
+            "runs": [],
+        }
+
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--profile-config",
+            str(profile_path),
+            "--discovery-enrichment-file",
+            str(enrichment_path),
+            "--discovery-enrichment-source",
+            "fundamentals_cache",
+            "--run-once",
+        ]
+    )
+
+    exit_code = run_cli(args, scheduler_func=fake_scheduler)
+
+    inputs, _config = scheduler_calls[0]
+    assert exit_code == 0
+    assert inputs.discovery_enrichment_file == enrichment_path
+    assert inputs.discovery_enrichment_source == "fundamentals_cache"
 
 
 def test_scheduler_writes_summary_output_file(tmp_path):

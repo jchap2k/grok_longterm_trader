@@ -8,6 +8,7 @@ from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
 
+from longterm.discovery_enrichment import apply_discovery_enrichment, load_discovery_enrichment_file
 from longterm.discovery_sources import load_candidate_source_file
 from longterm.motley_fool_settings import load_motley_fool_capture_settings
 from longterm.orchestration import run_longterm_cycle
@@ -26,6 +27,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--discovery-candidates", default="")
     parser.add_argument("--discovery-source-file", default="")
     parser.add_argument("--discovery-source", default="")
+    parser.add_argument("--discovery-enrichment-file", default="")
+    parser.add_argument("--discovery-enrichment-source", default="local_enrichment")
     parser.add_argument("--profile-config", default=str(DEFAULT_PROFILE_PATH))
     parser.add_argument("--motley-fool-config", default=None)
     parser.add_argument("--journal-db", default=None)
@@ -50,6 +53,8 @@ def run_cli(
         args.discovery_candidates,
         source_file=args.discovery_source_file,
         source=args.discovery_source,
+        enrichment_file=args.discovery_enrichment_file,
+        enrichment_source=args.discovery_enrichment_source,
     )
     settings = load_motley_fool_capture_settings(args.motley_fool_config)
     portfolio_state = (
@@ -106,16 +111,26 @@ def _load_discovery_candidates(
     *,
     source_file: str = "",
     source: str = "",
+    enrichment_file: str = "",
+    enrichment_source: str = "local_enrichment",
 ) -> list[dict[str, Any]]:
     if path and source_file:
         raise ValueError("Use either --discovery-candidates or --discovery-source-file, not both.")
     if source_file:
         if not source:
             raise ValueError("--discovery-source is required when using --discovery-source-file.")
-        return load_candidate_source_file(source_file, source=source)
-    if not path:
-        return []
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
-    if not isinstance(payload, list):
-        raise ValueError("Discovery candidates file must contain a JSON list.")
-    return [dict(item) for item in payload]
+        candidates = load_candidate_source_file(source_file, source=source)
+    elif path:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        if not isinstance(payload, list):
+            raise ValueError("Discovery candidates file must contain a JSON list.")
+        candidates = [dict(item) for item in payload]
+    else:
+        candidates = []
+    if enrichment_file:
+        candidates = apply_discovery_enrichment(
+            candidates,
+            load_discovery_enrichment_file(enrichment_file),
+            source=enrichment_source,
+        )
+    return candidates
