@@ -47,6 +47,8 @@ def test_account_action_plan_builds_allowed_buy_intent(tmp_path):
     assert payload["intents"][0]["trade_value"] == 2720.0
     assert payload["intents"][0]["allowed"] is True
     assert payload["intents"][0]["decision_id"] == decision_id
+    assert payload["intents"][0]["risk_review"]["allowed"] is True
+    assert payload["intents"][0]["risk_review"]["risk_level"] in {"low", "medium"}
 
 
 def test_account_action_plan_pauses_new_buy_but_keeps_review_intent(tmp_path):
@@ -73,6 +75,8 @@ def test_account_action_plan_pauses_new_buy_but_keeps_review_intent(tmp_path):
     assert plan.intents[0].symbol == "NVDA"
     assert plan.intents[0].allowed is False
     assert "Pause new buys" in plan.intents[0].reason
+    assert plan.intents[0].risk_review["allowed"] is False
+    assert plan.intents[0].risk_review["veto_reasons"]
     assert plan.intents[1].symbol == "AAPL"
 
 
@@ -126,6 +130,7 @@ def test_account_action_plan_includes_rebalance_intent(tmp_path):
     assert rebalance.order_intent == "SELL_TO_FUND_BUY"
     assert rebalance.trade_value == 3640.0
     assert rebalance.allowed is True
+    assert rebalance.risk_review["intent_type"] == "REBALANCE"
 
 
 def test_account_action_plan_blocks_protected_symbol_trade(tmp_path):
@@ -149,3 +154,4 @@ def test_account_action_plan_blocks_protected_symbol_trade(tmp_path):
     assert plan.intents[0].symbol == "FXAIX"
     assert plan.intents[0].allowed is False
     assert "protected" in plan.intents[0].reason.lower()
+    assert any("protected" in reason.lower() for reason in plan.intents[0].risk_review["veto_reasons"])

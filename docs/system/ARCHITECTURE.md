@@ -24,7 +24,7 @@ Applies optional local/cacheable metric enrichment to discovery candidates befor
 Reads candidate JSON or local source files, optionally applies local enrichment, and emits the discovery buckets. It can also export the research-ready queue as idea-batch JSON for the existing research cycle.
 
 `longterm/research_runner.py`
-Builds context sections and runs the CGH decision committee through `CheapGrokHeavy`.
+Builds context sections and runs the CGH decision committee through `CheapGrokHeavy`. It now includes a deterministic thesis challenge section so the final decision sees an explicit bull case, bear case, key risks, and kill criteria before producing a recommendation.
 
 `research/research_packet.py`
 Defines the normalized research packet and the minimum completeness rule for deep research. Packets must have a company name, idea source, and at least one research-context field (`business_summary`, `thesis_summary`, or `source_notes`) before the cycle calls the research runner. Incomplete ideas are skipped and reported rather than sent to the LLM committee.
@@ -44,6 +44,9 @@ Defines the long-term CGH domain roles and presets:
 `longterm/reviewers.py`
 Deterministic business-story, balance-sheet, quality-durability, and quality-at-reasonable-price reviewers. These do not make final decisions; they ground the CGH context. The quality-durability reviewer reflects the `Quality Investing` notes by naming durable quality patterns and common quality traps.
 
+`longterm/thesis_challenge.py`
+Builds the deterministic bull/bear thesis challenge from the research packet, reviewer support, reviewer objections, invalidation conditions, and risk flags. This borrows the useful adversarial-review idea from multi-agent trading architectures without adding another LLM call.
+
 `longterm/review_cadence.py`
 Assigns review cadence and expected holding horizon by company category and risk language.
 
@@ -61,6 +64,9 @@ Provides `CachedRecommendationEnricher`, a daily cache wrapper for recommendatio
 
 `longterm/capital_alert.py`
 Builds informational capital-needed alerts and provider-agnostic email payloads when high-conviction ideas exceed available active-sleeve cash. Alerts can be suppressed with portfolio state when an existing non-protected holding has a sell/reduce recommendation and should fund the better idea first. These payloads are not instructions to deposit funds and do not execute trades.
+
+`longterm/risk_review.py`
+Builds deterministic dry-run risk reviews for account-action intents. Reviews check protected symbols, benchmark gate state, thesis/review status, position-size warnings, and active-sleeve cash warnings before actions are surfaced as machine-readable plan intents.
 
 `longterm/capital_alert_cli.py`
 Provides a dry-run-first command surface for rendering capital-needed markdown or explicitly sending the prepared payload through the configured SMTP sender.

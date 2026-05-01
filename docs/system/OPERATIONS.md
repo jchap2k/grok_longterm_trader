@@ -117,6 +117,15 @@ python scripts/longterm_next_actions.py --journal-db path\to\journal.db --portfo
 python scripts/longterm_action_plan.py --symbol NVDA --portfolio-state path\to\portfolio.json --decision-file path\to\decision.json
 ```
 
+Dry-run account action plans include a machine-readable `risk_review` on each
+intent. This is not broker execution; it is the local risk panel that checks
+protected symbols, benchmark-gate pauses, stale or weakening thesis status,
+oversized suggested positions, and active-sleeve cash warnings.
+
+The research runner also sends a deterministic thesis challenge into the CGH
+decision context. That challenge makes the bull case, bear case, key risks, and
+kill criteria explicit before a final recommendation is parsed and journaled.
+
 ## Recommendation Rank History
 
 Recommendation reports can record an explicit rank snapshot so future reports can

@@ -15,6 +15,7 @@ from longterm.portfolio_state import PortfolioState
 from longterm.rebalance_planner import RebalancePlanner
 from longterm.report_builder import RecommendationTableBuilder
 from longterm.review_status import ReviewStatusBuilder
+from longterm.risk_review import RiskReviewBuilder
 from portfolio.portfolio_profile import PortfolioProfile
 from research.intake import create_research_packet_from_idea
 
@@ -32,6 +33,7 @@ class AccountActionIntent:
     decision_id: str = ""
     trade_id: str = ""
     lesson_id: str = ""
+    risk_review: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -59,11 +61,13 @@ class AccountActionPlanBuilder:
         rebalance_planner: RebalancePlanner | None = None,
         generated_at_func: Callable[[], str] | None = None,
         plan_id_func: Callable[[], str] | None = None,
+        risk_review_builder: RiskReviewBuilder | None = None,
     ):
         self.benchmark_guard = benchmark_guard or BenchmarkGuard()
         self.rebalance_planner = rebalance_planner or RebalancePlanner()
         self.generated_at_func = generated_at_func or _now_iso
         self.plan_id_func = plan_id_func or (lambda: str(uuid.uuid4()))
+        self.risk_review_builder = risk_review_builder or RiskReviewBuilder()
 
     def build(
         self,
@@ -93,6 +97,14 @@ class AccountActionPlanBuilder:
 
         for row in recommendations:
             symbol = str(row.get("symbol") or "").upper()
+            risk_review = self.risk_review_builder.build(
+                row,
+                profile=profile,
+                portfolio_state=portfolio_state,
+                benchmark_guard_result=guard_result,
+                review_status=review_status_by_symbol.get(symbol, {}),
+                intent_type=str(row.get("recommendation") or ""),
+            )
             packet = create_research_packet_from_idea({"symbol": symbol}, profile=profile)
             planned = ActionPlanner().plan(
                 packet,
@@ -106,7 +118,7 @@ class AccountActionPlanBuilder:
             )
 
             if planned.action == "PROTECTED_HOLD":
-                intents.append(_blocked_intent(row, planned.reason))
+                intents.append(_blocked_intent(row, planned.reason, risk_review=risk_review.to_dict()))
                 blocked_reasons.append(planned.reason)
                 continue
 
@@ -124,18 +136,20 @@ class AccountActionPlanBuilder:
                         allowed=True,
                         reason=reason,
                         decision_id=str(row.get("decision_id") or ""),
+                        risk_review=risk_review.to_dict(),
                     )
                 )
                 continue
 
             if planned.order_intent == "BUY":
-                if guard_result.should_pause_new_buys:
-                    intents.append(_blocked_intent(row, guard_result.reason))
-                    blocked_reasons.append(guard_result.reason)
+                if not risk_review.allowed:
+                    reason = "; ".join(risk_review.veto_reasons) or guard_result.reason
+                    intents.append(_blocked_intent(row, reason, risk_review=risk_review.to_dict()))
+                    blocked_reasons.append(reason)
                     continue
                 if planned.capital_needed_alert:
                     if suppression_reason:
-                        intents.append(_blocked_intent(row, suppression_reason))
+                        intents.append(_blocked_intent(row, suppression_reason, risk_review=risk_review.to_dict()))
                         blocked_reasons.append(suppression_reason)
                     else:
                         intents.append(
@@ -151,6 +165,7 @@ class AccountActionPlanBuilder:
                                     "additional active-sleeve cash."
                                 ),
                                 decision_id=str(row.get("decision_id") or ""),
+                                risk_review=risk_review.to_dict(),
                             )
                         )
                         blocked_reasons.append("Capital shortfall.")
@@ -165,6 +180,7 @@ class AccountActionPlanBuilder:
                         allowed=planned.allowed,
                         reason=planned.reason,
                         decision_id=str(row.get("decision_id") or ""),
+                        risk_review=risk_review.to_dict(),
                     )
                 )
 
@@ -176,6 +192,18 @@ class AccountActionPlanBuilder:
             review_status_by_symbol=review_status_by_symbol,
         )
         if proposal.should_rebalance:
+            rebalance_risk = self.risk_review_builder.build(
+                {
+                    "symbol": proposal.target_symbol,
+                    "recommendation": "REBALANCE",
+                    "suggested_size_pct": proposal.target_suggested_size_pct,
+                },
+                profile=profile,
+                portfolio_state=portfolio_state,
+                benchmark_guard_result=guard_result,
+                review_status=review_status_by_symbol.get(proposal.target_symbol, {}),
+                intent_type="REBALANCE",
+            )
             intents.append(
                 AccountActionIntent(
                     symbol=proposal.target_symbol,
@@ -187,6 +215,7 @@ class AccountActionPlanBuilder:
                     reason=proposal.reason,
                     source_symbol=proposal.fund_from_symbol,
                     decision_id=proposal.target_decision_id,
+                    risk_review=rebalance_risk.to_dict(),
                 )
             )
 
@@ -203,7 +232,7 @@ class AccountActionPlanBuilder:
         )
 
 
-def _blocked_intent(row: dict, reason: str) -> AccountActionIntent:
+def _blocked_intent(row: dict, reason: str, *, risk_review: dict | None = None) -> AccountActionIntent:
     return AccountActionIntent(
         symbol=str(row.get("symbol") or "").upper(),
         intent_type="BLOCKED",
@@ -213,6 +242,7 @@ def _blocked_intent(row: dict, reason: str) -> AccountActionIntent:
         allowed=False,
         reason=reason,
         decision_id=str(row.get("decision_id") or ""),
+        risk_review=risk_review or {},
     )
 
 

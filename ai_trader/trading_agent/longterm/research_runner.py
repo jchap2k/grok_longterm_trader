@@ -16,6 +16,7 @@ from longterm.reviewers import (
     QualityAtReasonablePriceReviewer,
     ReviewResult,
 )
+from longterm.thesis_challenge import ThesisChallengeReviewer
 from research.research_packet import ResearchPacket
 
 
@@ -84,6 +85,11 @@ class LongTermResearchRunner:
         )
         review_results = self._run_deterministic_reviews(packet)
         cadence = self.review_cadence_policy.assign(packet)
+        thesis_challenge = ThesisChallengeReviewer().review(
+            packet,
+            review_results=review_results,
+            risk_flags=risk_flags,
+        )
         return {
             "company_research_packet": (
                 f"Symbol: {packet.symbol}\n"
@@ -104,6 +110,7 @@ class LongTermResearchRunner:
             "supporting_evidence": supporting_evidence,
             "risk_flags": risk_flags,
             "deterministic_reviews": self._format_review_results(review_results),
+            "thesis_challenge": thesis_challenge.to_context_text(),
             "review_cadence": (
                 f"review_cadence={cadence.review_cadence}; "
                 f"expected_hold_horizon={cadence.expected_hold_horizon}; "
