@@ -4,7 +4,7 @@ Last updated: 2026-04-30
 Repo: `S:\LLM_files\grok_longterm_trader`
 Remote: `https://github.com/jchap2k/grok_longterm_trader.git`
 Branch: `main`
-Latest feature commit: `84f77c0 Add discovery enrichment inputs`
+Latest feature commit: `b80ad99 Gate incomplete research packets`
 
 This file is a temporary handoff document for another Codex instance. It is meant to explain:
 - what this project is
@@ -72,6 +72,7 @@ Additional continuation work completed on 2026-04-30:
 - wired discovery candidates into one-cycle orchestration and scheduler inputs so discovery can feed research cycles directly
 - added local discovery source loaders for S&P-style CSVs, ETF holdings CSVs, and NasdaqTrader pipe-delimited listing files; discovery, cycle, and scheduler CLIs can now ingest those files directly
 - added local/cacheable discovery enrichment inputs so candidate JSON/source files can be hydrated with market cap, growth, profitability, leverage, trend, leadership, valuation, rank, and score fields before discovery scoring
+- added a minimum `ResearchPacket` completeness gate so thin ticker stubs are skipped before LLM research; skipped ideas are counted and preserved in cycle/scheduler artifacts
 
 What those changes accomplished:
 
@@ -105,6 +106,7 @@ What those changes accomplished:
 
 ### Research and decision pipeline
 - Raw ideas can be normalized into canonical `ResearchPacket` objects.
+- `ResearchPacket` now owns the minimum completeness rule for deep research: company name, idea source, and at least one research-context field (`business_summary`, `thesis_summary`, or `source_notes`). Incomplete packets are skipped before `runner.run_and_record(...)`.
 - Deterministic local reviewers ground the decision with business-story, balance-sheet, quality-durability, and quality-at-reasonable-price context.
 - The long-term CGH committee then produces the actual structured decision.
 - That decision is persisted into the journal for later reporting and benchmarking.
@@ -318,6 +320,12 @@ Additional automated validation completed on 2026-04-30:
   - works
 - `python -m pytest longterm -q`
   - now passes with `153 passed`
+- Grok fix validation for the research packet completeness gate
+  - returned 85% confidence; implemented the reusable `ResearchPacket` method and skipped-ideas artifact recommendation
+- `python -m py_compile research/research_packet.py longterm/orchestration.py longterm/scheduler.py`
+  - works
+- `python -m pytest longterm -q`
+  - now passes with `156 passed`
 
 ## 4. Critical Guardrails
 
