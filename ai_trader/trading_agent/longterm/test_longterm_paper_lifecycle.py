@@ -108,6 +108,30 @@ def test_paper_lifecycle_summary_surfaces_blocked_and_rejected_states(tmp_path):
     assert summary["state_counts"]["execution_rejected"] == 1
 
 
+def test_paper_lifecycle_summary_surfaces_canceled_state(tmp_path):
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    ledger.record_execution_event(
+        {
+            "decision_id": "decision-nvda",
+            "preview_id": "preview-nvda",
+            "preview_log_id": "preview-log-1",
+            "plan_id": "plan-1",
+            "broker_order_id": "broker-order-1",
+            "symbol": "NVDA",
+            "side": "buy",
+            "notional": 1000,
+            "status": "canceled",
+            "paper_mode": True,
+            "live_mode": False,
+        }
+    )
+
+    summary = build_paper_lifecycle_summary(ledger)
+
+    assert summary["items"][0]["lifecycle_state"] == "execution_canceled"
+    assert summary["state_counts"]["execution_canceled"] == 1
+
+
 def test_paper_lifecycle_cli_outputs_json(tmp_path, capsys):
     ledger_path = tmp_path / "paper.db"
     price_map_path = tmp_path / "prices.json"

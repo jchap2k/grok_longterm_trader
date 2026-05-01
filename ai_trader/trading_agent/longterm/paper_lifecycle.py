@@ -111,6 +111,8 @@ def _lifecycle_state(item: Mapping[str, Any]) -> str:
         return "filled_outcome_pending"
     if execution_status == "rejected":
         return "execution_rejected"
+    if execution_status in {"canceled", "cancelled", "expired"}:
+        return "execution_canceled"
     if execution_status == "status_refresh_error":
         return "execution_status_error"
     if execution_status:

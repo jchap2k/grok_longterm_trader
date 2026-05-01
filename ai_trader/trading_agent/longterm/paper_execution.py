@@ -348,7 +348,7 @@ class PaperExecutionBoundary:
                     client_order_id=item["client_order_id"],
                     time_in_force="day",
                 )
-                broker_status = str(response.get("status") or "").lower()
+                broker_status = _normalize_broker_status(response.get("status"))
                 broker_order_id = str(response.get("id") or response.get("order_id") or "")
                 if broker_status in SUBMITTED_BROKER_STATUSES:
                     item["status"] = "submitted"
@@ -517,6 +517,13 @@ def _dedupe(values: list[str]) -> list[str]:
             seen.add(text)
             result.append(text)
     return result
+
+
+def _normalize_broker_status(value: Any) -> str:
+    text = str(value or "").lower().strip()
+    if "." in text:
+        text = text.rsplit(".", 1)[-1]
+    return text
 
 
 __all__ = [

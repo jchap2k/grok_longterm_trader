@@ -191,6 +191,31 @@ def test_paper_execution_submit_records_submitted_with_deterministic_client_orde
     assert events[0]["event_json"]["active_rules_hash"] == result["active_rules"]["sha256"]
 
 
+def test_paper_execution_normalizes_alpaca_enum_statuses_as_submitted(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = _record_decision(journal)
+    _record_preview(ledger, decision_id)
+    broker = FakePaperBroker(status="OrderStatus.PENDING_NEW", order_id="alpaca-paper-enum-1")
+
+    result = _boundary(tmp_path).run(
+        _action_plan(decision_id),
+        journal=journal,
+        ledger=ledger,
+        profile=PortfolioProfile(protected_symbols=["FXAIX"]),
+        portfolio_state=PortfolioState(cash=5000, protected_symbols=["FXAIX"]),
+        broker=broker,
+        submit=True,
+    )
+
+    events = ledger.list_execution_events(limit=10)
+    assert result["submitted_count"] == 1
+    assert result["rejected_count"] == 0
+    assert events[0]["status"] == "submitted"
+    assert events[0]["broker_order_id"] == "alpaca-paper-enum-1"
+    assert events[0]["event_json"]["broker_status"] == "pending_new"
+
+
 def test_paper_execution_duplicate_preview_is_blocked_before_broker_call(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     ledger = PaperTradeLedger(tmp_path / "paper.db")
