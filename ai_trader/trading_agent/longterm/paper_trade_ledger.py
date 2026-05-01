@@ -272,6 +272,25 @@ class PaperTradeLedger:
                 result[decision_id] = row
         return result
 
+    def has_execution_status(
+        self,
+        *,
+        broker_order_id: str,
+        status: str,
+    ) -> bool:
+        """Return whether an execution status has already been recorded."""
+        normalized_order = str(broker_order_id or "")
+        normalized_status = str(status or "")
+        if not normalized_order or not normalized_status:
+            return False
+        for row in self.list_execution_events(limit=10000):
+            if (
+                str(row.get("broker_order_id") or "") == normalized_order
+                and str(row.get("status") or "") == normalized_status
+            ):
+                return True
+        return False
+
     def _eligibility_event_exists(self, decision_id: str, preview_id: str, status: str) -> bool:
         conn = sqlite3.connect(self.db_path)
         try:

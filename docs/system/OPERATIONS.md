@@ -346,6 +346,18 @@ Stage 6B is deliberately narrow:
 - It uses deterministic `client_order_id` values for broker idempotency and records `submission_attempt_id` on every event.
 - It is not scheduler-wired and cannot submit live orders.
 
+Refresh statuses for already-submitted Alpaca paper orders:
+
+```powershell
+python scripts/longterm_paper_order_status_refresh.py --ledger-db path\to\paper_ledger.db
+python scripts/longterm_paper_order_status_refresh.py --ledger-db path\to\paper_ledger.db --json
+```
+
+Status refresh is read-only with respect to the broker. It looks up submitted
+paper order IDs, calls Alpaca paper order-status reads, and appends status events
+such as `filled`, `partially_filled`, `rejected`, or `status_refresh_error` to
+`PaperTradeLedger`. It does not submit, cancel, replace, or modify orders.
+
 Run the feedback refresh maintenance loop:
 
 ```powershell

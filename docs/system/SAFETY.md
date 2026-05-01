@@ -75,3 +75,5 @@ Before live execution exists:
 - require deterministic `client_order_id`, `submission_attempt_id`, active
   rules hash, `paper_mode=true`, and `live_mode=false` in every paper execution
   event
+- keep paper order status refresh broker-read-only; it may append status events
+  to the paper ledger, but it must not submit, cancel, replace, or modify orders
