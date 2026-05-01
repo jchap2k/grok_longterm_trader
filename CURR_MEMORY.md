@@ -4,7 +4,7 @@ Last updated: 2026-05-01
 Repo: `S:\LLM_files\grok_longterm_trader`
 Remote: `https://github.com/jchap2k/grok_longterm_trader.git`
 Branch: `main`
-Latest feature commit: `9ded86f Add thesis challenge and risk review`
+Latest feature commit: `64be879 Add durable thesis review workflow`
 
 This file is a temporary handoff document for another Codex instance. It is meant to explain:
 - what this project is
@@ -80,6 +80,7 @@ Additional continuation work completed on 2026-04-30:
 - added recommendation rank-history snapshots so reports can show previous rank and rank movement
 - hardened thesis/review states to distinguish `healthy`, `stale`, `weakening`, and `broken`
 - added deterministic bull/bear thesis challenge context and per-intent risk-review artifacts inspired by the multi-agent trading architecture article, without adding extra LLM calls or live execution
+- added a durable thesis-review workflow so operator reviews can be recorded, listed, and used by future report/next-actions status calculations
 
 What those changes accomplished:
 
@@ -127,6 +128,7 @@ What those changes accomplished:
 - Recommendation reports can now show previous rank and rank movement when rank snapshots exist; cycle-generated reports record snapshots, and the journal CLI can explicitly record snapshots with `--record-rank-snapshot`.
 - Enrichment adds daily/volatile fields like price, change, market cap, revenue growth, estimated return range, and drawdown without polluting the immutable journal.
 - Review status can be derived later from stored packets without mutating historical decision records. Thesis states now distinguish stale overdue reviews, weakening risk-language evidence, and broken invalidation conditions.
+- Durable thesis review events can now be recorded in the journal; newer CGH decisions supersede older reviews, while current broken/weakening reviews remain visible until newer evidence or a newer decision changes the thesis.
 
 ### Next-actions / portfolio-aware planning
 - A dry-run action planner can translate a structured decision into a proposed `BUY`, `SELL`, or `NONE`.
@@ -134,12 +136,14 @@ What those changes accomplished:
 - A deterministic `RiskReviewBuilder` now reviews dry-run account-action intents for protected-symbol vetoes, benchmark-gate pauses, stale/weakening/broken thesis status, oversized suggested positions, and cash warnings.
 - The decision journal now has a `longterm_action_plan_journal` table for storing generated dry-run action plans.
 - The decision journal now has a `longterm_deferred_research_queue` table for open/resolved deferred enrichment tasks.
+- The decision journal now has a `longterm_thesis_review_journal` table for audited thesis-review events with symbol, state, trigger, evidence, optional decision/trade linkage, and optional market value context.
 - Portfolio state can be loaded as read-only context.
 - Protected holdings are separated from active holdings.
 - The benchmark guard can pause new buys if active results lag `FXAIX`.
 - The rebalance planner can propose rotations from weaker active holdings into stronger candidates without touching protected holdings.
 - Rebalance source selection now considers review risk as well as raw rank: review-due, stale, deteriorating, broken, or invalidated source holdings can receive a small score adjustment, and the score/gap are rendered in dry-run markdown.
 - Next-actions markdown can now show a `Deferred Research Queue` section for incomplete research packets, including symbol, missing fields, provenance, next step, and suggested enrichment command.
+- Held positions with `broken` or `weakening` thesis state are elevated to `urgent_review_holding` instead of ordinary review rows.
 
 ### Capital alerting
 - Capital-needed alerts exist but are informational only.
@@ -371,6 +375,16 @@ Additional automated validation completed on 2026-04-30:
   - works
 - `python -m pytest ai_trader/trading_agent/longterm -q`
   - now passes with `168 passed`
+- Grok plan review for durable thesis review workflow
+  - returned `proceed_with_notes` at 85% confidence; V1 added nullable decision/trade/market-value trace fields, timestamp precedence, and next-actions urgency while keeping reviews as dry-run audit events
+- `python -m py_compile ai_trader/trading_agent/longterm/decision_journal.py ai_trader/trading_agent/longterm/review_status.py ai_trader/trading_agent/longterm/journal_cli.py ai_trader/trading_agent/longterm/next_actions.py`
+  - works
+- `python -m pytest ai_trader/trading_agent/longterm -q`
+  - now passes with `173 passed`
+- `python scripts/longterm_journal.py thesis-review-record --journal-db <temp db> --symbol AAPL --thesis-state healthy --status reviewed --notes "Smoke review." --evidence "Services revenue still growing." --review-trigger manual --current-market-value 4200`
+  - works
+- `python scripts/longterm_journal.py thesis-review-list --journal-db <temp db> --limit 1`
+  - works
 
 ## 4. Critical Guardrails
 
@@ -602,15 +616,16 @@ Potential files:
 - `longterm/review_status.py`
 
 ### Phase 5 - Thesis-monitoring and review workflow hardening
-Status: foundation done
+Status: durable review events started
 Priority: medium-high
 
 Goal:
 - make the system genuinely useful after initial recommendation, not just at idea entry
 
 Planned enhancements:
-- improved review-due generation
+- improved review-due generation (partially done through durable review events)
 - clearer thesis-broken / thesis-weakening / thesis-on-track states
+- durable operator review recording and listing (done)
 - cadence-specific review templates by company type
 - better handling of repeated decisions for the same symbol
 
@@ -735,6 +750,8 @@ From `ai_trader/trading_agent`:
 - `python scripts/longterm_journal.py report --journal-db path\\to\\journal.db --limit 20 --record-rank-snapshot`
 - `python scripts/longterm_journal.py deferred-list --journal-db path\\to\\journal.db`
 - `python scripts/longterm_journal.py deferred-resolve --journal-db path\\to\\journal.db --deferred-id <id> --notes "Enriched from fundamentals cache."`
+- `python scripts/longterm_journal.py thesis-review-record --symbol AAPL --thesis-state healthy --notes "Reviewed after earnings." --evidence "Services revenue still growing."`
+- `python scripts/longterm_journal.py thesis-review-list --limit 20`
 - `python scripts/longterm_next_actions.py --portfolio-state path\\to\\portfolio.json --limit 10`
 - `python scripts/longterm_motley_fool_capture.py --source dashboard`
 - `python scripts/longterm_motley_fool_setup.py`
@@ -795,7 +812,7 @@ For this repo, trust these first:
 Once the scheduler/orchestration layer is built and validated, the next likely best sequence is:
 
 1. Improve recommendation-table ranking/reporting maturity.
-2. Strengthen thesis-monitor and review workflow.
+2. Strengthen thesis-monitor and review workflow. Durable review events are now started; next useful work is review templates and richer evidence ingestion.
 3. Refine next-actions / rebalance decision quality.
 4. Tune review-aware rebalance scoring weights with actual journal outcomes.
 5. Only then start a true live-readiness design review.
