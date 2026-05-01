@@ -416,6 +416,7 @@ Stage 6B paper execution work:
 ```powershell
 python scripts/longterm_position_report.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --paper-ledger-db path\to\paper_ledger.db
 python scripts/longterm_position_report.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --period quarterly --paper-ledger-db path\to\paper_ledger.db
+python scripts/longterm_position_report.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --paper-ledger-db path\to\paper_ledger.db --paper-outcome-price-map path\to\prices.json
 ```
 
 The report is read-only and not scheduler-wired yet. It summarizes cash, active
@@ -423,7 +424,8 @@ sleeve value, protected/core value, and tracked portfolio value, then adds a
 per-position intelligence section using collected journal/research context:
 latest recommendation, rank, repeat recommendation count, thesis, review status,
 paper preview status, eligibility feedback, reconciliation notes, outcome versus
-`FXAIX`, outcome freshness, new-information notes, invalidation conditions, and
+`FXAIX`, paper fill outcome versus `FXAIX` when an explicit price map is
+supplied, outcome freshness, new-information notes, invalidation conditions, and
 knowledge gaps.
 
 Send the same report through the local Brevo-compatible email config only when

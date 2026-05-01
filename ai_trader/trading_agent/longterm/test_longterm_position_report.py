@@ -112,6 +112,43 @@ def test_position_report_includes_portfolio_summary_and_collected_position_knowl
     assert "Knowledge gaps: none" in report
 
 
+def test_position_report_includes_provider_free_paper_outcomes_when_price_map_supplied(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    decision_id = _record_decision(journal)
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    ledger.record_execution_event(
+        {
+            "decision_id": decision_id,
+            "preview_id": "preview-nvda",
+            "preview_log_id": "preview-log-1",
+            "plan_id": "plan-1",
+            "broker_order_id": "broker-order-1",
+            "symbol": "NVDA",
+            "side": "buy",
+            "notional": 1000,
+            "status": "filled",
+            "filled_quantity": 10,
+            "filled_price": 100,
+            "benchmark_symbol": "FXAIX",
+            "benchmark_price_at_fill": 100,
+            "paper_mode": True,
+            "live_mode": False,
+        }
+    )
+    portfolio = PortfolioState(cash=1500, holdings=[{"symbol": "NVDA", "market_value": 4200}])
+
+    report = build_position_intelligence_report(
+        journal,
+        portfolio_state=portfolio,
+        paper_ledger=ledger,
+        paper_outcome_price_map={"NVDA": 120, "FXAIX": 110},
+    )
+
+    assert "Paper outcome status: evaluated" in report
+    assert "Paper fill return: 20.0%" in report
+    assert "Paper outcome vs FXAIX: 10.0%" in report
+
+
 def test_position_report_surfaces_positions_without_collected_research_as_knowledge_gap(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     portfolio = PortfolioState(
@@ -144,6 +181,55 @@ def test_position_report_cli_outputs_markdown(tmp_path, capsys):
     output = capsys.readouterr().out
     assert "# Long-Term Position Intelligence Report" in output
     assert "## NVDA - Nvidia" in output
+
+
+def test_position_report_cli_accepts_paper_outcome_price_map(tmp_path, capsys):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    decision_id = _record_decision(journal)
+    portfolio_path = tmp_path / "portfolio.json"
+    paper_ledger_path = tmp_path / "paper.db"
+    price_map_path = tmp_path / "prices.json"
+    portfolio_path.write_text(
+        json.dumps({"cash": 1500, "holdings": [{"symbol": "NVDA", "market_value": 4200}]}),
+        encoding="utf-8",
+    )
+    price_map_path.write_text(json.dumps({"NVDA": 120, "FXAIX": 110}), encoding="utf-8")
+    ledger = PaperTradeLedger(paper_ledger_path)
+    ledger.record_execution_event(
+        {
+            "decision_id": decision_id,
+            "preview_id": "preview-nvda",
+            "preview_log_id": "preview-log-1",
+            "plan_id": "plan-1",
+            "broker_order_id": "broker-order-1",
+            "symbol": "NVDA",
+            "side": "buy",
+            "notional": 1000,
+            "status": "filled",
+            "filled_price": 100,
+            "benchmark_price_at_fill": 100,
+            "paper_mode": True,
+            "live_mode": False,
+        }
+    )
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--journal-db",
+            str(journal.db_path),
+            "--portfolio-state",
+            str(portfolio_path),
+            "--paper-ledger-db",
+            str(paper_ledger_path),
+            "--paper-outcome-price-map",
+            str(price_map_path),
+        ]
+    )
+
+    assert run_cli(args) == 0
+    output = capsys.readouterr().out
+    assert "Paper outcome status: evaluated" in output
+    assert "Paper outcome vs FXAIX: 10.0%" in output
 
 
 def test_position_report_email_payload_is_periodic_and_send_gated(tmp_path):

@@ -9,6 +9,7 @@ from longterm.capital_alert import CapitalNeededEmail
 from longterm.decision_journal import LongTermDecisionJournal
 from longterm.feedback_refresh import outcome_freshness
 from longterm.paper_execution_status import PaperExecutionStatusBuilder
+from longterm.paper_outcomes import summarize_paper_outcomes
 from longterm.paper_preview_status import PaperPreviewStatusBuilder
 from longterm.paper_trade_ledger import PaperTradeLedger
 from longterm.portfolio_state import PortfolioState
@@ -21,6 +22,7 @@ def build_position_intelligence_report(
     *,
     portfolio_state: PortfolioState,
     paper_ledger: PaperTradeLedger | None = None,
+    paper_outcome_price_map: Mapping[str, Any] | None = None,
     feedback_summary: Mapping[str, Any] | None = None,
     limit: int = 100,
 ) -> str:
@@ -44,6 +46,10 @@ def build_position_intelligence_report(
         default_items=outcome_freshness(journal).get("items") or [],
     )
     eligibility_by_symbol = _feedback_by_symbol(feedback_summary, "eligibility")
+    paper_outcomes_by_symbol = _paper_outcomes_by_symbol(
+        paper_ledger=paper_ledger,
+        price_map=paper_outcome_price_map,
+    )
 
     lines = [
         "# Long-Term Position Intelligence Report",
@@ -68,6 +74,7 @@ def build_position_intelligence_report(
         packet = packets_by_symbol.get(symbol, {})
         freshness = freshness_by_symbol.get(symbol, {})
         eligibility = eligibility_by_symbol.get(symbol, {})
+        paper_outcome = paper_outcomes_by_symbol.get(symbol, {})
         title_company = row.get("company_name") or profile.get("company_name") or packet.get("company_name") or symbol
         gaps = _knowledge_gaps(row=row, profile=profile, freshness=freshness)
 
@@ -86,6 +93,9 @@ def build_position_intelligence_report(
                 f"- Paper preview blocked reasons: {_join(row.get('paper_preview_blocked_reasons') or profile.get('paper_preview_blocked_reasons')) or 'none'}",
                 f"- Paper execution: {row.get('paper_execution_status') or row.get('paper_execution_latest_status') or 'none'}",
                 f"- Paper broker order: {row.get('paper_execution_broker_order_id') or 'none'}",
+                f"- Paper outcome status: {paper_outcome.get('status') or 'not evaluated'}",
+                f"- Paper fill return: {_pct(paper_outcome.get('paper_return_pct'))}",
+                f"- Paper outcome vs FXAIX: {_pct(paper_outcome.get('excess_return_pct'))}",
                 f"- Paper execution eligibility: {eligibility.get('status') or 'not evaluated'}",
                 f"- Reconciliation: {profile.get('latest_reconciliation_status') or 'none'}",
                 f"- Reconciliation notes: {_join(profile.get('paper_reconciliation_notes')) or 'none'}",
@@ -106,6 +116,7 @@ def build_position_intelligence_email(
     portfolio_state: PortfolioState,
     recipient_email: str,
     paper_ledger: PaperTradeLedger | None = None,
+    paper_outcome_price_map: Mapping[str, Any] | None = None,
     feedback_summary: Mapping[str, Any] | None = None,
     period: str = "monthly",
 ) -> CapitalNeededEmail:
@@ -114,6 +125,7 @@ def build_position_intelligence_email(
         journal,
         portfolio_state=portfolio_state,
         paper_ledger=paper_ledger,
+        paper_outcome_price_map=paper_outcome_price_map,
         feedback_summary=feedback_summary,
     )
     normalized_period = period.lower().strip() or "monthly"
@@ -168,6 +180,22 @@ def _feedback_by_symbol(
         items = default_items or []
     result: dict[str, dict[str, Any]] = {}
     for item in items:
+        symbol = str(item.get("symbol") or "").upper()
+        if symbol and symbol not in result:
+            result[symbol] = dict(item)
+    return result
+
+
+def _paper_outcomes_by_symbol(
+    *,
+    paper_ledger: PaperTradeLedger | None,
+    price_map: Mapping[str, Any] | None,
+) -> dict[str, dict[str, Any]]:
+    if paper_ledger is None or price_map is None:
+        return {}
+    payload = summarize_paper_outcomes(paper_ledger, price_map=price_map)
+    result: dict[str, dict[str, Any]] = {}
+    for item in payload.get("items") or []:
         symbol = str(item.get("symbol") or "").upper()
         if symbol and symbol not in result:
             result[symbol] = dict(item)
