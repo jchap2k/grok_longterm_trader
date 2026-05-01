@@ -346,6 +346,37 @@ The generated `feedback_tuning_inputs` payload is explicitly analysis-only. It
 may inform human review and future LLM planning, but it must not mutate
 recommendation ranks, rebalance weights, position sizing, or action planning.
 
+## Position Intelligence Report
+
+Generate an on-demand monthly or quarterly position intelligence report before
+Stage 6B paper execution work:
+
+```powershell
+python scripts/longterm_position_report.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --paper-ledger-db path\to\paper_ledger.db
+python scripts/longterm_position_report.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --period quarterly --paper-ledger-db path\to\paper_ledger.db
+```
+
+The report is read-only and not scheduler-wired yet. It summarizes cash, active
+sleeve value, protected/core value, and tracked portfolio value, then adds a
+per-position intelligence section using collected journal/research context:
+latest recommendation, rank, repeat recommendation count, thesis, review status,
+paper preview status, eligibility feedback, reconciliation notes, outcome versus
+`FXAIX`, outcome freshness, new-information notes, invalidation conditions, and
+knowledge gaps.
+
+Send the same report through the local Brevo-compatible email config only when
+explicitly intended:
+
+```powershell
+python scripts/longterm_position_report.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --period monthly --paper-ledger-db path\to\paper_ledger.db --email-config path\to\email_notifications.json --send
+python scripts/longterm_position_report.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --period quarterly --paper-ledger-db path\to\paper_ledger.db --recipient-email you@example.com --send
+```
+
+Position intelligence emails are informational only. They do not authorize
+orders, mutate ranking, change sizing, refresh prices, or trigger broker calls.
+Automatic monthly/quarterly scheduling is intentionally deferred until the
+future scheduler block owns cadence and delivery policy.
+
 ## Capital-Needed Email Payloads
 
 Capital-needed emails are informational only. The long-term trader can build provider-agnostic email payloads and send them through a Brevo-compatible SMTP sender, but email sending should remain off until explicitly enabled in a local ignored config file. A capital request should only be sent when a high-conviction candidate lacks active-sleeve cash and existing non-protected holdings do not already have sell/reduce recommendations that should fund the idea first.

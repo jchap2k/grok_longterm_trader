@@ -59,3 +59,7 @@ Before live execution exists:
   interpreted as durable authorization to submit orders
 - keep feedback tuning inputs analysis-only; they must not auto-mutate ranking,
   sizing, rebalance scoring, or action-planner behavior
+- keep monthly/quarterly position intelligence emails informational and
+  on-demand until scheduler policy is explicitly implemented; reports may
+  summarize collected position research and feedback, but they must not
+  authorize orders or trigger broker calls
