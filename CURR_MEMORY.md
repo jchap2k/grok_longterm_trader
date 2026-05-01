@@ -4,7 +4,7 @@ Last updated: 2026-05-01
 Repo: `S:\LLM_files\grok_longterm_trader`
 Remote: `https://github.com/jchap2k/grok_longterm_trader.git`
 Branch: `main`
-Latest feature commit: `4c701d8 Persist deferred research queue`
+Latest feature commit: `24bca99 Advance long-term operator workflows`
 
 This file is a temporary handoff document for another Codex instance. It is meant to explain:
 - what this project is
@@ -76,6 +76,9 @@ Additional continuation work completed on 2026-04-30:
 - added a structured `deferred_research_queue` for skipped research packets with missing fields, provenance bucket, next-step guidance, and a suggested enrichment command
 - surfaced `deferred_research_queue` in next-actions markdown so skipped/incomplete ideas become operator-visible enrichment tasks instead of hidden JSON-only artifacts
 - persisted deferred research queue rows into the decision journal, with CLI commands to list and resolve enrichment tasks across runs
+- made standalone next-actions reports include persisted open deferred research rows from the journal
+- added recommendation rank-history snapshots so reports can show previous rank and rank movement
+- hardened thesis/review states to distinguish `healthy`, `stale`, `weakening`, and `broken`
 
 What those changes accomplished:
 
@@ -119,8 +122,9 @@ What those changes accomplished:
 - A recommendation-table builder now creates ranked rows with traceability.
 - The output is closer to a curated service/research list than a raw log dump.
 - Recommendation rows now include an action-aware ranking score that blends confidence, suggested size, and `BUY` / `ADD` actionability; the markdown report shows both the score and reason.
+- Recommendation reports can now show previous rank and rank movement when rank snapshots exist; cycle-generated reports record snapshots, and the journal CLI can explicitly record snapshots with `--record-rank-snapshot`.
 - Enrichment adds daily/volatile fields like price, change, market cap, revenue growth, estimated return range, and drawdown without polluting the immutable journal.
-- Review status can be derived later from stored packets without mutating historical decision records.
+- Review status can be derived later from stored packets without mutating historical decision records. Thesis states now distinguish stale overdue reviews, weakening risk-language evidence, and broken invalidation conditions.
 
 ### Next-actions / portfolio-aware planning
 - A dry-run action planner can translate a structured decision into a proposed `BUY`, `SELL`, or `NONE`.
@@ -230,6 +234,7 @@ What those changes accomplished:
 - Stored action plans are audit records only; they do not imply execution.
 - Next-actions markdown now includes deferred research rows when supplied by the cycle, making enrichment work visible in the same operator artifact as buy/review/capital-needed actions.
 - Deferred research rows can be listed and resolved through `python scripts/longterm_journal.py deferred-list ...` and `deferred-resolve ...`.
+- Standalone `longterm_next_actions.py` also reads open persisted deferred rows from the journal, so enrichment tasks remain visible after the originating cycle has ended.
 - Scheduler can write the structured JSON summary to disk:
   - `python scripts/run_longterm_scheduler.py --run-once --summary-output path\to\scheduler_summary.json ...`
 
@@ -350,6 +355,12 @@ Additional automated validation completed on 2026-04-30:
   - works
 - `python -m pytest ai_trader/trading_agent/longterm -q`
   - now passes with `161 passed`
+- Grok plan review for roadmap items 1-3
+  - returned `proceed_with_notes` at 85% confidence; implemented schema creation, explicit rank snapshots, deferred next-actions integration, and grounded thesis-state hardening while keeping broker/live execution untouched.
+- `python -m py_compile ai_trader/trading_agent/longterm/decision_journal.py ai_trader/trading_agent/longterm/journal_cli.py ai_trader/trading_agent/longterm/next_actions_cli.py ai_trader/trading_agent/longterm/thesis_monitor.py ai_trader/trading_agent/longterm/report_builder.py ai_trader/trading_agent/longterm/orchestration.py`
+  - works
+- `python -m pytest ai_trader/trading_agent/longterm -q`
+  - now passes with `165 passed`
 
 ## 4. Critical Guardrails
 
@@ -478,6 +489,9 @@ What is already done in Phase 1:
 - the cycle can now emit dry-run capital-alert markdown when active sleeve/cash inputs are supplied
 - the cycle can now pass deferred research items into next-actions markdown so incomplete ideas appear as visible enrichment tasks
 - the cycle can now persist deferred research items to the decision journal when `journal_db_path` is supplied
+- standalone next-actions can now pull persisted deferred research rows from the journal
+- recommendation reports now include previous-rank/rank-movement context once snapshots exist
+- review/thesis status now distinguishes stale, weakening, and broken states
 - scheduler summary output can now be written to disk
 
 What is not done yet in Phase 1:
@@ -687,10 +701,13 @@ This first deliverable is now partially complete:
 - bounded recurring dry-run scheduler wrapper now exists and reloads per-cycle context
 - deferred research queue rows are now visible in cycle-generated next-actions markdown
 - deferred research queue rows now persist in the decision journal and can be listed/resolved with `longterm_journal.py`
+- standalone next-actions now surfaces persisted deferred research rows
+- recommendation rank snapshots and rank movement now exist
+- thesis monitoring now has `healthy`, `stale`, `weakening`, and `broken` states
 
-The next best small milestone is to decide whether persisted deferred rows should
-feed `longterm_next_actions.py` even outside the same cycle, or whether to add
-rank-movement/history to the recommendation table first.
+The next best small milestone is Phase 2 scheduler operating model design:
+decide the daily/weekly cadence for discovery refreshes, research runs, thesis
+reviews, benchmark checks, next-actions/rebalance reports, and capital alerts.
 
 ## 8. Practical Notes For Another Codex
 
@@ -699,6 +716,7 @@ From `ai_trader/trading_agent`:
 - `python -m pytest longterm -q`
 - `python scripts/run_longterm_research.py --symbol AAPL --company-name Apple --thesis "Services and ecosystem durability." --business-summary "Consumer technology platform." --dry-run`
 - `python scripts/longterm_journal.py report --limit 10`
+- `python scripts/longterm_journal.py report --journal-db path\\to\\journal.db --limit 20 --record-rank-snapshot`
 - `python scripts/longterm_journal.py deferred-list --journal-db path\\to\\journal.db`
 - `python scripts/longterm_journal.py deferred-resolve --journal-db path\\to\\journal.db --deferred-id <id> --notes "Enriched from fundamentals cache."`
 - `python scripts/longterm_next_actions.py --portfolio-state path\\to\\portfolio.json --limit 10`
