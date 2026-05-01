@@ -42,6 +42,7 @@ python scripts/longterm_live_readiness.py
 python scripts/longterm_live_readiness.py --json
 python scripts/longterm_live_readiness.py --observed-file path\to\live_readiness_observed.json
 python scripts/longterm_live_readiness.py --observed-file path\to\base_observed.json --observed-fragment path\to\broker_capability_observed.json
+python scripts/longterm_live_readiness_bundle.py --observed-file path\to\base_observed.json --paper-ledger-db path\to\paper_ledger.db --required-order-model whole_share
 ```
 
 `longterm_broker_capabilities.py` is advisory-only. With the default
@@ -59,6 +60,10 @@ a time without hand-editing the main observed JSON.
 `longterm_paper_trading_verification.py` can generate the
 `paper_trading_verified` fragment from the paper execution ledger after a
 successful filled paper order. It is read-only and does not call a broker.
+
+`longterm_live_readiness_bundle.py` combines the base observed file, broker
+capability evidence, and paper-trading verification into one checklist result.
+It is still evidence-only and does not enable live execution.
 
 The command reports readiness only. It does not enable live mode and does not
 place orders.
