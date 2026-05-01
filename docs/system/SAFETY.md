@@ -42,3 +42,6 @@ Before live execution exists:
 - keep rebalance outcome analysis read-only; outcome reports may justify future
   scoring changes, but they must not auto-mutate planner weights or execution
   behavior
+- keep paper reconciliation read-only; reconciliation reports may compare
+  actual paper state to dry-run plans, but they must not submit paper or live
+  orders

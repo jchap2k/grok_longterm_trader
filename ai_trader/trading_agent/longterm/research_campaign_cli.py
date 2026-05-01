@@ -13,6 +13,7 @@ from longterm.research_campaign import (
     mark_research_batch,
     next_research_batch,
     refresh_campaign_counts,
+    summarize_research_campaign,
 )
 
 
@@ -34,6 +35,10 @@ def build_parser() -> argparse.ArgumentParser:
     mark.add_argument("--batch-id", required=True)
     mark.add_argument("--status", choices=sorted(VALID_BATCH_STATUSES), required=True)
     mark.add_argument("--notes", default="")
+
+    summary = subparsers.add_parser("summary", help="Summarize campaign progress.")
+    summary.add_argument("--manifest", required=True)
+    summary.add_argument("--json", action="store_true")
 
     return parser
 
@@ -74,6 +79,14 @@ def run_cli(args: argparse.Namespace) -> int:
         print(json.dumps(manifest, indent=2, sort_keys=True))
         return 0
 
+    if args.command == "summary":
+        summary = summarize_research_campaign(refresh_campaign_counts(_read_json(args.manifest)))
+        if args.json:
+            print(json.dumps(summary, indent=2, sort_keys=True))
+        else:
+            print(_summary_markdown(summary), end="")
+        return 0
+
     raise ValueError(f"Unsupported command: {args.command}")
 
 
@@ -93,6 +106,27 @@ def _write_json(path: str | Path, payload: dict) -> None:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _summary_markdown(summary: dict) -> str:
+    lines = [
+        "# Research Campaign Summary",
+        "",
+        f"- Campaign: {summary.get('campaign_id') or 'n/a'}",
+        f"- Status: {summary.get('status')}",
+        f"- Batches: {summary.get('batch_count')}",
+        f"- Total ideas: {summary.get('total_ideas')}",
+        f"- Completion: {summary.get('completion_pct')}%",
+        "",
+        "| Status | Count |",
+        "| --- | ---: |",
+    ]
+    for status, count in sorted((summary.get("status_counts") or {}).items()):
+        lines.append(f"| {status} | {count} |")
+    next_batch = summary.get("next_batch") or {}
+    if next_batch:
+        lines.extend(["", f"Next batch: `{next_batch.get('batch_id')}`"])
+    return "\n".join(lines) + "\n"
 
 
 __all__ = ["build_parser", "main", "run_cli"]

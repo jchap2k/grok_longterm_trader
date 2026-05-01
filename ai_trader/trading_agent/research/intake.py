@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import fields
 from typing import Any, Mapping
 
 from portfolio.portfolio_profile import PortfolioProfile
@@ -43,4 +44,5 @@ def create_research_packet_from_idea(
         payload.setdefault("benchmark_symbol", profile.benchmark_symbol)
         payload.setdefault("defensive_parking_symbol", profile.defensive_parking_symbol)
 
-    return ResearchPacket(**payload)
+    packet_fields = {field.name for field in fields(ResearchPacket)}
+    return ResearchPacket(**{key: value for key, value in payload.items() if key in packet_fields})

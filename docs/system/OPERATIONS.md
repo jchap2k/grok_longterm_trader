@@ -81,6 +81,12 @@ scoring:
 python scripts/run_longterm_discovery.py --source-file path\to\sp500.csv --source sp500 --enrichment-file path\to\fundamentals.json --enrichment-source fundamentals_cache
 ```
 
+Research-packet enrichment is a second, pre-LLM readiness layer. It keeps
+provider metrics transient, adds source notes, and reports
+`completeness_score`, `completeness_bucket`, and `missing_fields` before ideas
+consume committee calls. Enriched dictionaries remain compatible with
+`ResearchPacket` intake; unknown transient keys are ignored by packet creation.
+
 Write research-ready candidates as an idea batch for the existing research
 cycle:
 
@@ -105,6 +111,7 @@ runs:
 python scripts/longterm_research_campaign.py init --batch-dir path\to\research_batches --manifest-output path\to\research_campaign.json
 python scripts/longterm_research_campaign.py next --manifest path\to\research_campaign.json --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json
 python scripts/longterm_research_campaign.py mark --manifest path\to\research_campaign.json --batch-id research-batch-001 --status completed --notes "Processed and journaled."
+python scripts/longterm_research_campaign.py summary --manifest path\to\research_campaign.json
 ```
 
 The campaign command does not run research automatically. It tracks operator
@@ -228,6 +235,18 @@ python scripts/longterm_next_actions.py --portfolio-state path\to\portfolio.json
 
 The snapshot command is read-only and paper-only. It does not place, cancel, or
 modify orders.
+
+Reconcile the current paper snapshot against a dry-run action plan or expected
+cash before considering any paper-execution feature:
+
+```powershell
+python scripts/longterm_paper_reconciliation.py --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --expected-cash 5000
+python scripts/longterm_paper_reconciliation.py --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --json
+```
+
+The reconciliation report flags missing target symbols, unexpected non-protected
+holdings, target-value mismatches, cash delta, and protected-symbol presence. It
+is read-only and does not submit paper or live orders.
 
 ## Capital-Needed Email Payloads
 

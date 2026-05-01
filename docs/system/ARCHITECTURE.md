@@ -29,6 +29,9 @@ Splits research-ready universe ideas into stable batch files so the operator can
 `longterm/research_campaign.py`
 Tracks multi-batch research campaigns after universe batching. It creates a manifest from `research-batch-*.json` files, records pending/completed/deferred/failed/skipped status, and emits the exact supervised `run_longterm_cycle.py --idea-batch ...` command for the next pending batch. It does not run research automatically.
 
+`longterm/research_packet_enrichment.py`
+Merges local/cacheable enrichment rows into research ideas before `ResearchPacket` intake. It scores packet readiness with `completeness_score`, `completeness_bucket`, and `missing_fields`, while keeping provider-specific metrics transient unless a later decision explicitly journals them.
+
 `longterm/research_runner.py`
 Builds context sections and runs the CGH decision committee through `CheapGrokHeavy`. It now includes a deterministic thesis challenge section so the final decision sees an explicit bull case, bear case, key risks, and kill criteria before producing a recommendation.
 
@@ -129,6 +132,9 @@ Loads read-only portfolio snapshots and separates active versus protected holdin
 `longterm/alpaca_paper_account.py`
 Reads Alpaca paper-account state through the standard broker API, normalizes positions into a read-only snapshot, and can export the same `PortfolioState` contract used by next-actions, benchmark, rebalance, and capital-alert planning. It is paper-only and does not expose order placement.
 
+`longterm/paper_reconciliation.py`
+Compares read-only paper account state against dry-run action-plan targets and expected cash. It reports missing target symbols, extra non-protected symbols, value mismatches, and protected-symbol presence. It is reconciliation only and never submits orders.
+
 `longterm/next_actions.py`
 Combines recommendation table builder output, portfolio state, automatically-derived review status, benchmark guard, and dry-run planner into a prioritized next-actions report. When the benchmark guard pauses new buys, buy candidates are shown as paused rather than actionable. If a high-conviction idea lacks active-sleeve cash, the report surfaces a `capital_needed` alert instead of pretending the buy can proceed.
 
@@ -143,7 +149,7 @@ Checks review due dates and whether current evidence matches invalidation condit
 
 ## Decision Flow
 
-Universe sources -> discovery queue -> research batches -> research campaign manifest -> `ResearchPacket` completeness gate -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> rebalance outcome analysis -> Alpaca paper/read-only portfolio snapshot -> benchmark guard -> dry-run account action plan -> next-actions/report artifacts.
+Universe sources -> discovery queue -> research packet enrichment -> research batches -> research campaign manifest -> `ResearchPacket` completeness gate -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> rebalance outcome analysis -> Alpaca paper/read-only portfolio snapshot -> paper reconciliation -> benchmark guard -> dry-run account action plan -> next-actions/report artifacts.
 
 ## Data Flow Safety
 

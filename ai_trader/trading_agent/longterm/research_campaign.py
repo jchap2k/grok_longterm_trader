@@ -108,6 +108,33 @@ def build_suggested_cycle_command(
     return command
 
 
+def summarize_research_campaign(manifest: dict[str, Any]) -> dict[str, Any]:
+    """Summarize operator progress across a research campaign manifest."""
+    batches = [dict(batch) for batch in manifest.get("batches") or []]
+    status_counts = {status: 0 for status in sorted(VALID_BATCH_STATUSES)}
+    total_ideas = 0
+    blocked_batches = []
+    for batch in batches:
+        status = str(batch.get("status") or "pending").lower()
+        status_counts.setdefault(status, 0)
+        status_counts[status] += 1
+        total_ideas += int(batch.get("idea_count") or 0)
+        if status in {"deferred", "failed"}:
+            blocked_batches.append(batch)
+    completed_count = status_counts.get("completed", 0)
+    batch_count = len(batches)
+    return {
+        "campaign_id": manifest.get("campaign_id", ""),
+        "status": "completed" if batch_count and completed_count == batch_count else "active",
+        "batch_count": batch_count,
+        "total_ideas": total_ideas,
+        "status_counts": status_counts,
+        "completion_pct": round((completed_count / batch_count * 100.0), 2) if batch_count else 0.0,
+        "next_batch": next_research_batch({"batches": batches}),
+        "blocked_batches": blocked_batches,
+    }
+
+
 __all__ = [
     "VALID_BATCH_STATUSES",
     "build_research_campaign_manifest",
@@ -115,4 +142,5 @@ __all__ = [
     "mark_research_batch",
     "next_research_batch",
     "refresh_campaign_counts",
+    "summarize_research_campaign",
 ]
