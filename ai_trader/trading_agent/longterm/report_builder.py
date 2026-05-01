@@ -75,6 +75,14 @@ def _short_id(value: str | None) -> str:
     return (value or "")[:8]
 
 
+def _format_notes(value) -> str:
+    if not value:
+        return ""
+    if isinstance(value, list):
+        return "; ".join(str(item).replace("|", "/") for item in value)
+    return str(value).replace("|", "/")
+
+
 def build_markdown_report(
     journal: LongTermDecisionJournal,
     *,
@@ -107,8 +115,8 @@ def build_markdown_report(
         "",
         "## Recommendation Table",
         "",
-        "| Rank | Rank Score | Decision ID | Symbol | Company | Action | Service | Price | Change | Previous Rank | Rank Move | Market Cap | Type | 1Y Rev. Growth | Return Since Rec | Rec Date | Est. Return | Est. Max Drawdown | Review Due | Thesis State | Paper Preview | Paper Preview ID | Data As Of | Times Rec'd | Notes | Rank Reason | Reason | Link |",
-        "|---:|---:|---|---|---|---|---|---:|---:|---:|---|---:|---|---:|---:|---|---:|---:|---|---|---|---|---|---:|---:|---|---|---|",
+        "| Rank | Rank Score | Decision ID | Symbol | Company | Action | Service | Price | Change | Previous Rank | Rank Move | Market Cap | Type | 1Y Rev. Growth | Return Since Rec | Rec Date | Est. Return | Est. Max Drawdown | Review Due | Thesis State | Paper Preview | Paper Preview ID | Data As Of | Times Rec'd | New Info | Notes | Rank Reason | Reason | Link |",
+        "|---:|---:|---|---|---|---|---|---:|---:|---:|---|---:|---|---:|---:|---|---:|---:|---|---|---|---|---|---:|---|---:|---|---|---|",
     ]
 
     for row in RecommendationTableBuilder(
@@ -119,7 +127,7 @@ def build_markdown_report(
         paper_preview_status_by_symbol=paper_preview_status_by_symbol,
         ).build(limit=limit):
         lines.append(
-            "| {rank} | {rank_score} | {decision_id} | {symbol} | {company} | {action} | {service} | {price} | {change} | {previous_rank} | {rank_movement} | {market_cap} | {risk_type} | {growth} | {return_since_rec} | {rec_date} | {return_range} | {drawdown} | {review_due} | {thesis_state} | {paper_preview} | {paper_preview_id} | {data_as_of} | {times} | {notes} | {rank_reason} | {reason} | {link} |".format(
+            "| {rank} | {rank_score} | {decision_id} | {symbol} | {company} | {action} | {service} | {price} | {change} | {previous_rank} | {rank_movement} | {market_cap} | {risk_type} | {growth} | {return_since_rec} | {rec_date} | {return_range} | {drawdown} | {review_due} | {thesis_state} | {paper_preview} | {paper_preview_id} | {data_as_of} | {times} | {new_info} | {notes} | {rank_reason} | {reason} | {link} |".format(
                 rank=row.get("rank", ""),
                 rank_score=_fmt_number(row.get("ranking_score")),
                 decision_id=_short_id(row.get("decision_id")),
@@ -144,6 +152,7 @@ def build_markdown_report(
                 paper_preview_id=row.get("paper_preview_id") or "",
                 data_as_of=row.get("data_as_of") or "",
                 times=row.get("times_recommended") or "",
+                new_info=_format_notes(row.get("new_information_notes")),
                 notes=row.get("discussion_count") or "",
                 rank_reason=row.get("rank_reason") or "",
                 reason=row.get("reason") or "",

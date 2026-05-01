@@ -289,7 +289,8 @@ class LongTermDecisionJournal:
             rows = conn.execute(
                 """
                 SELECT decision_id, timestamp, symbol, company_name, recommendation,
-                       confidence, suggested_size_pct, key_thesis, decision_json
+                       confidence, suggested_size_pct, key_thesis, packet_json,
+                       decision_json
                 FROM longterm_decision_journal
                 WHERE recommendation IN ('BUY', 'ADD', 'HOLD')
                 ORDER BY timestamp DESC
@@ -335,7 +336,11 @@ class LongTermDecisionJournal:
             record["revenue_growth_1y_pct"] = decision.get("revenue_growth_1y_pct")
             record["estimated_return_range"] = decision.get("estimated_return_range") or ""
             record["estimated_max_drawdown_pct"] = decision.get("estimated_max_drawdown_pct")
-            record["times_recommended"] = sum(1 for item in rows if item["symbol"] == symbol)
+            symbol_history = [dict(item) for item in rows if item["symbol"] == symbol]
+            record["times_recommended"] = len(symbol_history)
+            record["repeat_recommendation_count"] = len(symbol_history)
+            record["new_information_notes"] = _new_information_notes(symbol_history)
+            record["new_information_count"] = len(record["new_information_notes"])
             record["discussion_count"] = decision.get("discussion_count")
             ranking_score = _recommendation_ranking_score(record)
             record["ranking_score"] = ranking_score
@@ -783,6 +788,42 @@ def _rank_movement(current_rank: int, previous_rank: int) -> str:
     if current_rank > previous_rank:
         return "down"
     return "unchanged"
+
+
+def _new_information_notes(symbol_history: list[Mapping[str, Any]]) -> list[str]:
+    """Extract repeat-recommendation notes that should enrich a stock profile."""
+    if len(symbol_history) <= 1:
+        return []
+    notes: list[str] = []
+    latest = symbol_history[0]
+    latest_packet = json.loads(str(latest.get("packet_json") or "{}"))
+    for note in latest_packet.get("source_notes") or []:
+        note_text = str(note).strip()
+        if not note_text:
+            continue
+        if "new information" in note_text.lower():
+            notes.append(note_text)
+    latest_thesis = str(latest.get("key_thesis") or "").strip()
+    prior_theses = [
+        str(row.get("key_thesis") or "").strip()
+        for row in symbol_history[1:]
+        if str(row.get("key_thesis") or "").strip()
+    ]
+    for thesis in prior_theses:
+        if latest_thesis and thesis and thesis != latest_thesis:
+            notes.append(f"Prior thesis: {thesis}")
+    return _dedupe_preserve_order(notes)
+
+
+def _dedupe_preserve_order(values: list[str]) -> list[str]:
+    seen = set()
+    result = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
 
 
 def _normalize_missing_fields(value: Any) -> list[str]:

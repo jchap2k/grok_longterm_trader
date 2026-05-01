@@ -631,6 +631,100 @@ def test_recommendation_table_builder_enriches_without_mutating_journal(tmp_path
     assert enricher.calls == ["NVDA"]
 
 
+def test_repeated_recommendations_increment_count_and_surface_new_information(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    journal.record_decision(
+        create_research_packet_from_idea(
+            {
+                "symbol": "NVDA",
+                "company_name": "Nvidia",
+                "idea_source": "motley_fool",
+                "business_summary": "AI accelerator platform.",
+                "source_notes": ["Initial Stock Advisor recommendation."],
+            }
+        ),
+        decision={
+            "recommendation": "BUY",
+            "confidence": 88,
+            "suggested_size_pct": 6,
+            "key_thesis": "AI data center demand remains durable.",
+        },
+    )
+    journal.record_decision(
+        create_research_packet_from_idea(
+            {
+                "symbol": "NVDA",
+                "company_name": "Nvidia",
+                "idea_source": "motley_fool",
+                "business_summary": "AI accelerator platform.",
+                "source_notes": [
+                    "New information: Blackwell supply commentary improved.",
+                    "New information: management raised data-center margin outlook.",
+                ],
+            }
+        ),
+        decision={
+            "recommendation": "BUY",
+            "confidence": 92,
+            "suggested_size_pct": 8,
+            "key_thesis": "Blackwell ramp improves long-term earnings power.",
+        },
+    )
+
+    rows = journal.list_recommendation_table(limit=5)
+
+    assert rows[0]["symbol"] == "NVDA"
+    assert rows[0]["times_recommended"] == 2
+    assert rows[0]["repeat_recommendation_count"] == 2
+    assert rows[0]["new_information_count"] == 3
+    assert "Blackwell supply commentary improved" in rows[0]["new_information_notes"][0]
+    assert "Prior thesis: AI data center demand remains durable." in rows[0]["new_information_notes"]
+
+
+def test_markdown_report_includes_repeat_recommendation_and_new_information_notes(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    journal.record_decision(
+        create_research_packet_from_idea(
+            {
+                "symbol": "NVDA",
+                "company_name": "Nvidia",
+                "idea_source": "motley_fool",
+                "business_summary": "AI accelerator platform.",
+                "source_notes": ["Initial recommendation."],
+            }
+        ),
+        decision={
+            "recommendation": "BUY",
+            "confidence": 88,
+            "suggested_size_pct": 6,
+            "key_thesis": "AI data center demand remains durable.",
+        },
+    )
+    journal.record_decision(
+        create_research_packet_from_idea(
+            {
+                "symbol": "NVDA",
+                "company_name": "Nvidia",
+                "idea_source": "motley_fool",
+                "business_summary": "AI accelerator platform.",
+                "source_notes": ["New information: Blackwell supply commentary improved."],
+            }
+        ),
+        decision={
+            "recommendation": "BUY",
+            "confidence": 92,
+            "suggested_size_pct": 8,
+            "key_thesis": "Blackwell ramp improves long-term earnings power.",
+        },
+    )
+
+    report = build_markdown_report(journal)
+
+    assert "Times Rec'd" in report
+    assert "New Info" in report
+    assert "Blackwell supply commentary improved" in report
+
+
 def test_recommendation_table_builder_marks_review_due_from_review_candidates(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     journal.record_decision(

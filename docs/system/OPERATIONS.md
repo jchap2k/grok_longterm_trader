@@ -31,6 +31,13 @@ python scripts/longterm_journal.py update-outcome --decision-id <id> --candidate
 
 The recommendation table is derived from `DecisionJournal` rows through `RecommendationTableBuilder`. Volatile market/fundamental fields should be enriched at report time and cached daily; do not write transient enrichment directly into the journal unless it becomes part of a durable decision record. Markdown reports include shortened decision IDs so every recommendation row can be traced back to the durable journal entry.
 
+Repeat recommendations are intentional signal, similar to Motley Fool-style
+recommendation counts. The current recommendation row keeps the latest thesis
+while incrementing `Times Rec'd`. If a repeat packet includes source notes marked
+`New information: ...` or the thesis changed versus prior recommendations, the
+report surfaces those notes in `New Info` so the stock profile can be enriched
+before future research or paper-action decisions.
+
 Review status is layered onto the same table with `ReviewStatusBuilder`. It reads stored packet JSON from the journal, applies the configured review cadence through `ThesisMonitor`, and returns `review_due`, `days_since_review`, and `thesis_state` fields for reports and next-action markdown.
 
 Record a completed thesis review after checking earnings, business evidence, or portfolio context:
