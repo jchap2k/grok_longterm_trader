@@ -1,10 +1,10 @@
 # Current Memory - Grok Long-Term Trader
 
-Last updated: 2026-04-30
+Last updated: 2026-05-01
 Repo: `S:\LLM_files\grok_longterm_trader`
 Remote: `https://github.com/jchap2k/grok_longterm_trader.git`
 Branch: `main`
-Latest feature commit: `3fde0fd Add deferred research queue`
+Latest feature commit: `9051a13 Surface deferred research in next actions`
 
 This file is a temporary handoff document for another Codex instance. It is meant to explain:
 - what this project is
@@ -74,6 +74,7 @@ Additional continuation work completed on 2026-04-30:
 - added local/cacheable discovery enrichment inputs so candidate JSON/source files can be hydrated with market cap, growth, profitability, leverage, trend, leadership, valuation, rank, and score fields before discovery scoring
 - added a minimum `ResearchPacket` completeness gate so thin ticker stubs are skipped before LLM research; skipped ideas are counted and preserved in cycle/scheduler artifacts
 - added a structured `deferred_research_queue` for skipped research packets with missing fields, provenance bucket, next-step guidance, and a suggested enrichment command
+- surfaced `deferred_research_queue` in next-actions markdown so skipped/incomplete ideas become operator-visible enrichment tasks instead of hidden JSON-only artifacts
 
 What those changes accomplished:
 
@@ -108,7 +109,7 @@ What those changes accomplished:
 ### Research and decision pipeline
 - Raw ideas can be normalized into canonical `ResearchPacket` objects.
 - `ResearchPacket` now owns the minimum completeness rule for deep research: company name, idea source, and at least one research-context field (`business_summary`, `thesis_summary`, or `source_notes`). Incomplete packets are skipped before `runner.run_and_record(...)`.
-- Skipped packets now also appear in `deferred_research_queue`, turning thin ticker stubs into explicit enrichment work for a later cycle.
+- Skipped packets now also appear in `deferred_research_queue`, turning thin ticker stubs into explicit enrichment work for a later cycle. When the cycle builds next-actions markdown, those deferred items can now render as a dedicated operator-facing enrichment section with missing fields and suggested commands.
 - Deterministic local reviewers ground the decision with business-story, balance-sheet, quality-durability, and quality-at-reasonable-price context.
 - The long-term CGH committee then produces the actual structured decision.
 - That decision is persisted into the journal for later reporting and benchmarking.
@@ -129,6 +130,7 @@ What those changes accomplished:
 - The benchmark guard can pause new buys if active results lag `FXAIX`.
 - The rebalance planner can propose rotations from weaker active holdings into stronger candidates without touching protected holdings.
 - Rebalance source selection now considers review risk as well as raw rank: review-due, stale, deteriorating, broken, or invalidated source holdings can receive a small score adjustment, and the score/gap are rendered in dry-run markdown.
+- Next-actions markdown can now show a `Deferred Research Queue` section for incomplete research packets, including symbol, missing fields, provenance, next step, and suggested enrichment command.
 
 ### Capital alerting
 - Capital-needed alerts exist but are informational only.
@@ -224,6 +226,7 @@ What those changes accomplished:
 - Rebalance markdown is dry-run only and uses the existing `RebalancePlanner`; protected holdings remain excluded. It now includes source/target rank context, sell-down sizing details, decision IDs when recommendation rows provide them, optional review/thesis context, and the benchmark gate reason.
 - Account action plans are dry-run only and are the future paper/live execution contract, not broker orders.
 - Stored action plans are audit records only; they do not imply execution.
+- Next-actions markdown now includes deferred research rows when supplied by the cycle, making enrichment work visible in the same operator artifact as buy/review/capital-needed actions.
 - Scheduler can write the structured JSON summary to disk:
   - `python scripts/run_longterm_scheduler.py --run-once --summary-output path\to\scheduler_summary.json ...`
 
@@ -334,6 +337,10 @@ Additional automated validation completed on 2026-04-30:
   - works
 - `python -m pytest longterm -q`
   - still passes with `156 passed`
+- `python -m py_compile ai_trader/trading_agent/longterm/next_actions.py ai_trader/trading_agent/longterm/orchestration.py`
+  - works
+- `python -m pytest ai_trader/trading_agent/longterm -q`
+  - now passes with `158 passed`
 
 ## 4. Critical Guardrails
 
@@ -460,6 +467,7 @@ What is already done in Phase 1:
 - the cycle can now emit recommendation markdown
 - the cycle can now emit next-actions markdown when given portfolio state
 - the cycle can now emit dry-run capital-alert markdown when active sleeve/cash inputs are supplied
+- the cycle can now pass deferred research items into next-actions markdown so incomplete ideas appear as visible enrichment tasks
 - scheduler summary output can now be written to disk
 
 What is not done yet in Phase 1:
@@ -667,6 +675,11 @@ This first deliverable is now partially complete:
 - recommendation / next-actions output integration now exists in a first markdown-returning form
 - login/setup automation now exists behind `--launch-login-if-needed`
 - bounded recurring dry-run scheduler wrapper now exists and reloads per-cycle context
+- deferred research queue rows are now visible in cycle-generated next-actions markdown
+
+The next best small milestone is to decide whether enrichment snapshots and/or
+deferred research queue rows should be persisted in the decision journal so
+operator follow-up work survives across runs and can be reconciled later.
 
 ## 8. Practical Notes For Another Codex
 
