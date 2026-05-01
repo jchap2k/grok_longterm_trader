@@ -33,6 +33,20 @@ The recommendation table is derived from `DecisionJournal` rows through `Recomme
 
 Review status is layered onto the same table with `ReviewStatusBuilder`. It reads stored packet JSON from the journal, applies the configured review cadence through `ThesisMonitor`, and returns `review_due`, `days_since_review`, and `thesis_state` fields for reports and next-action markdown.
 
+Record a completed thesis review after checking earnings, business evidence, or portfolio context:
+
+```powershell
+python scripts/longterm_journal.py thesis-review-record --journal-db path\to\journal.db --symbol AAPL --thesis-state healthy --status reviewed --notes "Services thesis remains intact." --evidence "Services revenue still growing." --review-trigger manual --current-market-value 4200
+```
+
+List recent thesis reviews:
+
+```powershell
+python scripts/longterm_journal.py thesis-review-list --journal-db path\to\journal.db --limit 20
+```
+
+Recorded thesis reviews are audit events. They do not place orders, but they do feed future review status. A newer CGH decision supersedes an older review; otherwise, a recorded `broken` or `weakening` review remains visible in reports and next-actions until newer evidence or a newer decision changes the thesis.
+
 ## Discovery Queue
 
 Discovery builds the stock universe that deserves research. It does not create
@@ -148,6 +162,7 @@ The next-actions report is still dry-run only. It evaluates the FXAIX benchmark 
 
 - If the active sleeve is not clearing the benchmark guard, new buy candidates are marked `paused_buy_candidate`.
 - If a buy is attractive but active-sleeve cash is short, it is marked `capital_needed` so an email or dashboard can later notify the user.
+- If a held position has a recorded `broken` or `weakening` thesis state, it is marked `urgent_review_holding` rather than an ordinary review.
 - When generated from a cycle, it can include a `Deferred Research Queue` section listing incomplete symbols, missing fields, provenance, and the suggested enrichment command to run before those ideas should consume LLM research.
 - Protected symbols such as `FXAIX` remain excluded from sell, trim, rebalance, and rotation logic.
 

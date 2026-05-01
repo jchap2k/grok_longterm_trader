@@ -35,6 +35,26 @@ def build_parser() -> argparse.ArgumentParser:
     deferred_resolve.add_argument("--deferred-id", required=True)
     deferred_resolve.add_argument("--notes", default="")
 
+    thesis_review_record = subparsers.add_parser(
+        "thesis-review-record", help="Record a thesis review event."
+    )
+    thesis_review_record.add_argument("--journal-db", default=None)
+    thesis_review_record.add_argument("--symbol", required=True)
+    thesis_review_record.add_argument("--thesis-state", required=True)
+    thesis_review_record.add_argument("--status", default="reviewed")
+    thesis_review_record.add_argument("--notes", default="")
+    thesis_review_record.add_argument("--evidence", action="append", default=[])
+    thesis_review_record.add_argument("--decision-id", default=None)
+    thesis_review_record.add_argument("--trade-id", default=None)
+    thesis_review_record.add_argument("--review-trigger", default="manual")
+    thesis_review_record.add_argument("--current-market-value", type=float, default=None)
+
+    thesis_review_list = subparsers.add_parser(
+        "thesis-review-list", help="List thesis review events."
+    )
+    thesis_review_list.add_argument("--journal-db", default=None)
+    thesis_review_list.add_argument("--limit", type=int, default=20)
+
     update = subparsers.add_parser("update-outcome", help="Update active-vs-benchmark outcome.")
     update.add_argument("--journal-db", default=None)
     update.add_argument("--decision-id", required=True)
@@ -81,6 +101,25 @@ def run_cli(args: argparse.Namespace) -> int:
     if args.command == "deferred-resolve":
         journal.resolve_deferred_research_item(args.deferred_id, notes=args.notes)
         print(f"resolved {args.deferred_id}")
+        return 0
+
+    if args.command == "thesis-review-record":
+        review_id = journal.record_thesis_review(
+            symbol=args.symbol,
+            thesis_state=args.thesis_state,
+            status=args.status,
+            review_notes=args.notes,
+            evidence=args.evidence,
+            decision_id=args.decision_id,
+            trade_id=args.trade_id,
+            review_trigger=args.review_trigger,
+            current_market_value=args.current_market_value,
+        )
+        print(f"recorded thesis review {review_id}")
+        return 0
+
+    if args.command == "thesis-review-list":
+        print(json.dumps(journal.list_thesis_reviews(limit=args.limit), indent=2, sort_keys=True))
         return 0
 
     if args.command == "update-outcome":

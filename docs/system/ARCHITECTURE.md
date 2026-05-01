@@ -33,7 +33,7 @@ Defines the normalized research packet and the minimum completeness rule for dee
 Builds one dry-run cycle from manual, discovery, and optional Motley Fool ideas. It now emits `skipped_ideas` and a richer `deferred_research_queue` for incomplete packets, including missing fields and a suggested enrichment command, so skipped ticker stubs become explicit enrichment work instead of disappearing. When a journal is configured, deferred research rows are persisted for later enrichment follow-up.
 
 `longterm/next_actions.py`
-Creates the operator-facing dry-run next-actions report from the journal, portfolio state, review status, and benchmark guard. It also renders deferred research items from the cycle so incomplete candidate packets become visible enrichment work with missing fields and suggested discovery/enrichment commands.
+Creates the operator-facing dry-run next-actions report from the journal, portfolio state, review status, and benchmark guard. It elevates held positions with `broken` or `weakening` thesis state into `urgent_review_holding` rows. It also renders deferred research items from the cycle so incomplete candidate packets become visible enrichment work with missing fields and suggested discovery/enrichment commands.
 
 `agent/configs/longterm_trading_agent_specs.json`
 Defines the long-term CGH domain roles and presets:
@@ -54,7 +54,7 @@ Assigns review cadence and expected holding horizon by company category and risk
 Marks review status as `healthy`, `stale`, `weakening`, or `broken` from review cadence, supplied evidence, thesis-invalidation conditions, and common quality-durability risk language.
 
 `longterm/decision_journal.py`
-Stores decisions, structured packets, raw responses, benchmark start prices, outcome updates, recommendation table rows, review candidates, dry-run account action plans, persisted deferred research items, and recommendation rank snapshots for future paper/live reconciliation.
+Stores decisions, structured packets, raw responses, benchmark start prices, outcome updates, recommendation table rows, review candidates, durable thesis review events, dry-run account action plans, persisted deferred research items, and recommendation rank snapshots for future paper/live reconciliation.
 
 `longterm/report_builder.py`
 Creates a markdown decision report with benchmark outcomes and a Motley-Fool-style recommendation table. `RecommendationTableBuilder` is the preferred seam for report/next-action rows: it starts from `DecisionJournal` rows, optionally hydrates volatile fields, carries shortened decision IDs for traceability, includes previous-rank / rank-movement context when snapshots exist, and does not write enrichment back into the journal.
@@ -97,7 +97,7 @@ capture may run, and `enabled=true` plus `cookie_ready=false` can trigger an
 interactive login/setup flow.
 
 `longterm/review_status.py`
-Builds per-symbol thesis review status from journal review candidates. It rehydrates the stored research packet, applies `ThesisMonitor`, and returns review-due/thesis-state fields for recommendation tables, markdown reports, and next-action reports without mutating the journal.
+Builds per-symbol thesis review status from journal review candidates and the durable thesis-review event table. Newer CGH decisions take precedence over older reviews; otherwise, recorded thesis reviews supply the last-review date and can preserve a `broken` or `weakening` state until a newer decision or new evidence changes it. The builder returns review-due/thesis-state fields for recommendation tables, markdown reports, and next-action reports without mutating the journal.
 
 `longterm/action_planner.py`
 Converts a structured decision into a non-executing proposed `BUY`, `SELL`, or `NONE` intent.

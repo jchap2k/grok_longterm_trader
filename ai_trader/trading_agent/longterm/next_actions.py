@@ -106,12 +106,17 @@ class NextActionsPlanner:
                 )
             elif portfolio_state.holding_value(symbol) > 0:
                 reason = row.get("reason") or "Held symbol remains on recommendation table."
-                if row.get("review_due"):
+                thesis_state = str(row.get("thesis_state") or "").lower()
+                category = "review_holding"
+                if thesis_state in {"broken", "weakening"}:
+                    category = "urgent_review_holding"
+                    reason += f" Thesis state is {thesis_state}."
+                elif row.get("review_due"):
                     reason += " Review due."
                 actions.append(
                     NextAction(
                         priority=len(actions) + 1,
-                        category="review_holding",
+                        category=category,
                         symbol=symbol,
                         action="REVIEW",
                         reason=reason,

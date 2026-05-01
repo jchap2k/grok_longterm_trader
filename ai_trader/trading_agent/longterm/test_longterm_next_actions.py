@@ -461,6 +461,73 @@ def test_review_status_builder_marks_due_reviews_from_journal(tmp_path):
     assert statuses["MSFT"]["thesis_state"] == "stale"
 
 
+def test_review_status_builder_uses_recorded_thesis_review_as_last_review(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    _record_decision(journal, "MSFT", confidence=83)
+    journal.record_thesis_review(
+        symbol="MSFT",
+        thesis_state="healthy",
+        status="reviewed",
+        review_notes="Reviewed after earnings; thesis remains intact.",
+        evidence=["Cloud growth remains durable"],
+    )
+
+    statuses = ReviewStatusBuilder(
+        journal,
+        today=date.today(),
+    ).build(limit=5)
+
+    assert statuses["MSFT"]["review_due"] is False
+    assert statuses["MSFT"]["thesis_state"] == "healthy"
+    assert statuses["MSFT"]["days_since_review"] == 0
+
+
+def test_review_status_builder_preserves_recorded_broken_review_until_new_decision(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    _record_decision(journal, "MSFT", confidence=83)
+    journal.record_thesis_review(
+        symbol="MSFT",
+        thesis_state="broken",
+        status="reviewed",
+        review_notes="Invalidation condition was confirmed.",
+        evidence=["Cloud growth materially slows"],
+    )
+
+    statuses = ReviewStatusBuilder(journal, today=date.today()).build(limit=5)
+
+    assert statuses["MSFT"]["thesis_state"] == "broken"
+    assert "latest recorded thesis review" in statuses["MSFT"]["review_reason"].lower()
+
+
+def test_next_actions_elevates_broken_held_thesis_to_urgent_review(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    _record_decision(journal, "AAPL", confidence=72, size=4, thesis="Durable but lower conviction.")
+    profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
+    state = PortfolioState(
+        cash=5000,
+        holdings=[{"symbol": "AAPL", "market_value": 5000}],
+        protected_symbols=["FXAIX"],
+    )
+
+    actions = NextActionsPlanner(
+        review_status_by_symbol={
+            "AAPL": {
+                "review_due": False,
+                "thesis_state": "broken",
+                "review_reason": "Latest recorded thesis review marked the thesis broken.",
+            }
+        }
+    ).plan(
+        journal,
+        profile=profile,
+        portfolio_state=state,
+    )
+
+    assert actions[0].symbol == "AAPL"
+    assert actions[0].category == "urgent_review_holding"
+    assert "broken" in actions[0].reason.lower()
+
+
 def test_decision_journal_can_list_review_candidates_since_date(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     _record_decision(journal, "AAPL", confidence=80)

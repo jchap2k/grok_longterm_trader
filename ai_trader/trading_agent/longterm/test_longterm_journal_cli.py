@@ -167,6 +167,51 @@ def test_journal_cli_report_can_record_rank_snapshot(tmp_path, capsys):
     assert snapshot["AAPL"]["rank"] == 1
 
 
+def test_journal_cli_records_and_lists_thesis_reviews(tmp_path, capsys):
+    db_path = tmp_path / "journal.db"
+    decision_id = _record_sample_decision(db_path)
+    parser = build_parser()
+
+    record_args = parser.parse_args(
+        [
+            "thesis-review-record",
+            "--journal-db",
+            str(db_path),
+            "--symbol",
+            "AAPL",
+            "--thesis-state",
+            "healthy",
+            "--status",
+            "reviewed",
+            "--notes",
+            "Services thesis remains intact.",
+            "--evidence",
+            "Services revenue still growing.",
+            "--decision-id",
+            decision_id,
+            "--review-trigger",
+            "manual",
+            "--current-market-value",
+            "4200",
+        ]
+    )
+
+    record_exit_code = run_cli(record_args)
+    record_output = capsys.readouterr().out
+
+    assert record_exit_code == 0
+    assert "recorded thesis review" in record_output
+
+    list_args = parser.parse_args(["thesis-review-list", "--journal-db", str(db_path)])
+    list_exit_code = run_cli(list_args)
+    payload = json.loads(capsys.readouterr().out)
+
+    assert list_exit_code == 0
+    assert payload[0]["symbol"] == "AAPL"
+    assert payload[0]["thesis_state"] == "healthy"
+    assert payload[0]["evidence"] == ["Services revenue still growing."]
+
+
 def test_capital_alert_cli_outputs_markdown_without_sending(tmp_path, capsys):
     db_path = tmp_path / "journal.db"
     journal = LongTermDecisionJournal(db_path)

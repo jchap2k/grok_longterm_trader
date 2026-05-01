@@ -36,20 +36,35 @@ class ReviewStatusBuilder:
     def build(self, *, limit: int = 20) -> dict[str, dict]:
         statuses: dict[str, dict] = {}
         monitor = ThesisMonitor(today=self.today)
+        latest_reviews = self.journal.latest_thesis_review_by_symbol()
         for row in self.journal.list_review_candidates(limit=limit):
             symbol = str(row["symbol"]).upper()
             if symbol in statuses:
                 continue
             packet_data = json.loads(row.get("packet_json") or "{}")
             packet = create_research_packet_from_idea(packet_data)
-            last_review_date = self.last_review_dates_by_symbol.get(symbol) or _parse_date(
-                row.get("outcome_updated_at") or row.get("timestamp")
-            )
+            latest_review = latest_reviews.get(symbol)
+            decision_timestamp = row.get("timestamp")
+            review_is_current = _review_is_newer_or_same(latest_review, decision_timestamp)
+            if symbol in self.last_review_dates_by_symbol:
+                last_review_date = self.last_review_dates_by_symbol[symbol]
+            elif review_is_current:
+                last_review_date = _parse_date(latest_review.get("timestamp"))
+            else:
+                last_review_date = _parse_date(row.get("outcome_updated_at") or decision_timestamp)
             status = monitor.evaluate(
                 packet,
                 last_review_date=last_review_date,
                 current_evidence=self.evidence_by_symbol.get(symbol, []),
             )
+            if (
+                review_is_current
+                and symbol not in self.evidence_by_symbol
+                and str(latest_review.get("thesis_state") or "").lower() in {"broken", "weakening"}
+            ):
+                status_payload = _status_from_recorded_review(latest_review, self.today)
+                statuses[symbol] = status_payload
+                continue
             statuses[symbol] = {
                 "review_due": status.review_due,
                 "days_since_review": status.days_since_review,
@@ -64,3 +79,27 @@ def _parse_date(value: str | None) -> date:
     if not value:
         return date.today()
     return datetime.fromisoformat(value).date()
+
+
+def _review_is_newer_or_same(review: Mapping[str, object] | None, decision_timestamp: str | None) -> bool:
+    if not review:
+        return False
+    review_timestamp = str(review.get("timestamp") or "")
+    if not decision_timestamp:
+        return True
+    return review_timestamp >= str(decision_timestamp)
+
+
+def _status_from_recorded_review(review: Mapping[str, object], today: date) -> dict:
+    review_date = _parse_date(str(review.get("timestamp") or ""))
+    thesis_state = str(review.get("thesis_state") or "").lower()
+    evidence = [str(item) for item in review.get("evidence") or []]
+    return {
+        "review_due": thesis_state in {"broken", "weakening"},
+        "days_since_review": (today - review_date).days,
+        "thesis_state": thesis_state,
+        "matched_invalidation_conditions": evidence,
+        "review_reason": f"Latest recorded thesis review marked the thesis {thesis_state}.",
+        "latest_thesis_review_id": review.get("review_id"),
+        "latest_thesis_review_timestamp": review.get("timestamp"),
+    }

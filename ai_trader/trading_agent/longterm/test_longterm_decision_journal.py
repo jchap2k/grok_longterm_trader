@@ -184,3 +184,35 @@ def test_decision_journal_tracks_recommendation_rank_movement(tmp_path):
     assert aapl["rank_movement"] == "up"
     assert nvda["previous_rank"] == 1
     assert nvda["rank_movement"] == "down"
+
+
+def test_decision_journal_records_thesis_review_events_with_traceability(tmp_path):
+    db_path = tmp_path / "longterm_decisions.db"
+    journal = LongTermDecisionJournal(db_path)
+    decision_id = journal.record_decision(
+        create_research_packet_from_idea({"symbol": "MSFT", "company_name": "Microsoft"}),
+        decision={"recommendation": "BUY", "confidence": 86, "suggested_size_pct": 6},
+    )
+
+    review_id = journal.record_thesis_review(
+        symbol="MSFT",
+        thesis_state="healthy",
+        status="reviewed",
+        review_notes="Cloud and AI thesis remains intact.",
+        evidence=["Azure growth remains durable."],
+        decision_id=decision_id,
+        review_trigger="manual",
+        current_market_value=5200.0,
+    )
+    reviews = journal.list_thesis_reviews(limit=5)
+    latest = journal.latest_thesis_review_by_symbol()
+
+    assert review_id
+    assert reviews[0]["review_id"] == review_id
+    assert reviews[0]["symbol"] == "MSFT"
+    assert reviews[0]["thesis_state"] == "healthy"
+    assert reviews[0]["decision_id"] == decision_id
+    assert reviews[0]["review_trigger"] == "manual"
+    assert reviews[0]["current_market_value"] == 5200.0
+    assert reviews[0]["evidence"] == ["Azure growth remains durable."]
+    assert latest["MSFT"]["review_id"] == review_id

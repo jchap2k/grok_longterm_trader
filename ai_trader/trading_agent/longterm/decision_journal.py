@@ -120,6 +120,31 @@ class LongTermDecisionJournal:
                 ON longterm_recommendation_rank_history (symbol, timestamp)
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS longterm_thesis_review_journal (
+                    review_id TEXT PRIMARY KEY,
+                    timestamp TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    thesis_state TEXT NOT NULL,
+                    review_trigger TEXT,
+                    review_notes TEXT,
+                    evidence_json TEXT NOT NULL,
+                    decision_id TEXT,
+                    trade_id TEXT,
+                    current_market_value REAL,
+                    packet_json TEXT,
+                    review_json TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_longterm_thesis_review_symbol_timestamp
+                ON longterm_thesis_review_journal (symbol, timestamp)
+                """
+            )
             conn.commit()
         finally:
             conn.close()
@@ -577,6 +602,119 @@ class LongTermDecisionJournal:
             conn.close()
         return {str(row["symbol"]).upper(): dict(row) for row in rows}
 
+    def record_thesis_review(
+        self,
+        *,
+        symbol: str,
+        thesis_state: str,
+        status: str = "reviewed",
+        review_notes: str = "",
+        evidence: list[str] | None = None,
+        decision_id: str | None = None,
+        trade_id: str | None = None,
+        current_market_value: float | None = None,
+        review_trigger: str = "manual",
+        packet: ResearchPacket | Mapping[str, Any] | None = None,
+        review_payload: Mapping[str, Any] | None = None,
+    ) -> str:
+        """Persist an operator thesis review event for later status derivation."""
+        review_id = str(uuid.uuid4())
+        timestamp = datetime.now().isoformat()
+        normalized_symbol = str(symbol or "").upper()
+        evidence_list = [str(item) for item in (evidence or [])]
+        packet_json = _packet_payload_json(packet)
+        payload = dict(review_payload or {})
+        payload.update(
+            {
+                "review_id": review_id,
+                "symbol": normalized_symbol,
+                "status": status,
+                "thesis_state": thesis_state,
+                "review_trigger": review_trigger,
+                "review_notes": review_notes,
+                "evidence": evidence_list,
+                "decision_id": decision_id,
+                "trade_id": trade_id,
+                "current_market_value": current_market_value,
+            }
+        )
+
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute(
+                """
+                INSERT INTO longterm_thesis_review_journal (
+                    review_id, timestamp, symbol, status, thesis_state,
+                    review_trigger, review_notes, evidence_json, decision_id,
+                    trade_id, current_market_value, packet_json, review_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    review_id,
+                    timestamp,
+                    normalized_symbol,
+                    str(status),
+                    str(thesis_state).lower(),
+                    str(review_trigger),
+                    str(review_notes),
+                    json.dumps(evidence_list, sort_keys=True),
+                    decision_id,
+                    trade_id,
+                    float(current_market_value) if current_market_value is not None else None,
+                    packet_json,
+                    json.dumps(payload, sort_keys=True),
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        return review_id
+
+    def list_thesis_reviews(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Return recent thesis review events, newest first."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                """
+                SELECT review_id, timestamp, symbol, status, thesis_state,
+                       review_trigger, review_notes, evidence_json, decision_id,
+                       trade_id, current_market_value, packet_json, review_json
+                FROM longterm_thesis_review_journal
+                ORDER BY timestamp DESC
+                LIMIT ?
+                """,
+                (int(limit),),
+            ).fetchall()
+        finally:
+            conn.close()
+        return [_hydrate_thesis_review_row(dict(row)) for row in rows]
+
+    def latest_thesis_review_by_symbol(self) -> dict[str, dict[str, Any]]:
+        """Return the latest thesis review event for each symbol."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                """
+                SELECT review_id, timestamp, symbol, status, thesis_state,
+                       review_trigger, review_notes, evidence_json, decision_id,
+                       trade_id, current_market_value, packet_json, review_json
+                FROM longterm_thesis_review_journal
+                ORDER BY timestamp DESC
+                """
+            ).fetchall()
+        finally:
+            conn.close()
+
+        latest: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            record = _hydrate_thesis_review_row(dict(row))
+            symbol = str(record["symbol"]).upper()
+            if symbol not in latest:
+                latest[symbol] = record
+        return latest
+
     def summarize_benchmark_performance(self) -> dict[str, Any]:
         """Summarize decisions that have both active and benchmark outcomes."""
         conn = sqlite3.connect(self.db_path)
@@ -664,3 +802,19 @@ def _deferred_research_priority(item: Mapping[str, Any], missing_fields: list[st
         score += 10.0
     score += max(0.0, 10.0 - (len(missing_fields) * 2.0))
     return round(score, 4)
+
+
+def _packet_payload_json(packet: ResearchPacket | Mapping[str, Any] | None) -> str | None:
+    if packet is None:
+        return None
+    if isinstance(packet, ResearchPacket):
+        return json.dumps(packet.to_dict(), sort_keys=True)
+    return json.dumps(dict(packet), sort_keys=True)
+
+
+def _hydrate_thesis_review_row(record: dict[str, Any]) -> dict[str, Any]:
+    record["evidence"] = json.loads(record.pop("evidence_json") or "[]")
+    packet_json = record.get("packet_json")
+    record["packet"] = json.loads(packet_json) if packet_json else None
+    record["review_json"] = json.loads(record.get("review_json") or "{}")
+    return record
