@@ -42,6 +42,8 @@ class LongTermCycleResult:
     manual_idea_count: int
     captured_idea_count: int
     total_idea_count: int
+    skipped_idea_count: int = 0
+    skipped_ideas: list[dict[str, str]] = field(default_factory=list)
     decision_ids: list[str] = field(default_factory=list)
     capture_sources_run: list[str] = field(default_factory=list)
     discovery_summary: dict[str, int] = field(default_factory=dict)
@@ -162,6 +164,8 @@ def run_longterm_cycle(
 
     decision_ids: list[str] = []
     packet_completeness_warnings: list[str] = []
+    skipped_idea_count = 0
+    skipped_ideas: list[dict[str, str]] = []
     for idea in all_ideas:
         packet_idea = {
             key: value for key, value in idea.items() if not str(key).startswith("_")
@@ -171,7 +175,18 @@ def run_longterm_cycle(
             profile=profile,
             idea_source=packet_idea.get("idea_source"),
         )
-        packet_completeness_warnings.extend(_packet_completeness_warnings(packet))
+        assessment = _packet_completeness_assessment(packet)
+        packet_completeness_warnings.extend(assessment["warnings"])
+        if assessment["block_research"]:
+            skipped_idea_count += 1
+            packet_completeness_warnings.append(f"{packet.symbol or 'UNKNOWN'}: skipped incomplete research packet")
+            skipped_ideas.append(
+                {
+                    "symbol": packet.symbol or "UNKNOWN",
+                    "reason": "incomplete_research_packet",
+                }
+            )
+            continue
         decision_ids.append(
             runner.run_and_record(
                 packet,
@@ -243,6 +258,8 @@ def run_longterm_cycle(
         manual_idea_count=len(base_ideas),
         captured_idea_count=len(captured_ideas),
         total_idea_count=len(all_ideas),
+        skipped_idea_count=skipped_idea_count,
+        skipped_ideas=skipped_ideas,
         decision_ids=decision_ids,
         capture_sources_run=capture_sources_run,
         discovery_summary=discovery_summary,
@@ -291,16 +308,12 @@ def _idea_provenance_summary(ideas: list[dict[str, Any]]) -> dict[str, int]:
     return summary
 
 
-def _packet_completeness_warnings(packet) -> list[str]:
-    warnings: list[str] = []
-    symbol = packet.symbol or "UNKNOWN"
-    if not packet.company_name:
-        warnings.append(f"{symbol}: missing company_name")
-    if not packet.idea_source:
-        warnings.append(f"{symbol}: missing idea_source")
-    if not packet.thesis_summary and not packet.business_summary:
-        warnings.append(f"{symbol}: missing thesis_summary or business_summary")
-    return warnings
+def _packet_completeness_assessment(packet) -> dict[str, Any]:
+    warnings = packet.completeness_warnings()
+    return {
+        "warnings": warnings,
+        "block_research": bool(warnings),
+    }
 
 
 def _rebalance_markdown(proposal) -> str:

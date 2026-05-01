@@ -107,6 +107,8 @@ def test_scheduler_run_once_records_explicit_outputs(tmp_path):
             "setup_status": "not_requested",
             "decision_ids": ["decision-AAPL"],
             "total_idea_count": 1,
+            "skipped_idea_count": 1,
+            "skipped_ideas": [{"symbol": "TSLA", "reason": "incomplete_research_packet"}],
             "recommendation_report_markdown": "# report\n",
             "next_actions_markdown": "# actions\n",
             "capital_alert_markdown": "# capital\n",
@@ -128,6 +130,8 @@ def test_scheduler_run_once_records_explicit_outputs(tmp_path):
     assert summary.success_count == 1
     assert summary.error_count == 0
     assert summary.runs[0].decision_ids == ["decision-AAPL"]
+    assert summary.runs[0].skipped_idea_count == 1
+    assert summary.runs[0].skipped_ideas == [{"symbol": "TSLA", "reason": "incomplete_research_packet"}]
     assert summary.runs[0].recommendation_report_markdown == "# report\n"
     assert summary.runs[0].next_actions_markdown == "# actions\n"
     assert summary.runs[0].capital_alert_markdown == "# capital\n"

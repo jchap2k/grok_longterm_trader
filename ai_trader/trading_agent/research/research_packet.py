@@ -79,6 +79,22 @@ class ResearchPacket:
             return None
         return sum(scores) / len(scores)
 
+    def completeness_warnings(self) -> List[str]:
+        """Return blocking warnings for research packets that are too thin."""
+        warnings: List[str] = []
+        symbol = self.symbol or "UNKNOWN"
+        if not self.company_name:
+            warnings.append(f"{symbol}: missing company_name")
+        if not self.idea_source:
+            warnings.append(f"{symbol}: missing idea_source")
+        if not self.business_summary and not self.thesis_summary and not self.source_notes:
+            warnings.append(f"{symbol}: missing research context")
+        return warnings
+
+    def is_minimally_complete_for_research(self) -> bool:
+        """Return whether this packet has enough context for paid/deep research."""
+        return not self.completeness_warnings()
+
     def to_dict(self) -> Dict[str, Any]:
         """Serialize packet to a JSON-friendly dictionary."""
         payload = asdict(self)

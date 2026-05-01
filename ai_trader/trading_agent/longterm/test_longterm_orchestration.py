@@ -81,7 +81,14 @@ def test_cycle_reports_login_required_when_enabled_but_cookie_missing(tmp_path):
 
     result = run_longterm_cycle(
         profile=_build_profile(),
-        manual_ideas=[{"symbol": "MSFT", "company_name": "Microsoft"}],
+        manual_ideas=[
+            {
+                "symbol": "MSFT",
+                "company_name": "Microsoft",
+                "idea_source": "manual_watchlist",
+                "source_notes": ["Operator requested setup/login smoke test."],
+            }
+        ],
         motley_fool_settings=settings,
         capture_func=lambda *args, **kwargs: [{"symbol": "SHOULD_NOT_RUN"}],
         runner=runner,
@@ -102,7 +109,14 @@ def test_cycle_can_launch_motley_fool_setup_then_capture(tmp_path):
 
     def fake_capture(source_key, *, profile_dir=None, url=None):
         captured_calls.append((source_key, profile_dir, url))
-        return [{"symbol": "NVDA", "company_name": "Nvidia", "idea_source": "motley_fool_new_recommendations"}]
+        return [
+            {
+                "symbol": "NVDA",
+                "company_name": "Nvidia",
+                "idea_source": "motley_fool_new_recommendations",
+                "business_summary": "Premium source candidate.",
+            }
+        ]
 
     def fake_setup(settings, **kwargs):
         setup_calls.append((settings.profile_dir, settings.login_url))
@@ -141,7 +155,14 @@ def test_cycle_can_launch_motley_fool_setup_then_capture(tmp_path):
 
     result = run_longterm_cycle(
         profile=_build_profile(),
-        manual_ideas=[{"symbol": "MSFT", "company_name": "Microsoft"}],
+        manual_ideas=[
+            {
+                "symbol": "MSFT",
+                "company_name": "Microsoft",
+                "idea_source": "manual_watchlist",
+                "source_notes": ["Operator requested setup/login smoke test."],
+            }
+        ],
         motley_fool_settings=settings,
         capture_func=fake_capture,
         setup_func=fake_setup,
@@ -325,22 +346,67 @@ def test_cycle_can_build_report_and_next_actions_outputs(tmp_path):
 
 def test_cycle_surfaces_packet_completeness_warnings(tmp_path):
     class FakeRunner:
+        def __init__(self):
+            self.symbols = []
+
         def run_and_record(self, packet, **kwargs):
+            self.symbols.append(packet.symbol)
             return f"decision-{packet.symbol}"
 
+    runner = FakeRunner()
     result = run_longterm_cycle(
         profile=_build_profile(),
         manual_ideas=[{"symbol": "TSLA"}],
         motley_fool_settings=MotleyFoolCaptureSettings(enabled=False, cookie_ready=False),
-        runner=FakeRunner(),
+        runner=runner,
         journal_db_path=tmp_path / "journal.db",
     )
 
     assert result.packet_completeness_warnings == [
         "TSLA: missing company_name",
         "TSLA: missing idea_source",
-        "TSLA: missing thesis_summary or business_summary",
+        "TSLA: missing research context",
+        "TSLA: skipped incomplete research packet",
     ]
+    assert result.skipped_idea_count == 1
+    assert result.skipped_ideas == [{"symbol": "TSLA", "reason": "incomplete_research_packet"}]
+    assert result.decision_ids == []
+    assert runner.symbols == []
+
+
+def test_cycle_allows_discovery_ideas_with_source_notes_as_research_context(tmp_path):
+    recorded_symbols = []
+
+    class FakeRunner:
+        def run_and_record(self, packet, **kwargs):
+            recorded_symbols.append(packet.symbol)
+            return f"decision-{packet.symbol}"
+
+    result = run_longterm_cycle(
+        profile=_build_profile(),
+        discovery_candidates=[
+            {
+                "symbol": "MSFT",
+                "company_name": "Microsoft",
+                "source": "sp500",
+                "notes": ["Enriched from fundamentals_cache."],
+                "revenue_growth_1y_pct": 16,
+                "earnings_growth_1y_pct": 20,
+                "return_on_capital_pct": 28,
+                "gross_margin_pct": 68,
+                "market_cap": 3_000_000_000_000,
+                "category_leader": True,
+            }
+        ],
+        motley_fool_settings=MotleyFoolCaptureSettings(enabled=False, cookie_ready=False),
+        runner=FakeRunner(),
+        journal_db_path=tmp_path / "journal.db",
+    )
+
+    assert recorded_symbols == ["MSFT"]
+    assert result.skipped_idea_count == 0
+    assert result.skipped_ideas == []
+    assert result.packet_completeness_warnings == []
 
 
 def test_cycle_can_build_capital_alert_markdown(tmp_path):

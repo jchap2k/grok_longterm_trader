@@ -54,6 +54,31 @@ def test_create_research_packet_from_idea_accepts_enum_category():
     assert packet.company_category is CompanyCategory.FAST_GROWER
 
 
+def test_research_packet_completeness_allows_source_notes_as_context():
+    packet = create_research_packet_from_idea(
+        {
+            "symbol": "MSFT",
+            "company_name": "Microsoft",
+            "idea_source": "discovery_sp500",
+            "source_notes": ["Discovery metrics: revenue growth 16%."],
+        }
+    )
+
+    assert packet.completeness_warnings() == []
+    assert packet.is_minimally_complete_for_research() is True
+
+
+def test_research_packet_completeness_blocks_thin_ticker_stub():
+    packet = create_research_packet_from_idea({"symbol": "TSLA"})
+
+    assert packet.completeness_warnings() == [
+        "TSLA: missing company_name",
+        "TSLA: missing idea_source",
+        "TSLA: missing research context",
+    ]
+    assert packet.is_minimally_complete_for_research() is False
+
+
 def test_longterm_research_runner_builds_context_and_calls_grok_helper(monkeypatch):
     captured = {}
 

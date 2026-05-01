@@ -26,6 +26,9 @@ Reads candidate JSON or local source files, optionally applies local enrichment,
 `longterm/research_runner.py`
 Builds context sections and runs the CGH decision committee through `CheapGrokHeavy`.
 
+`research/research_packet.py`
+Defines the normalized research packet and the minimum completeness rule for deep research. Packets must have a company name, idea source, and at least one research-context field (`business_summary`, `thesis_summary`, or `source_notes`) before the cycle calls the research runner. Incomplete ideas are skipped and reported rather than sent to the LLM committee.
+
 `agent/configs/longterm_trading_agent_specs.json`
 Defines the long-term CGH domain roles and presets:
 
@@ -104,7 +107,7 @@ Checks review due dates and whether current evidence matches invalidation condit
 
 ## Decision Flow
 
-Universe sources -> discovery queue -> `ResearchPacket` -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> benchmark guard -> dry-run account action plan -> next-actions/report artifacts.
+Universe sources -> discovery queue -> `ResearchPacket` completeness gate -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> benchmark guard -> dry-run account action plan -> next-actions/report artifacts.
 
 ## Data Flow Safety
 

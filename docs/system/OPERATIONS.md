@@ -83,6 +83,12 @@ Discovery buckets:
 - `watchlist`: interesting candidates that need more evidence before research.
 - `rejected`: candidates failing basic liquidity, growth, leverage, or trend checks.
 
+Before any idea reaches the LLM research runner, the cycle applies a minimum
+`ResearchPacket` completeness gate. Each packet needs a company name, idea
+source, and research context from `business_summary`, `thesis_summary`, or
+`source_notes`. Thin ticker stubs are skipped, counted in `skipped_idea_count`,
+and listed in `skipped_ideas` instead of consuming research calls.
+
 ## Dry-Run Action Plan
 
 ```powershell
