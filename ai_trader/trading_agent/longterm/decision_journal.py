@@ -100,6 +100,26 @@ class LongTermDecisionJournal:
                 ON longterm_deferred_research_queue (parent_decision_id)
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS longterm_recommendation_rank_history (
+                    snapshot_id TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    rank INTEGER NOT NULL,
+                    ranking_score REAL,
+                    recommendation TEXT,
+                    decision_id TEXT,
+                    PRIMARY KEY (snapshot_id, symbol)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_longterm_rank_history_symbol_timestamp
+                ON longterm_recommendation_rank_history (symbol, timestamp)
+                """
+            )
             conn.commit()
         finally:
             conn.close()
@@ -284,6 +304,7 @@ class LongTermDecisionJournal:
             record["current_price"] = decision.get("current_price")
             record["change_pct"] = decision.get("change_pct")
             record["previous_rank"] = decision.get("previous_rank") or "-"
+            record["rank_movement"] = decision.get("rank_movement") or "new"
             record["market_cap"] = decision.get("market_cap") or ""
             record["risk_type"] = decision.get("risk_type") or decision.get("type") or ""
             record["revenue_growth_1y_pct"] = decision.get("revenue_growth_1y_pct")
@@ -307,6 +328,15 @@ class LongTermDecisionJournal:
 
         for index, row in enumerate(ranked, start=1):
             row["rank"] = index
+        previous_ranks = self.latest_recommendation_rank_by_symbol()
+        for row in ranked:
+            previous = previous_ranks.get(str(row.get("symbol") or "").upper())
+            if previous:
+                row["previous_rank"] = int(previous["rank"])
+                row["rank_movement"] = _rank_movement(int(row["rank"]), int(previous["rank"]))
+            else:
+                row["previous_rank"] = "-"
+                row["rank_movement"] = "new"
         return ranked
 
     def list_review_candidates(self, limit: int = 20) -> list[dict[str, Any]]:
@@ -487,6 +517,66 @@ class LongTermDecisionJournal:
         if cursor.rowcount == 0:
             raise KeyError(f"Deferred research item not found: {deferred_id}")
 
+    def record_recommendation_rank_snapshot(self, rows: list[Mapping[str, Any]]) -> str:
+        """Persist the current recommendation-table ordering for future movement."""
+        snapshot_id = str(uuid.uuid4())
+        timestamp = datetime.now().isoformat()
+        conn = sqlite3.connect(self.db_path)
+        try:
+            for row in rows:
+                symbol = str(row.get("symbol") or "").upper()
+                if not symbol:
+                    continue
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO longterm_recommendation_rank_history (
+                        snapshot_id, timestamp, symbol, rank, ranking_score,
+                        recommendation, decision_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        snapshot_id,
+                        timestamp,
+                        symbol,
+                        int(row.get("rank") or 0),
+                        float(row["ranking_score"]) if row.get("ranking_score") is not None else None,
+                        str(row.get("recommendation") or row.get("action") or ""),
+                        str(row.get("decision_id") or ""),
+                    ),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+        return snapshot_id
+
+    def latest_recommendation_rank_by_symbol(self) -> dict[str, dict[str, Any]]:
+        """Return symbol -> latest persisted recommendation rank row."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            latest_snapshot = conn.execute(
+                """
+                SELECT snapshot_id
+                FROM longterm_recommendation_rank_history
+                ORDER BY timestamp DESC
+                LIMIT 1
+                """
+            ).fetchone()
+            if latest_snapshot is None:
+                return {}
+            rows = conn.execute(
+                """
+                SELECT snapshot_id, timestamp, symbol, rank, ranking_score,
+                       recommendation, decision_id
+                FROM longterm_recommendation_rank_history
+                WHERE snapshot_id = ?
+                """,
+                (latest_snapshot["snapshot_id"],),
+            ).fetchall()
+        finally:
+            conn.close()
+        return {str(row["symbol"]).upper(): dict(row) for row in rows}
+
     def summarize_benchmark_performance(self) -> dict[str, Any]:
         """Summarize decisions that have both active and benchmark outcomes."""
         conn = sqlite3.connect(self.db_path)
@@ -547,6 +637,14 @@ def _rank_reason(row: Mapping[str, Any], ranking_score: float) -> str:
         f"{action} recommendation, confidence {confidence}, "
         f"suggested size {size:g}%, ranking score {ranking_score:g}."
     )
+
+
+def _rank_movement(current_rank: int, previous_rank: int) -> str:
+    if current_rank < previous_rank:
+        return "up"
+    if current_rank > previous_rank:
+        return "down"
+    return "unchanged"
 
 
 def _normalize_missing_fields(value: Any) -> list[str]:

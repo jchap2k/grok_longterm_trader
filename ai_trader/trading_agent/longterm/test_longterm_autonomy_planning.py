@@ -134,7 +134,7 @@ def test_thesis_monitor_marks_review_due_by_cadence():
 
     assert status.review_due is True
     assert status.days_since_review == 40
-    assert status.thesis_state == "healthy"
+    assert status.thesis_state == "stale"
 
 
 def test_thesis_monitor_detects_broken_invalidation_conditions():
@@ -156,6 +156,27 @@ def test_thesis_monitor_detects_broken_invalidation_conditions():
     assert status.review_due is False
     assert status.thesis_state == "broken"
     assert status.matched_invalidation_conditions == ["Cloud growth materially slows"]
+
+
+def test_thesis_monitor_detects_weakening_evidence_before_break():
+    monitor = ThesisMonitor(today=date(2026, 4, 29))
+    packet = create_research_packet_from_idea(
+        {
+            "symbol": "MSFT",
+            "review_cadence": "quarterly",
+            "invalidation_conditions": ["Cloud growth materially slows"],
+        }
+    )
+
+    status = monitor.evaluate(
+        packet,
+        last_review_date=date(2026, 4, 1),
+        current_evidence=["Recent report mentions margin pressure and slowing growth."],
+    )
+
+    assert status.review_due is False
+    assert status.thesis_state == "weakening"
+    assert "margin pressure" in status.matched_invalidation_conditions
 
 
 def test_action_planner_cli_outputs_dry_run_json(tmp_path, capsys):

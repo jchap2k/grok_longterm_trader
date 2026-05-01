@@ -405,6 +405,47 @@ def test_next_actions_markdown_includes_deferred_research_queue(tmp_path):
     assert "python scripts/run_longterm_discovery.py" in markdown
 
 
+def test_next_actions_cli_includes_persisted_deferred_research_items(tmp_path, capsys):
+    journal_db = tmp_path / "journal.db"
+    journal = LongTermDecisionJournal(journal_db)
+    journal.record_deferred_research_item(
+        {
+            "symbol": "TSLA",
+            "missing_fields": ["company_name"],
+            "provenance_bucket": "manual",
+            "suggested_next_step": "enrich_candidate_before_research",
+        }
+    )
+    portfolio_path = tmp_path / "portfolio.json"
+    portfolio_path.write_text(
+        json.dumps({"cash": 5000, "holdings": [], "protected_symbols": ["FXAIX"]}),
+        encoding="utf-8",
+    )
+    profile_path = tmp_path / "profile.json"
+    profile_path.write_text(
+        json.dumps({"tradable_capital": 34000, "protected_symbols": ["FXAIX"]}),
+        encoding="utf-8",
+    )
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--journal-db",
+            str(journal_db),
+            "--profile-config",
+            str(profile_path),
+            "--portfolio-state",
+            str(portfolio_path),
+        ]
+    )
+
+    exit_code = run_cli(args)
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "## Deferred Research Queue" in output
+    assert "TSLA" in output
+
+
 def test_review_status_builder_marks_due_reviews_from_journal(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     _record_decision(journal, "MSFT", confidence=83)
@@ -417,7 +458,7 @@ def test_review_status_builder_marks_due_reviews_from_journal(tmp_path):
 
     assert statuses["MSFT"]["review_due"] is True
     assert statuses["MSFT"]["days_since_review"] == 40
-    assert statuses["MSFT"]["thesis_state"] == "healthy"
+    assert statuses["MSFT"]["thesis_state"] == "stale"
 
 
 def test_decision_journal_can_list_review_candidates_since_date(tmp_path):

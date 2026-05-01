@@ -47,11 +47,14 @@ Deterministic business-story, balance-sheet, quality-durability, and quality-at-
 `longterm/review_cadence.py`
 Assigns review cadence and expected holding horizon by company category and risk language.
 
+`longterm/thesis_monitor.py`
+Marks review status as `healthy`, `stale`, `weakening`, or `broken` from review cadence, supplied evidence, thesis-invalidation conditions, and common quality-durability risk language.
+
 `longterm/decision_journal.py`
-Stores decisions, structured packets, raw responses, benchmark start prices, outcome updates, recommendation table rows, review candidates, dry-run account action plans, and persisted deferred research items for future paper/live reconciliation.
+Stores decisions, structured packets, raw responses, benchmark start prices, outcome updates, recommendation table rows, review candidates, dry-run account action plans, persisted deferred research items, and recommendation rank snapshots for future paper/live reconciliation.
 
 `longterm/report_builder.py`
-Creates a markdown decision report with benchmark outcomes and a Motley-Fool-style recommendation table. `RecommendationTableBuilder` is the preferred seam for report/next-action rows: it starts from `DecisionJournal` rows, optionally hydrates volatile fields, carries shortened decision IDs for traceability, and does not write enrichment back into the journal.
+Creates a markdown decision report with benchmark outcomes and a Motley-Fool-style recommendation table. `RecommendationTableBuilder` is the preferred seam for report/next-action rows: it starts from `DecisionJournal` rows, optionally hydrates volatile fields, carries shortened decision IDs for traceability, includes previous-rank / rank-movement context when snapshots exist, and does not write enrichment back into the journal.
 
 `longterm/recommendation_enrichment.py`
 Provides `CachedRecommendationEnricher`, a daily cache wrapper for recommendation-table enrichment such as current price, daily change, market cap, revenue growth, estimated return range, and max drawdown. This keeps external data calls out of core journal storage and avoids repeated fetches during report generation.

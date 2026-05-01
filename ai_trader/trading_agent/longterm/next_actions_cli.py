@@ -29,6 +29,7 @@ def run_cli(args: argparse.Namespace) -> int:
             journal,
             profile=profile,
             portfolio_state=state,
+            deferred_research_queue=journal.list_deferred_research_items(limit=args.limit),
             limit=args.limit,
         ),
         end="",

@@ -23,6 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
     report = subparsers.add_parser("report", help="Render a markdown decision report.")
     report.add_argument("--journal-db", default=None)
     report.add_argument("--limit", type=int, default=20)
+    report.add_argument("--record-rank-snapshot", action="store_true")
 
     deferred_list = subparsers.add_parser("deferred-list", help="List deferred research items.")
     deferred_list.add_argument("--journal-db", default=None)
@@ -57,6 +58,11 @@ def run_cli(args: argparse.Namespace) -> int:
 
     if args.command == "report":
         print(build_markdown_report(journal, limit=args.limit), end="")
+        if args.record_rank_snapshot:
+            snapshot_id = journal.record_recommendation_rank_snapshot(
+                journal.list_recommendation_table(limit=args.limit)
+            )
+            print(f"\nrecorded rank snapshot {snapshot_id}")
         return 0
 
     if args.command == "deferred-list":

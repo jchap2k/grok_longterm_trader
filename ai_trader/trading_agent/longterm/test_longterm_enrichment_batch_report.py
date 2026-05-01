@@ -479,7 +479,7 @@ def test_build_markdown_report_can_auto_derive_review_status(tmp_path):
     )
 
     assert "MSFT" in report
-    assert "| True | healthy |" in report
+    assert "| True | stale |" in report
 
 
 def test_build_markdown_report_includes_decision_id_for_traceability(tmp_path):

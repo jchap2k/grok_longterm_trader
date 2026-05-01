@@ -95,8 +95,8 @@ def build_markdown_report(
         "",
         "## Recommendation Table",
         "",
-        "| Rank | Rank Score | Decision ID | Symbol | Company | Action | Service | Price | Change | Previous Rank | Market Cap | Type | 1Y Rev. Growth | Return Since Rec | Rec Date | Est. Return | Est. Max Drawdown | Review Due | Thesis State | Data As Of | Times Rec'd | Notes | Rank Reason | Reason | Link |",
-        "|---:|---:|---|---|---|---|---|---:|---:|---:|---:|---|---:|---:|---|---:|---:|---|---|---|---:|---:|---|---|---|",
+        "| Rank | Rank Score | Decision ID | Symbol | Company | Action | Service | Price | Change | Previous Rank | Rank Move | Market Cap | Type | 1Y Rev. Growth | Return Since Rec | Rec Date | Est. Return | Est. Max Drawdown | Review Due | Thesis State | Data As Of | Times Rec'd | Notes | Rank Reason | Reason | Link |",
+        "|---:|---:|---|---|---|---|---|---:|---:|---:|---|---:|---|---:|---:|---|---:|---:|---|---|---|---:|---:|---|---|---|",
     ]
 
     for row in RecommendationTableBuilder(
@@ -105,7 +105,7 @@ def build_markdown_report(
         review_status_by_symbol=review_status_by_symbol,
         ).build(limit=limit):
         lines.append(
-            "| {rank} | {rank_score} | {decision_id} | {symbol} | {company} | {action} | {service} | {price} | {change} | {previous_rank} | {market_cap} | {risk_type} | {growth} | {return_since_rec} | {rec_date} | {return_range} | {drawdown} | {review_due} | {thesis_state} | {data_as_of} | {times} | {notes} | {rank_reason} | {reason} | {link} |".format(
+            "| {rank} | {rank_score} | {decision_id} | {symbol} | {company} | {action} | {service} | {price} | {change} | {previous_rank} | {rank_movement} | {market_cap} | {risk_type} | {growth} | {return_since_rec} | {rec_date} | {return_range} | {drawdown} | {review_due} | {thesis_state} | {data_as_of} | {times} | {notes} | {rank_reason} | {reason} | {link} |".format(
                 rank=row.get("rank", ""),
                 rank_score=_fmt_number(row.get("ranking_score")),
                 decision_id=_short_id(row.get("decision_id")),
@@ -116,6 +116,7 @@ def build_markdown_report(
                 price=_fmt_price(row.get("current_price")),
                 change=_fmt_pct(row.get("change_pct")),
                 previous_rank=row.get("previous_rank") or "-",
+                rank_movement=row.get("rank_movement") or "new",
                 market_cap=row.get("market_cap") or "",
                 risk_type=row.get("risk_type") or "",
                 growth=_fmt_pct(row.get("revenue_growth_1y_pct")),

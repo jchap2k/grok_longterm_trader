@@ -151,6 +151,22 @@ def test_journal_cli_lists_and_resolves_deferred_research_items(tmp_path, capsys
     assert LongTermDecisionJournal(db_path).list_deferred_research_items(limit=5) == []
 
 
+def test_journal_cli_report_can_record_rank_snapshot(tmp_path, capsys):
+    db_path = tmp_path / "journal.db"
+    _record_sample_decision(db_path)
+    parser = build_parser()
+    args = parser.parse_args(
+        ["report", "--journal-db", str(db_path), "--limit", "3", "--record-rank-snapshot"]
+    )
+
+    exit_code = run_cli(args)
+    snapshot = LongTermDecisionJournal(db_path).latest_recommendation_rank_by_symbol()
+
+    assert exit_code == 0
+    assert "# Long-Term Trader Decision Report" in capsys.readouterr().out
+    assert snapshot["AAPL"]["rank"] == 1
+
+
 def test_capital_alert_cli_outputs_markdown_without_sending(tmp_path, capsys):
     db_path = tmp_path / "journal.db"
     journal = LongTermDecisionJournal(db_path)

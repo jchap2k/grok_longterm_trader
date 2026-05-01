@@ -105,11 +105,29 @@ After enriching/retrying an item, mark it resolved:
 python scripts/longterm_journal.py deferred-resolve --journal-db path\to\journal.db --deferred-id <id> --notes "Enriched from fundamentals cache."
 ```
 
+Standalone next-actions reports also include open persisted deferred rows:
+
+```powershell
+python scripts/longterm_next_actions.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --limit 10
+```
+
 ## Dry-Run Action Plan
 
 ```powershell
 python scripts/longterm_action_plan.py --symbol NVDA --portfolio-state path\to\portfolio.json --decision-file path\to\decision.json
 ```
+
+## Recommendation Rank History
+
+Recommendation reports can record an explicit rank snapshot so future reports can
+show previous rank and rank movement:
+
+```powershell
+python scripts/longterm_journal.py report --journal-db path\to\journal.db --limit 20 --record-rank-snapshot
+```
+
+The cycle also records a rank snapshot after generating a recommendation report.
+Rank movement is dry-run/reporting metadata only; it does not place orders.
 
 ## Next-Actions Report
 

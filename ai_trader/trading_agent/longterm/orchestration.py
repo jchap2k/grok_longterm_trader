@@ -224,6 +224,10 @@ def run_longterm_cycle(
             limit=report_limit,
         )
         report_generated = bool(recommendation_report_markdown)
+        if report_generated and hasattr(journal, "record_recommendation_rank_snapshot"):
+            journal.record_recommendation_rank_snapshot(
+                journal.list_recommendation_table(limit=report_limit)
+            )
         if portfolio_state is not None:
             next_actions_markdown = next_actions_builder_func(
                 journal,

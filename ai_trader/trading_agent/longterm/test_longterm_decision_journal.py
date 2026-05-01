@@ -152,3 +152,35 @@ def test_decision_journal_records_and_resolves_deferred_research_items(tmp_path)
     resolved = journal.list_deferred_research_items(limit=5, include_resolved=True)[0]
     assert resolved["status"] == "resolved"
     assert resolved["resolution_notes"] == "Enriched from fundamentals cache."
+
+
+def test_decision_journal_tracks_recommendation_rank_movement(tmp_path):
+    db_path = tmp_path / "longterm_decisions.db"
+    journal = LongTermDecisionJournal(db_path)
+    profile = PortfolioProfile(benchmark_symbol="FXAIX")
+
+    journal.record_decision(
+        create_research_packet_from_idea({"symbol": "NVDA", "company_name": "Nvidia"}, profile=profile),
+        decision={"recommendation": "BUY", "confidence": 92, "suggested_size_pct": 8},
+    )
+    journal.record_decision(
+        create_research_packet_from_idea({"symbol": "AAPL", "company_name": "Apple"}, profile=profile),
+        decision={"recommendation": "BUY", "confidence": 80, "suggested_size_pct": 5},
+    )
+    initial_rows = journal.list_recommendation_table(limit=5)
+    snapshot_id = journal.record_recommendation_rank_snapshot(initial_rows)
+
+    journal.record_decision(
+        create_research_packet_from_idea({"symbol": "AAPL", "company_name": "Apple"}, profile=profile),
+        decision={"recommendation": "BUY", "confidence": 96, "suggested_size_pct": 9},
+    )
+    moved_rows = journal.list_recommendation_table(limit=5)
+    aapl = next(row for row in moved_rows if row["symbol"] == "AAPL")
+    nvda = next(row for row in moved_rows if row["symbol"] == "NVDA")
+
+    assert snapshot_id
+    assert aapl["rank"] == 1
+    assert aapl["previous_rank"] == 2
+    assert aapl["rank_movement"] == "up"
+    assert nvda["previous_rank"] == 1
+    assert nvda["rank_movement"] == "down"
