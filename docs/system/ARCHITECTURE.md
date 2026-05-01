@@ -11,6 +11,12 @@ Normalizes raw idea dictionaries into research packets and applies portfolio pro
 `portfolio/portfolio_profile.py`
 Defines account-level constraints: protected symbols, benchmark, defensive parking symbol, cash symbol, and tradable capital.
 
+`longterm/discovery.py`
+Builds the upstream stock universe for research. It merges candidate rows from sources such as S&P 500/Russell/Nasdaq lists, ETF holdings, manual watchlists, quality-growth screens, and Motley Fool premium captures; scores them with a lightweight quality-growth pre-filter; then buckets them into `research_queue`, `watchlist`, or `rejected`. Discovery is not allowed to read portfolio state or create trade intents.
+
+`longterm/discovery_cli.py`
+Reads candidate JSON and emits the discovery buckets. It can also export the research-ready queue as idea-batch JSON for the existing research cycle.
+
 `longterm/research_runner.py`
 Builds context sections and runs the CGH decision committee through `CheapGrokHeavy`.
 
@@ -92,7 +98,7 @@ Checks review due dates and whether current evidence matches invalidation condit
 
 ## Decision Flow
 
-Raw idea -> `ResearchPacket` -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> benchmark guard -> dry-run account action plan -> next-actions/report artifacts.
+Universe sources -> discovery queue -> `ResearchPacket` -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> benchmark guard -> dry-run account action plan -> next-actions/report artifacts.
 
 ## Data Flow Safety
 

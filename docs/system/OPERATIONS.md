@@ -33,6 +33,33 @@ The recommendation table is derived from `DecisionJournal` rows through `Recomme
 
 Review status is layered onto the same table with `ReviewStatusBuilder`. It reads stored packet JSON from the journal, applies the configured review cadence through `ThesisMonitor`, and returns `review_due`, `days_since_review`, and `thesis_state` fields for reports and next-action markdown.
 
+## Discovery Queue
+
+Discovery builds the stock universe that deserves research. It does not create
+orders, recommendations, or account action plans. Good V1 source inputs include
+S&P 500 / Russell lists, Nasdaq/NYSE listings filtered for quality, major ETF
+holdings, quality/dividend/moat lists, manual watchlists, and Motley Fool
+premium captures.
+
+Run discovery from a candidate JSON file:
+
+```powershell
+python scripts/run_longterm_discovery.py --candidates path\to\candidates.json
+```
+
+Write research-ready candidates as an idea batch for the existing research
+cycle:
+
+```powershell
+python scripts/run_longterm_discovery.py --candidates path\to\candidates.json --research-ideas-output path\to\research_ideas.json
+python scripts/run_longterm_cycle.py --idea-batch path\to\research_ideas.json --journal-db path\to\journal.db
+```
+
+Discovery buckets:
+- `research_queue`: candidates that clear the mechanical quality-growth pre-filter.
+- `watchlist`: interesting candidates that need more evidence before research.
+- `rejected`: candidates failing basic liquidity, growth, leverage, or trend checks.
+
 ## Dry-Run Action Plan
 
 ```powershell

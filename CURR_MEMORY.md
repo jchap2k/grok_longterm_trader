@@ -68,8 +68,22 @@ Additional continuation work completed on 2026-04-30:
 - exposed recommendation `Rank Score` and `Rank Reason` in the markdown report so the operator can audit table ordering
 - added a structured dry-run `account_action_plan` contract for the future autonomous account manager and wired it through cycle and scheduler artifacts
 - persisted generated dry-run account action plans into the decision journal for future paper/live reconciliation
+- added V1 discovery queue logic and CLI/export path for building the research universe before any trade decisions are made
 
 What those changes accomplished:
+
+### Discovery / universe building
+- Discovery now has its own upstream module:
+  - `ai_trader/trading_agent/longterm/discovery.py`
+  - `ai_trader/trading_agent/longterm/discovery_cli.py`
+  - `ai_trader/trading_agent/scripts/run_longterm_discovery.py`
+- It merges duplicate symbols across sources, preserves provenance, assigns `discovery_id`, scores candidates mechanically, and buckets them into `research_queue`, `watchlist`, or `rejected`.
+- V1 candidate source strategy matches the planned universe-building model:
+  - core index/listing universes such as S&P 500, Russell, Nasdaq/NYSE, and ETF holdings
+  - high-quality external idea feeds such as Motley Fool
+  - manual watchlists and quality-growth screens
+- Discovery can export `research_queue` as idea-batch JSON for the existing research cycle.
+- Discovery is explicitly upstream: it does not read portfolio state, does not call benchmark/account-action logic, and does not trade.
 
 ### Strategy / rules foundation
 - `ai_trader/rules/active_rules.txt` is now an XML-style long-term rules file.
