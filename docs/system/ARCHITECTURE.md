@@ -35,6 +35,9 @@ Builds one dry-run cycle from manual, discovery, and optional Motley Fool ideas.
 `longterm/next_actions.py`
 Creates the operator-facing dry-run next-actions report from the journal, portfolio state, review status, and benchmark guard. It elevates held positions with `broken` or `weakening` thesis state into `urgent_review_holding` rows. It also renders deferred research items from the cycle so incomplete candidate packets become visible enrichment work with missing fields and suggested discovery/enrichment commands.
 
+`longterm/scheduler_operating_model.py`
+Defines the dry-run cadence model for daily, weekly, and as-needed operator routines. It covers discovery refresh, Motley Fool intake, research batches, thesis reviews, benchmark/capital checks, next-actions/rebalance refreshes, and Grok plan review touchpoints. It is guidance and artifact generation only, not a cron engine and not broker execution.
+
 `agent/configs/longterm_trading_agent_specs.json`
 Defines the long-term CGH domain roles and presets:
 
@@ -53,6 +56,9 @@ Assigns review cadence and expected holding horizon by company category and risk
 `longterm/thesis_monitor.py`
 Marks review status as `healthy`, `stale`, `weakening`, or `broken` from review cadence, supplied evidence, thesis-invalidation conditions, and common quality-durability risk language.
 
+`longterm/review_templates.py`
+Builds operator thesis-review checklists from `ResearchPacket`, review status, evidence, decision IDs, and a compact excerpt of `active_rules.txt`. This keeps human review prompts aligned with quality durability, valuation discipline, thesis breakers, and FXAIX benchmark accountability.
+
 `longterm/decision_journal.py`
 Stores decisions, structured packets, raw responses, benchmark start prices, outcome updates, recommendation table rows, review candidates, durable thesis review events, dry-run account action plans, persisted deferred research items, and recommendation rank snapshots for future paper/live reconciliation.
 
@@ -67,6 +73,9 @@ Builds informational capital-needed alerts and provider-agnostic email payloads 
 
 `longterm/risk_review.py`
 Builds deterministic dry-run risk reviews for account-action intents. Reviews check protected symbols, benchmark gate state, thesis/review status, position-size warnings, and active-sleeve cash warnings before actions are surfaced as machine-readable plan intents.
+
+`longterm/live_readiness.py`
+Builds a dry-run live-readiness checklist. It reports unmet gates such as benchmark proof, paper trading, protected-symbol enforcement, manual approval, kill switch, audit logs, broker-read reconciliation, explicit live-mode config, and secrets hygiene. It does not enable live execution.
 
 `longterm/capital_alert_cli.py`
 Provides a dry-run-first command surface for rendering capital-needed markdown or explicitly sending the prepared payload through the configured SMTP sender.

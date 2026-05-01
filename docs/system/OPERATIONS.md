@@ -47,6 +47,11 @@ python scripts/longterm_journal.py thesis-review-list --journal-db path\to\journ
 
 Recorded thesis reviews are audit events. They do not place orders, but they do feed future review status. A newer CGH decision supersedes an older review; otherwise, a recorded `broken` or `weakening` review remains visible in reports and next-actions until newer evidence or a newer decision changes the thesis.
 
+Generate an operator review checklist from code by using `ReviewTemplateBuilder`
+inside a supervised workflow. The checklist is anchored to `active_rules.txt`
+and asks for business momentum, quality durability, valuation discipline, thesis
+breakers, evidence to collect, and the operator decision.
+
 ## Discovery Queue
 
 Discovery builds the stock universe that deserves research. It does not create
@@ -165,6 +170,25 @@ The next-actions report is still dry-run only. It evaluates the FXAIX benchmark 
 - If a held position has a recorded `broken` or `weakening` thesis state, it is marked `urgent_review_holding` rather than an ordinary review.
 - When generated from a cycle, it can include a `Deferred Research Queue` section listing incomplete symbols, missing fields, provenance, and the suggested enrichment command to run before those ideas should consume LLM research.
 - Protected symbols such as `FXAIX` remain excluded from sell, trim, rebalance, and rotation logic.
+
+You can pass current evidence into the report without mutating journal records:
+
+```powershell
+python scripts/longterm_next_actions.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --evidence-file path\to\evidence.json
+```
+
+Evidence JSON can be either a direct symbol-to-list mapping or a richer mapping:
+
+```json
+{
+  "AAPL": {
+    "evidence": ["Services revenue still growing."],
+    "decision_id": "optional-decision-id"
+  }
+}
+```
+
+Evidence files may not suggest sell, trim, reduce, or rebalance actions for protected symbols.
 
 ## Capital-Needed Email Payloads
 
@@ -327,6 +351,26 @@ The dry-run scheduler repeatedly calls the same one-cycle orchestration path.
 It does not place orders. Each cycle reloads profile, Motley Fool settings, idea
 input, and portfolio state from disk so cash/holding changes are not frozen in
 memory during a longer run.
+
+Print the intended cadence model:
+
+```powershell
+python scripts/longterm_scheduler_operating_model.py
+python scripts/longterm_scheduler_operating_model.py --json
+```
+
+The operating model is guidance for daily/weekly/as-needed routines. It is not a
+cron daemon and it does not execute broker orders.
+
+Print live-readiness gates:
+
+```powershell
+python scripts/longterm_live_readiness.py
+python scripts/longterm_live_readiness.py --observed-file path\to\live_readiness_observed.json
+```
+
+The live-readiness checklist is intentionally conservative. It reports unmet
+gates and does not enable live mode.
 
 Run exactly one scheduled cycle:
 

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import csv
+import json
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
 from typing import Any, Mapping
 
 from longterm.action_planner import ActionPlanner
@@ -123,7 +126,7 @@ class NextActionsPlanner:
                     )
                 )
 
-        return actions
+        return _prioritize_actions(actions)
 
 
 def build_next_actions_markdown(
@@ -134,16 +137,26 @@ def build_next_actions_markdown(
     benchmark_guard: BenchmarkGuard | None = None,
     review_status_today: date | None = None,
     last_review_dates_by_symbol: Mapping[str, date] | None = None,
+    review_status_by_symbol: dict[str, dict] | None = None,
+    evidence_by_symbol: Mapping[str, list[str]] | None = None,
+    evidence_file: str | Path | None = None,
     deferred_research_queue: list[Mapping[str, Any]] | None = None,
     limit: int = 10,
 ) -> str:
     guard = benchmark_guard or BenchmarkGuard()
     guard_result = guard.evaluate(journal.summarize_benchmark_performance())
-    review_status_by_symbol = ReviewStatusBuilder(
-        journal,
-        today=review_status_today,
-        last_review_dates_by_symbol=last_review_dates_by_symbol,
-    ).build(limit=limit)
+    if evidence_file:
+        evidence_by_symbol = load_evidence_by_symbol(
+            evidence_file,
+            protected_symbols=portfolio_state.protected_symbols or profile.protected_symbols,
+        )
+    if review_status_by_symbol is None:
+        review_status_by_symbol = ReviewStatusBuilder(
+            journal,
+            today=review_status_today,
+            last_review_dates_by_symbol=last_review_dates_by_symbol,
+            evidence_by_symbol=evidence_by_symbol,
+        ).build(limit=limit)
     actions = NextActionsPlanner(review_status_by_symbol=review_status_by_symbol).plan(
         journal,
         profile=profile,
@@ -157,6 +170,14 @@ def build_next_actions_markdown(
         "",
         f"Benchmark gate: {guard_result.reason}",
         "",
+        "## Category Summary",
+        "",
+        "| Category | Count |",
+        "|---|---:|",
+        *_category_summary_lines(actions),
+        "",
+        "## Actions",
+        "",
         "| Priority | Category | Symbol | Action | Reason |",
         "|---:|---|---|---|---|",
     ]
@@ -167,6 +188,19 @@ def build_next_actions_markdown(
     if deferred_research_queue:
         lines.extend(_deferred_research_queue_lines(deferred_research_queue))
     return "\n".join(lines) + "\n"
+
+
+def load_evidence_by_symbol(
+    path: str | Path,
+    *,
+    protected_symbols: list[str] | None = None,
+) -> dict[str, list[str]]:
+    """Load symbol evidence from JSON or CSV for review-status calculations."""
+    path = Path(path)
+    protected = {symbol.upper() for symbol in (protected_symbols or [])}
+    if path.suffix.lower() == ".csv":
+        return _load_evidence_csv(path, protected_symbols=protected)
+    return _load_evidence_json(path, protected_symbols=protected)
 
 
 def _deferred_research_queue_lines(deferred_research_queue: list[Mapping[str, Any]]) -> list[str]:
@@ -200,3 +234,86 @@ def _format_missing_fields(value: Any) -> str:
 
 def _markdown_cell(value: str) -> str:
     return value.replace("|", "\\|").replace("\n", " ")
+
+
+def _prioritize_actions(actions: list[NextAction]) -> list[NextAction]:
+    category_order = {
+        "urgent_review_holding": 0,
+        "paused_buy_candidate": 1,
+        "capital_needed": 2,
+        "buy_candidate": 3,
+        "review_holding": 4,
+    }
+    ordered = sorted(
+        actions,
+        key=lambda action: (category_order.get(action.category, 99), action.priority),
+    )
+    return [
+        NextAction(
+            priority=index,
+            category=action.category,
+            symbol=action.symbol,
+            action=action.action,
+            reason=action.reason,
+        )
+        for index, action in enumerate(ordered, start=1)
+    ]
+
+
+def _category_summary_lines(actions: list[NextAction]) -> list[str]:
+    counts: dict[str, int] = {}
+    for action in actions:
+        counts[action.category] = counts.get(action.category, 0) + 1
+    return [f"| {category} | {count} |" for category, count in counts.items()]
+
+
+def _load_evidence_json(path: Path, *, protected_symbols: set[str]) -> dict[str, list[str]]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("Evidence JSON must contain a symbol mapping.")
+    evidence: dict[str, list[str]] = {}
+    for symbol, value in payload.items():
+        normalized = str(symbol).upper()
+        action_hint = ""
+        if isinstance(value, dict):
+            action_hint = str(value.get("action_hint") or "")
+            raw_evidence = value.get("evidence") or []
+        else:
+            raw_evidence = value
+        _validate_protected_evidence(normalized, action_hint, protected_symbols)
+        evidence[normalized] = _normalize_evidence_list(raw_evidence)
+    return evidence
+
+
+def _load_evidence_csv(path: Path, *, protected_symbols: set[str]) -> dict[str, list[str]]:
+    evidence: dict[str, list[str]] = {}
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle):
+            symbol = str(row.get("symbol") or "").upper()
+            if not symbol:
+                continue
+            action_hint = str(row.get("action_hint") or "")
+            _validate_protected_evidence(symbol, action_hint, protected_symbols)
+            text = str(row.get("evidence") or row.get("note") or "").strip()
+            if text:
+                evidence.setdefault(symbol, []).append(text)
+    return evidence
+
+
+def _normalize_evidence_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item).strip()]
+    if value:
+        return [str(value)]
+    return []
+
+
+def _validate_protected_evidence(
+    symbol: str,
+    action_hint: str,
+    protected_symbols: set[str],
+) -> None:
+    if symbol not in protected_symbols:
+        return
+    if action_hint.lower() in {"sell", "trim", "reduce", "rebalance"}:
+        raise ValueError(f"Evidence file cannot suggest {action_hint} for protected symbol {symbol}.")

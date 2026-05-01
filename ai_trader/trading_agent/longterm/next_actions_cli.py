@@ -16,6 +16,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--journal-db", default=None)
     parser.add_argument("--profile-config", default=str(DEFAULT_PROFILE_PATH))
     parser.add_argument("--portfolio-state", required=True)
+    parser.add_argument("--evidence-file", default=None)
     parser.add_argument("--limit", type=int, default=10)
     return parser
 
@@ -29,6 +30,7 @@ def run_cli(args: argparse.Namespace) -> int:
             journal,
             profile=profile,
             portfolio_state=state,
+            evidence_file=args.evidence_file,
             deferred_research_queue=journal.list_deferred_research_items(limit=args.limit),
             limit=args.limit,
         ),

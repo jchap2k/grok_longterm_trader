@@ -6,6 +6,9 @@
 
 The system is not live-trading enabled. Current behavior is research, journaling, dry-run action planning, next-actions reporting, and safety validation.
 
+Live-readiness gates are documented in `LIVE_READINESS.md`; that checklist is a
+design artifact only and does not enable execution.
+
 ## Strategy Identity
 
 The trader prefers:
