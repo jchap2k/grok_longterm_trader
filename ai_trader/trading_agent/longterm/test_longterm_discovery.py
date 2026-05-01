@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from longterm.discovery import DiscoveryCandidate, DiscoveryEngine
 from longterm.discovery_cli import build_parser, run_cli
+from longterm.discovery_sources import load_candidate_source_file
 
 
 def test_discovery_merges_duplicate_symbols_and_preserves_provenance():
@@ -178,3 +179,90 @@ def test_discovery_cli_outputs_buckets_and_research_idea_batch(tmp_path, capsys)
     assert payload["research_queue"][0]["decision"] == "research_ready"
     assert ideas[0]["symbol"] == "MSFT"
     assert ideas[0]["idea_source"] == "discovery_sp500"
+
+
+def test_discovery_cli_loads_local_source_file(tmp_path, capsys):
+    source_path = tmp_path / "sp500.csv"
+    source_path.write_text(
+        "Symbol,Security,GICS Sector\nMSFT,Microsoft,Information Technology\n",
+        encoding="utf-8",
+    )
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--source-file",
+            str(source_path),
+            "--source",
+            "sp500",
+        ]
+    )
+
+    exit_code = run_cli(args)
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["watchlist"][0]["symbol"] == "MSFT"
+    assert payload["watchlist"][0]["source"] == "sp500"
+
+
+def test_load_sp500_style_csv_candidates(tmp_path):
+    path = tmp_path / "sp500.csv"
+    path.write_text(
+        "Symbol,Security,GICS Sector\nMSFT,Microsoft,Information Technology\nBRK.B,Berkshire Hathaway,Financials\n",
+        encoding="utf-8",
+    )
+
+    candidates = load_candidate_source_file(path, source="sp500")
+
+    assert candidates == [
+        {
+            "symbol": "MSFT",
+            "company_name": "Microsoft",
+            "source": "sp500",
+            "notes": ["GICS Sector: Information Technology."],
+        },
+        {
+            "symbol": "BRK.B",
+            "company_name": "Berkshire Hathaway",
+            "source": "sp500",
+            "notes": ["GICS Sector: Financials."],
+        },
+    ]
+
+
+def test_load_etf_holdings_csv_candidates_with_weight_metadata(tmp_path):
+    path = tmp_path / "qqq_holdings.csv"
+    path.write_text(
+        "Ticker,Name,Weight\nAAPL,Apple Inc.,8.9\nNVDA,NVIDIA Corp.,7.2\n",
+        encoding="utf-8",
+    )
+
+    candidates = load_candidate_source_file(path, source="qqq")
+
+    assert candidates[0]["symbol"] == "AAPL"
+    assert candidates[0]["company_name"] == "Apple Inc."
+    assert candidates[0]["source"] == "qqq"
+    assert candidates[0]["source_score"] == 8.9
+    assert "ETF/index weight: 8.9%." in candidates[0]["notes"]
+
+
+def test_load_nasdaq_trader_pipe_listing_candidates(tmp_path):
+    path = tmp_path / "nasdaqlisted.txt"
+    path.write_text(
+        "Symbol|Security Name|Market Category|ETF|Test Issue|Financial Status|Round Lot Size|File Creation Time\n"
+        "MSFT|Microsoft Corporation|Q|N|N|N|100|20260430\n"
+        "QQQ|Invesco QQQ Trust|G|Y|N|N|100|20260430\n"
+        "TEST|Test Corp|Q|N|Y|N|100|20260430\n",
+        encoding="utf-8",
+    )
+
+    candidates = load_candidate_source_file(path, source="nasdaq_listed")
+
+    assert candidates == [
+        {
+            "symbol": "MSFT",
+            "company_name": "Microsoft Corporation",
+            "source": "nasdaq_listed",
+            "notes": ["Market Category: Q."],
+        }
+    ]

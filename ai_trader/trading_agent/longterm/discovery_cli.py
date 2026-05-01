@@ -8,11 +8,14 @@ from dataclasses import asdict
 from pathlib import Path
 
 from longterm.discovery import DiscoveryEngine
+from longterm.discovery_sources import load_candidate_source_file
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Build a long-term stock discovery queue from candidate JSON.")
-    parser.add_argument("--candidates", required=True, help="JSON file containing a list of raw discovery candidates.")
+    parser = argparse.ArgumentParser(description="Build a long-term stock discovery queue from candidate files.")
+    parser.add_argument("--candidates", default="", help="JSON file containing a list of raw discovery candidates.")
+    parser.add_argument("--source-file", default="", help="Local CSV or NasdaqTrader pipe file to load as candidates.")
+    parser.add_argument("--source", default="", help="Source label to attach when loading --source-file.")
     parser.add_argument("--research-limit", type=int, default=25)
     parser.add_argument(
         "--research-ideas-output",
@@ -23,10 +26,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run_cli(args: argparse.Namespace, *, engine: DiscoveryEngine | None = None) -> int:
-    candidate_path = Path(args.candidates)
-    payload = json.loads(candidate_path.read_text(encoding="utf-8"))
-    if not isinstance(payload, list):
-        raise ValueError("Discovery candidate file must contain a JSON list.")
+    payload = _load_candidates(args)
 
     result = (engine or DiscoveryEngine()).build_queue(
         payload,
@@ -43,6 +43,22 @@ def run_cli(args: argparse.Namespace, *, engine: DiscoveryEngine | None = None) 
 
     print(json.dumps(_result_payload(result), indent=2, sort_keys=True))
     return 0
+
+
+def _load_candidates(args: argparse.Namespace) -> list[dict]:
+    if args.source_file:
+        if not args.source:
+            raise ValueError("--source is required when using --source-file.")
+        return load_candidate_source_file(args.source_file, source=args.source)
+
+    if not args.candidates:
+        raise ValueError("Either --candidates or --source-file must be provided.")
+
+    candidate_path = Path(args.candidates)
+    payload = json.loads(candidate_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, list):
+        raise ValueError("Discovery candidate file must contain a JSON list.")
+    return payload
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -12,6 +12,7 @@ from typing import Any, Callable
 from longterm.motley_fool_settings import load_motley_fool_capture_settings
 from longterm.orchestration import run_longterm_cycle
 from longterm.orchestration_cli import _load_manual_ideas
+from longterm.discovery_sources import load_candidate_source_file
 from longterm.portfolio_state import PortfolioState
 from portfolio.portfolio_profile import PortfolioProfile
 
@@ -22,6 +23,8 @@ class LongTermSchedulerInputs:
     idea_file: str | Path | None = None
     idea_batch: str | Path | None = None
     discovery_candidates: str | Path | None = None
+    discovery_source_file: str | Path | None = None
+    discovery_source: str = ""
     motley_fool_config: str | Path | None = None
     journal_db: str | Path | None = None
     portfolio_state: str | Path | None = None
@@ -76,7 +79,11 @@ def build_cycle_kwargs(inputs: LongTermSchedulerInputs) -> dict[str, Any]:
         str(inputs.idea_file or ""),
         str(inputs.idea_batch or ""),
     )
-    discovery_candidates = _load_discovery_candidates(inputs.discovery_candidates)
+    discovery_candidates = _load_discovery_candidates(
+        inputs.discovery_candidates,
+        source_file=inputs.discovery_source_file,
+        source=inputs.discovery_source,
+    )
     settings = load_motley_fool_capture_settings(inputs.motley_fool_config)
     portfolio_state = (
         PortfolioState.from_file(inputs.portfolio_state, profile=profile)
@@ -101,7 +108,18 @@ def build_cycle_kwargs(inputs: LongTermSchedulerInputs) -> dict[str, Any]:
     return kwargs
 
 
-def _load_discovery_candidates(path: str | Path | None) -> list[dict[str, Any]]:
+def _load_discovery_candidates(
+    path: str | Path | None,
+    *,
+    source_file: str | Path | None = None,
+    source: str = "",
+) -> list[dict[str, Any]]:
+    if path and source_file:
+        raise ValueError("Use either discovery_candidates or discovery_source_file, not both.")
+    if source_file:
+        if not source:
+            raise ValueError("discovery_source is required when using discovery_source_file.")
+        return load_candidate_source_file(source_file, source=source)
     if not path:
         return []
     payload = json.loads(Path(path).read_text(encoding="utf-8"))

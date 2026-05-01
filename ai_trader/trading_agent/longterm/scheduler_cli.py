@@ -20,6 +20,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--idea-file", default="")
     parser.add_argument("--idea-batch", default="")
     parser.add_argument("--discovery-candidates", default="")
+    parser.add_argument("--discovery-source-file", default="")
+    parser.add_argument("--discovery-source", default="")
     parser.add_argument("--profile-config", default=str(DEFAULT_PROFILE_PATH))
     parser.add_argument("--motley-fool-config", default=None)
     parser.add_argument("--journal-db", default=None)
@@ -48,6 +50,8 @@ def run_cli(
         idea_file=Path(args.idea_file) if args.idea_file else None,
         idea_batch=Path(args.idea_batch) if args.idea_batch else None,
         discovery_candidates=Path(args.discovery_candidates) if args.discovery_candidates else None,
+        discovery_source_file=Path(args.discovery_source_file) if args.discovery_source_file else None,
+        discovery_source=args.discovery_source,
         motley_fool_config=Path(args.motley_fool_config) if args.motley_fool_config else None,
         journal_db=Path(args.journal_db) if args.journal_db else None,
         portfolio_state=Path(args.portfolio_state) if args.portfolio_state else None,

@@ -584,6 +584,45 @@ def test_orchestration_cli_loads_idea_batch(tmp_path, capsys):
     assert '"total_idea_count": 2' in captured.out
 
 
+def test_orchestration_cli_loads_discovery_source_file(tmp_path, capsys):
+    source_path = tmp_path / "sp500.csv"
+    source_path.write_text(
+        "Symbol,Security,GICS Sector\nMSFT,Microsoft,Information Technology\n",
+        encoding="utf-8",
+    )
+    profile_path = tmp_path / "profile.json"
+    profile_path.write_text(
+        '{"account_strategy_mode":"roth_ira","tradable_capital":35000,"protected_symbols":["FXAIX"],"benchmark_symbol":"FXAIX","defensive_parking_symbol":"SPY"}',
+        encoding="utf-8",
+    )
+    cycle_calls = []
+
+    def fake_cycle(**kwargs):
+        cycle_calls.append(kwargs)
+        return {"status": "completed", "total_idea_count": 0}
+
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--discovery-source-file",
+            str(source_path),
+            "--discovery-source",
+            "sp500",
+            "--profile-config",
+            str(profile_path),
+            "--quiet",
+        ]
+    )
+
+    exit_code = run_cli(args, cycle_func=fake_cycle)
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"status": "completed"' in captured.out
+    assert cycle_calls[0]["discovery_candidates"][0]["symbol"] == "MSFT"
+    assert cycle_calls[0]["discovery_candidates"][0]["source"] == "sp500"
+
+
 def test_orchestration_cli_loads_portfolio_state_when_provided(tmp_path, capsys):
     idea_path = tmp_path / "idea.json"
     idea_path.write_text('{"symbol":"aapl","company_name":"Apple"}', encoding="utf-8")

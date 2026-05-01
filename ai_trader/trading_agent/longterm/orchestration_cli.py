@@ -8,6 +8,7 @@ from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
 
+from longterm.discovery_sources import load_candidate_source_file
 from longterm.motley_fool_settings import load_motley_fool_capture_settings
 from longterm.orchestration import run_longterm_cycle
 from longterm.portfolio_state import PortfolioState
@@ -23,6 +24,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--idea-file", default="")
     parser.add_argument("--idea-batch", default="")
     parser.add_argument("--discovery-candidates", default="")
+    parser.add_argument("--discovery-source-file", default="")
+    parser.add_argument("--discovery-source", default="")
     parser.add_argument("--profile-config", default=str(DEFAULT_PROFILE_PATH))
     parser.add_argument("--motley-fool-config", default=None)
     parser.add_argument("--journal-db", default=None)
@@ -43,7 +46,11 @@ def run_cli(
 ) -> int:
     profile = PortfolioProfile.from_file(args.profile_config)
     manual_ideas = _load_manual_ideas(args.idea_file, args.idea_batch)
-    discovery_candidates = _load_discovery_candidates(args.discovery_candidates)
+    discovery_candidates = _load_discovery_candidates(
+        args.discovery_candidates,
+        source_file=args.discovery_source_file,
+        source=args.discovery_source,
+    )
     settings = load_motley_fool_capture_settings(args.motley_fool_config)
     portfolio_state = (
         PortfolioState.from_file(args.portfolio_state, profile=profile)
@@ -94,7 +101,18 @@ def _load_manual_ideas(idea_file: str, idea_batch: str) -> list[dict[str, Any]]:
     return []
 
 
-def _load_discovery_candidates(path: str) -> list[dict[str, Any]]:
+def _load_discovery_candidates(
+    path: str,
+    *,
+    source_file: str = "",
+    source: str = "",
+) -> list[dict[str, Any]]:
+    if path and source_file:
+        raise ValueError("Use either --discovery-candidates or --discovery-source-file, not both.")
+    if source_file:
+        if not source:
+            raise ValueError("--discovery-source is required when using --discovery-source-file.")
+        return load_candidate_source_file(source_file, source=source)
     if not path:
         return []
     payload = json.loads(Path(path).read_text(encoding="utf-8"))

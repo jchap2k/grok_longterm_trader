@@ -48,6 +48,27 @@ def test_build_cycle_kwargs_loads_fresh_portfolio_state_each_time(tmp_path):
     assert second["verbose"] is False
 
 
+def test_build_cycle_kwargs_loads_discovery_source_file(tmp_path):
+    profile_path = tmp_path / "profile.json"
+    _write_profile(profile_path)
+    source_path = tmp_path / "sp500.csv"
+    source_path.write_text(
+        "Symbol,Security,GICS Sector\nMSFT,Microsoft,Information Technology\n",
+        encoding="utf-8",
+    )
+
+    inputs = LongTermSchedulerInputs(
+        profile_config=profile_path,
+        discovery_source_file=source_path,
+        discovery_source="sp500",
+    )
+
+    kwargs = build_cycle_kwargs(inputs)
+
+    assert kwargs["discovery_candidates"][0]["symbol"] == "MSFT"
+    assert kwargs["discovery_candidates"][0]["source"] == "sp500"
+
+
 def test_scheduler_run_once_records_explicit_outputs(tmp_path):
     profile_path = tmp_path / "profile.json"
     _write_profile(profile_path)
@@ -203,6 +224,46 @@ def test_scheduler_cli_forwards_inputs_and_prints_summary(tmp_path, capsys):
     assert inputs.portfolio_state == portfolio_path
     assert inputs.launch_login_if_needed is True
     assert inputs.quiet is True
+    assert config.max_runs == 1
+
+
+def test_scheduler_cli_forwards_discovery_source_file(tmp_path, capsys):
+    profile_path = tmp_path / "profile.json"
+    _write_profile(profile_path)
+    source_path = tmp_path / "sp500.csv"
+    source_path.write_text("Symbol,Security\nMSFT,Microsoft\n", encoding="utf-8")
+
+    scheduler_calls = []
+
+    def fake_scheduler(*, inputs, config):
+        scheduler_calls.append((inputs, config))
+        return {
+            "status": "completed",
+            "run_count": 1,
+            "success_count": 1,
+            "error_count": 0,
+            "runs": [],
+        }
+
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--profile-config",
+            str(profile_path),
+            "--discovery-source-file",
+            str(source_path),
+            "--discovery-source",
+            "sp500",
+            "--run-once",
+        ]
+    )
+
+    exit_code = run_cli(args, scheduler_func=fake_scheduler)
+
+    inputs, config = scheduler_calls[0]
+    assert exit_code == 0
+    assert inputs.discovery_source_file == source_path
+    assert inputs.discovery_source == "sp500"
     assert config.max_runs == 1
 
 
