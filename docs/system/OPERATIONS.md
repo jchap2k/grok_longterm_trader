@@ -248,6 +248,19 @@ The reconciliation report flags missing target symbols, unexpected non-protected
 holdings, target-value mismatches, cash delta, and protected-symbol presence. It
 is read-only and does not submit paper or live orders.
 
+Build a non-submitting paper order preview from a dry-run action plan:
+
+```powershell
+python scripts/longterm_paper_order_preview.py --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json
+python scripts/longterm_paper_order_preview.py --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --json
+```
+
+The preview converts `BUY` intents into buy-notional preview rows, `REBALANCE`
+intents into paired sell/buy preview rows, and `REVIEW` / `BLOCKED` /
+`CAPITAL_NEEDED` intents into `no_order` rows. It carries decision IDs, risk
+metadata, blocked reasons, cash shortfall, and rebalance transaction IDs. It
+does not import Alpaca and cannot submit orders.
+
 ## Capital-Needed Email Payloads
 
 Capital-needed emails are informational only. The long-term trader can build provider-agnostic email payloads and send them through a Brevo-compatible SMTP sender, but email sending should remain off until explicitly enabled in a local ignored config file. A capital request should only be sent when a high-conviction candidate lacks active-sleeve cash and existing non-protected holdings do not already have sell/reduce recommendations that should fund the idea first.

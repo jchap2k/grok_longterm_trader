@@ -45,3 +45,6 @@ Before live execution exists:
 - keep paper reconciliation read-only; reconciliation reports may compare
   actual paper state to dry-run plans, but they must not submit paper or live
   orders
+- keep paper order previews non-submitting; preview rows may look
+  broker-shaped, but `order_submission_enabled` must remain false until a
+  separate approved paper-execution layer exists
