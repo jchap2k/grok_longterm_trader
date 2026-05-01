@@ -664,12 +664,18 @@ cron daemon and it does not execute broker orders.
 Print live-readiness gates:
 
 ```powershell
+python scripts/longterm_broker_capabilities.py
+python scripts/longterm_broker_capabilities.py --required-order-model whole_share --observed-output path\to\broker_capability_observed.json
 python scripts/longterm_live_readiness.py
 python scripts/longterm_live_readiness.py --observed-file path\to\live_readiness_observed.json
 ```
 
 The live-readiness checklist is intentionally conservative. It reports unmet
-gates and does not enable live mode.
+gates and does not enable live mode. The broker-capability command is a static,
+advisory helper for the `broker_capability_match` gate; it does not call a
+broker. The default check blocks Alpaca paper notional/fractional sizing from
+being treated as Schwab API live-ready. Use `--required-order-model whole_share`
+only after the live plan has deliberately been adapted to whole-share sizing.
 
 Run exactly one scheduled cycle:
 

@@ -35,10 +35,19 @@ The checklist in `longterm/live_readiness.py` should remain conservative:
 ## Commands
 
 ```powershell
+python scripts/longterm_broker_capabilities.py
+python scripts/longterm_broker_capabilities.py --required-order-model whole_share --observed-output path\to\broker_capability_observed.json
 python scripts/longterm_live_readiness.py
 python scripts/longterm_live_readiness.py --json
 python scripts/longterm_live_readiness.py --observed-file path\to\live_readiness_observed.json
 ```
+
+`longterm_broker_capabilities.py` is advisory-only. With the default
+`notional_fractional` order model, it should block Alpaca-paper-to-Schwab-API
+live readiness because Schwab API is treated as whole-share only. If a future
+live plan is intentionally adapted to whole shares, run it with
+`--required-order-model whole_share` and include the generated observed JSON in
+the larger live-readiness evidence file.
 
 The command reports readiness only. It does not enable live mode and does not
 place orders.
