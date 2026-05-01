@@ -433,6 +433,17 @@ It surfaces blockers and warnings around protected symbols, benchmark guard,
 review/thesis state, active rules, feedback freshness, lifecycle errors, and
 decision traceability before any future scheduler-submit design is considered.
 
+Build the full read-only operator status bundle:
+
+```powershell
+python scripts/longterm_operator_status_bundle.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --paper-ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --price-map path\to\prices.json --feedback-summary path\to\feedback_summary.json
+python scripts/longterm_operator_status_bundle.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --paper-ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --json
+```
+
+The bundle combines paper lifecycle, advisory scheduler readiness, and position
+intelligence into one operator surface. It is intended for manual review before
+any later scheduler automation design and keeps order submission disabled.
+
 ## Position Intelligence Report
 
 Generate an on-demand monthly or quarterly position intelligence report before
