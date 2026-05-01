@@ -6,6 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from brokers.base_broker import Order, OrderSide, OrderStatus, OrderType
+from brokers import alpaca_broker as alpaca_broker_module
 from longterm.paper_order_status_refresh import (
     PaperOrderStatusRefresh,
     build_paper_order_status_refresh_markdown,
@@ -25,6 +26,38 @@ class FakeStatusBroker:
         if order_id in self.fail_ids:
             raise TimeoutError("status timeout")
         return self.orders[order_id]
+
+
+class FakeAlpacaStatus:
+    value = "pending_new"
+
+
+class FakeAlpacaSide:
+    value = "buy"
+
+
+class FakeAlpacaType:
+    value = "market"
+
+
+class FakeAlpacaNotionalOrder:
+    id = "order-1"
+    symbol = "NVDA"
+    side = FakeAlpacaSide()
+    type = FakeAlpacaType()
+    status = FakeAlpacaStatus()
+    qty = None
+    limit_price = None
+    stop_price = None
+    filled_avg_price = None
+    filled_qty = None
+    created_at = datetime(2026, 5, 1, 15, 30)
+    filled_at = None
+
+
+class FakeAlpacaOrderClient:
+    def get_order_by_id(self, order_id):
+        return FakeAlpacaNotionalOrder()
 
 
 def _submitted_event(ledger, *, decision_id="decision-1", broker_order_id="order-1", symbol="NVDA"):
@@ -78,6 +111,28 @@ def test_status_refresh_records_filled_event_for_submitted_order(tmp_path):
     assert latest["event_json"]["live_mode"] is False
     assert latest["event_json"]["filled_quantity"] == 3
     assert latest["event_json"]["filled_price"] == 101.5
+
+
+def test_status_refresh_handles_pending_alpaca_notional_order_without_qty(monkeypatch, tmp_path):
+    monkeypatch.setattr(alpaca_broker_module, "ALPACA_AVAILABLE", True)
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    _submitted_event(ledger)
+    broker = alpaca_broker_module.AlpacaBroker(
+        api_key="paper-key",
+        secret_key="paper-secret",
+        paper_trading=True,
+    )
+    broker.connected = True
+    broker.trading_client = FakeAlpacaOrderClient()
+
+    result = PaperOrderStatusRefresh().run(ledger=ledger, broker=broker)
+    latest = ledger.list_execution_events(limit=1)[0]
+
+    assert result["error_count"] == 0
+    assert result["status_counts"]["pending"] == 1
+    assert latest["status"] == "pending"
+    assert latest["event_json"]["filled_quantity"] == 0.0
+    assert latest["event_json"]["filled_price"] is None
 
 
 def test_status_refresh_is_idempotent_for_unchanged_terminal_status(tmp_path):

@@ -173,5 +173,29 @@ def test_live_readiness_checklist_blocks_live_mode_until_all_gates_pass():
 
     assert result.ready is False
     assert "benchmark_proven" in result.unmet_gate_keys
+    assert "broker_capability_match" in result.unmet_gate_keys
     assert "explicit_live_mode_config" in result.unmet_gate_keys
     assert "No live broker execution is enabled" in result.to_markdown()
+
+
+def test_live_readiness_requires_live_broker_capabilities_to_match_paper_sizing():
+    checklist = LiveReadinessChecklist.default()
+
+    result = checklist.evaluate(
+        {
+            "dry_run_cycles": 30,
+            "benchmark_proven": True,
+            "paper_trading_verified": True,
+            "protected_symbol_enforced": True,
+            "manual_approval": True,
+            "kill_switch": True,
+            "audit_logs": True,
+            "broker_read_reconciliation": True,
+            "explicit_live_mode_config": True,
+            "secrets_not_committed": True,
+            "broker_capability_match": False,
+        }
+    )
+
+    assert result.ready is False
+    assert "broker_capability_match" in result.unmet_gate_keys

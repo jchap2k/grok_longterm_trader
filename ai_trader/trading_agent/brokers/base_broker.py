@@ -41,7 +41,7 @@ class OrderStatus(Enum):
 class Position:
     """Represents a stock position."""
     symbol: str
-    quantity: int
+    quantity: float
     avg_entry_price: float
     current_price: float
     unrealized_pnl: float
@@ -54,13 +54,13 @@ class Order:
     order_id: str
     symbol: str
     side: OrderSide
-    quantity: int
+    quantity: float
     order_type: OrderType
     status: OrderStatus
     limit_price: Optional[float] = None
     stop_price: Optional[float] = None
     filled_price: Optional[float] = None
-    filled_quantity: int = 0
+    filled_quantity: float = 0
     created_at: Optional[datetime] = None
     filled_at: Optional[datetime] = None
 

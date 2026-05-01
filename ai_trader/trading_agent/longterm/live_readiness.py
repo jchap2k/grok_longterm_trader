@@ -50,6 +50,14 @@ class LiveReadinessChecklist:
                 LiveReadinessGate("dry_run_history", "Sufficient dry-run history", 30),
                 LiveReadinessGate("benchmark_proven", "Active sleeve benchmark proof"),
                 LiveReadinessGate("paper_trading_verified", "Paper trading verified"),
+                LiveReadinessGate(
+                    "broker_capability_match",
+                    "Live broker capabilities match paper sizing",
+                    description=(
+                        "The intended live broker must support the same order style "
+                        "used in paper simulation, or sizing must be adapted before live mode."
+                    ),
+                ),
                 LiveReadinessGate("protected_symbol_enforced", "Protected symbol enforcement"),
                 LiveReadinessGate("manual_approval", "Manual approval recorded"),
                 LiveReadinessGate("kill_switch", "Kill switch documented"),

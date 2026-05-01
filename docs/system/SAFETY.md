@@ -36,6 +36,8 @@ Before live execution exists:
 - confirm explicit user approval for live mode
 - keep broker execution behind a separate feature flag
 - require paper-trading validation first
+- require a broker-capability match before live mode; paper notional/fractional
+  behavior must not be assumed to transfer to a whole-share-only live API
 - require protected-symbol checks at the final execution boundary
 - require cash and buying-power checks at the final execution boundary
 - require audit logs for every proposed and executed action

@@ -10,6 +10,10 @@ must be satisfied before live execution should even be considered.
 - Protected holdings such as `FXAIX` must remain impossible to sell, trim, rotate, or rebalance out of.
 - Alpaca paper trading can be used as a live simulator before real capital is considered.
 - The current Alpaca integration is a read-only paper account snapshot path over the standard API. It exports portfolio state for planning; it does not place orders and does not require websockets.
+- Alpaca paper can support notional/fractional simulation, but that must not be
+  treated as proof that a future live broker supports the same sizing model.
+  For example, Schwab's public API is whole-share oriented even though Schwab
+  offers fractional "Stock Slices" outside the API.
 
 ## Required Gates
 
@@ -18,6 +22,8 @@ The checklist in `longterm/live_readiness.py` should remain conservative:
 - Sufficient dry-run history.
 - Active-sleeve benchmark proof versus `FXAIX`.
 - Paper trading verified.
+- Live broker capabilities match the paper sizing/order model, or the live
+  execution plan has been adapted and reviewed for whole-share constraints.
 - Protected-symbol enforcement.
 - Manual approval recorded.
 - Kill switch documented.

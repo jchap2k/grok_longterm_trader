@@ -5,6 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from brokers.base_broker import AccountInfo, Position
+from brokers import alpaca_broker as alpaca_broker_module
 from longterm.alpaca_paper_account import (
     AlpacaPaperAccountReader,
     paper_account_snapshot_to_portfolio_state,
@@ -61,6 +62,20 @@ class ChattyFakeReadOnlyBroker(FakeReadOnlyBroker):
         super().disconnect()
 
 
+class FakeAlpacaPosition:
+    symbol = "NVDA"
+    qty = "0.050106727"
+    avg_entry_price = "199.55"
+    current_price = "199.57"
+    unrealized_pl = "0.01"
+    unrealized_plpc = "0.0001"
+
+
+class FakeAlpacaTradingClient:
+    def get_all_positions(self):
+        return [FakeAlpacaPosition()]
+
+
 def test_alpaca_paper_reader_converts_account_to_portfolio_state():
     profile = PortfolioProfile(protected_symbols=["FXAIX"])
     broker = FakeReadOnlyBroker()
@@ -78,6 +93,23 @@ def test_alpaca_paper_reader_converts_account_to_portfolio_state():
     assert state.holding_value("FXAIX") == 3600.0
     assert state.active_market_value == 1850.0
     assert state.protected_market_value == 3600.0
+
+
+def test_alpaca_broker_preserves_fractional_position_quantities(monkeypatch):
+    monkeypatch.setattr(alpaca_broker_module, "ALPACA_AVAILABLE", True)
+    broker = alpaca_broker_module.AlpacaBroker(
+        api_key="paper-key",
+        secret_key="paper-secret",
+        paper_trading=True,
+    )
+    broker.connected = True
+    broker.trading_client = FakeAlpacaTradingClient()
+
+    positions = broker.get_positions()
+
+    assert positions[0].symbol == "NVDA"
+    assert positions[0].quantity == 0.050106727
+    assert positions[0].avg_entry_price == 199.55
 
 
 def test_alpaca_paper_reader_rejects_non_paper_mode():

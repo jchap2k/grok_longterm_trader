@@ -163,11 +163,11 @@ class AlpacaBroker(BaseBroker):
         for pos in alpaca_positions:
             positions.append(Position(
                 symbol=pos.symbol,
-                quantity=int(pos.qty),
-                avg_entry_price=float(pos.avg_entry_price),
-                current_price=float(pos.current_price),
-                unrealized_pnl=float(pos.unrealized_pl),
-                unrealized_pnl_percent=float(pos.unrealized_plpc) * 100
+                quantity=_safe_float(pos.qty),
+                avg_entry_price=_safe_float(pos.avg_entry_price),
+                current_price=_safe_float(pos.current_price),
+                unrealized_pnl=_safe_float(pos.unrealized_pl),
+                unrealized_pnl_percent=_safe_float(pos.unrealized_plpc) * 100
             ))
 
         return positions
@@ -738,8 +738,12 @@ class AlpacaBroker(BaseBroker):
             "calculated": OrderStatus.PENDING
         }
 
+        status_value = _alpaca_value(getattr(alpaca_order, "status", ""))
+        side_value = _alpaca_value(getattr(alpaca_order, "side", ""))
+        type_value = _alpaca_value(getattr(alpaca_order, "type", ""))
+
         # Map order side
-        side = OrderSide.BUY if alpaca_order.side == AlpacaOrderSide.BUY else OrderSide.SELL
+        side = OrderSide.BUY if side_value == "buy" else OrderSide.SELL
 
         # Map order type
         type_map = {
@@ -749,22 +753,37 @@ class AlpacaBroker(BaseBroker):
             "stop_limit": OrderType.STOP_LIMIT,
             "trailing_stop": OrderType.TRAILING_STOP
         }
-        order_type = type_map.get(alpaca_order.type, OrderType.MARKET)
+        order_type = type_map.get(type_value, OrderType.MARKET)
 
         return Order(
             order_id=str(alpaca_order.id),
             symbol=alpaca_order.symbol,
             side=side,
-            quantity=int(alpaca_order.qty),
+            quantity=_safe_float(getattr(alpaca_order, "qty", None)),
             order_type=order_type,
-            status=status_map.get(alpaca_order.status, OrderStatus.PENDING),
+            status=status_map.get(status_value, OrderStatus.PENDING),
             limit_price=float(alpaca_order.limit_price) if alpaca_order.limit_price else None,
             stop_price=float(alpaca_order.stop_price) if alpaca_order.stop_price else None,
             filled_price=float(alpaca_order.filled_avg_price) if alpaca_order.filled_avg_price else None,
-            filled_quantity=int(alpaca_order.filled_qty) if alpaca_order.filled_qty else 0,
+            filled_quantity=_safe_float(getattr(alpaca_order, "filled_qty", None)),
             created_at=alpaca_order.created_at,
             filled_at=alpaca_order.filled_at
         )
+
+
+def _alpaca_value(value: Any) -> str:
+    raw = getattr(value, "value", value)
+    text = str(raw or "").lower()
+    if "." in text:
+        text = text.rsplit(".", 1)[-1]
+    return text
+
+
+def _safe_float(value: Any) -> float:
+    try:
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 # Example usage
