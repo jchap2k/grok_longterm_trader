@@ -158,6 +158,9 @@ Provides the supervised Stage 6B Alpaca paper execution boundary. V1 submits onl
 `longterm/paper_order_status_refresh.py`
 Refreshes already-submitted Alpaca paper order statuses by reading broker order IDs from `PaperTradeLedger`, calling a read-only broker status API, and appending status events such as `filled`, `partially_filled`, `rejected`, or `status_refresh_error`. It does not submit, cancel, or modify orders.
 
+`longterm/paper_outcomes.py`
+Builds provider-free paper fill outcome summaries from `PaperTradeLedger` fill events and an explicit current-price map. It compares paper fill return against `FXAIX` from the fill baseline and does not mutate journal decisions or call a broker.
+
 `longterm/feedback_refresh.py`
 Runs explicit dry-run feedback maintenance. It can rebuild symbol profiles, apply paper-preview feedback, apply reconciliation feedback, refresh active-vs-FXAIX outcomes from explicit price maps, compute ephemeral outcome freshness, summarize review/thesis state, compute benchmark-guard context, persist idempotent eligibility evaluation events, and produce analysis-only tuning inputs. It does not mutate ranking, sizing, planner weights, or broker state.
 

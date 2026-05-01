@@ -367,6 +367,26 @@ paper order IDs, calls Alpaca paper order-status reads, and appends status event
 such as `filled`, `partially_filled`, `rejected`, or `status_refresh_error` to
 `PaperTradeLedger`. It does not submit, cancel, replace, or modify orders.
 
+Summarize paper fill outcomes versus `FXAIX` from explicit current prices:
+
+```powershell
+python scripts/longterm_paper_outcomes.py --ledger-db path\to\paper_ledger.db --price-map path\to\prices.json
+python scripts/longterm_paper_outcomes.py --ledger-db path\to\paper_ledger.db --price-map path\to\prices.json --json
+```
+
+The price map is provider-free evidence, for example:
+
+```json
+{
+  "NVDA": {"current_price": 120.0},
+  "FXAIX": {"current_price": 55.0}
+}
+```
+
+Paper outcomes do not mutate decision rows. They compare filled paper orders
+against the benchmark baseline stored in the fill event when available, and mark
+rows as `pending_price` when required prices are missing.
+
 Run the feedback refresh maintenance loop:
 
 ```powershell
