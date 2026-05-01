@@ -396,6 +396,17 @@ visible even after a later healthy status is recorded. Lifecycle/operator
 artifacts distinguish this by surfacing whether the current/latest status is
 still an error.
 
+Generate live-readiness evidence that paper trading has been verified:
+
+```powershell
+python scripts/longterm_paper_trading_verification.py --ledger-db path\to\paper_ledger.db
+python scripts/longterm_paper_trading_verification.py --ledger-db path\to\paper_ledger.db --observed-output path\to\paper_trading_observed.json --json
+```
+
+This report is read-only. It marks `paper_trading_verified=true` only when the
+paper ledger contains at least one filled paper execution and no current
+status-refresh errors.
+
 Summarize paper fill outcomes versus `FXAIX` from explicit current prices:
 
 ```powershell

@@ -158,6 +158,9 @@ Hydrates paper preview ledger rows into read-only status maps by decision ID and
 `longterm/paper_execution_status.py`
 Hydrates paper execution ledger events into read-only status maps by decision ID and symbol. Recommendation reports, next-actions, lifecycle, and position intelligence reports can show latest paper execution state, broker order ID, filled quantity/price, and error context without mutating original decision rows. Symbol summaries distinguish historical status-refresh error counts from whether the current/latest status is still an error.
 
+`longterm/paper_trading_verification.py`
+Builds a conservative live-readiness observed fragment for the `paper_trading_verified` gate from append-only paper execution ledger events. It requires at least one filled paper execution and no current status-refresh errors. It does not call a broker.
+
 `longterm/paper_execution_eligibility.py`
 Builds the pre-6B paper execution eligibility contract from a dry-run account action plan, the paper preview ledger, portfolio state, and protected-symbol profile. It checks decision-id traceability, preview freshness, preview ready/blocked/no-order status, explicit paper-execution gate state, protected symbols, and intent-level blockers. It does not import Alpaca and does not submit orders.
 

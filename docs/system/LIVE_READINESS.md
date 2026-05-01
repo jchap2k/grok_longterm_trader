@@ -37,6 +37,7 @@ The checklist in `longterm/live_readiness.py` should remain conservative:
 ```powershell
 python scripts/longterm_broker_capabilities.py
 python scripts/longterm_broker_capabilities.py --required-order-model whole_share --observed-output path\to\broker_capability_observed.json
+python scripts/longterm_paper_trading_verification.py --ledger-db path\to\paper_ledger.db --observed-output path\to\paper_trading_observed.json
 python scripts/longterm_live_readiness.py
 python scripts/longterm_live_readiness.py --json
 python scripts/longterm_live_readiness.py --observed-file path\to\live_readiness_observed.json
@@ -54,6 +55,10 @@ the larger live-readiness evidence file.
 `--observed-fragment` files. Later fragments override earlier values, which
 lets small advisory tools such as broker capability checks provide one gate at
 a time without hand-editing the main observed JSON.
+
+`longterm_paper_trading_verification.py` can generate the
+`paper_trading_verified` fragment from the paper execution ledger after a
+successful filled paper order. It is read-only and does not call a broker.
 
 The command reports readiness only. It does not enable live mode and does not
 place orders.
