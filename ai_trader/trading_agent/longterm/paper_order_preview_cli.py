@@ -11,6 +11,7 @@ from longterm.paper_order_preview import (
     build_paper_order_preview,
     build_paper_order_preview_markdown,
 )
+from longterm.paper_trade_ledger import PaperTradeLedger
 from longterm.portfolio_state import PortfolioState
 from portfolio.portfolio_profile import PortfolioProfile
 
@@ -21,6 +22,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--portfolio-state", required=True)
     parser.add_argument("--action-plan", required=True)
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--record-preview", action="store_true")
+    parser.add_argument("--ledger-db", default=None)
     return parser
 
 
@@ -29,6 +32,8 @@ def run_cli(args: argparse.Namespace) -> int:
     state = PortfolioState.from_file(args.portfolio_state, profile=profile)
     action_plan = _load_json(args.action_plan)
     preview = build_paper_order_preview(action_plan, portfolio_state=state, profile=profile)
+    if args.record_preview:
+        preview["preview_log_id"] = PaperTradeLedger(args.ledger_db).record_preview(preview)
     if args.json:
         print(json.dumps(preview, indent=2, sort_keys=True))
     else:

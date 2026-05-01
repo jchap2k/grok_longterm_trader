@@ -138,6 +138,9 @@ Compares read-only paper account state against dry-run action-plan targets and e
 `longterm/paper_order_preview.py`
 Converts dry-run account action plan intents into broker-shaped paper order previews without importing Alpaca or submitting orders. Preview rows carry plan/decision traceability, risk/review metadata, cash shortfall, blocked reasons, and paired rebalance transaction IDs. `order_submission_enabled` is always `false`.
 
+`longterm/paper_trade_ledger.py`
+Persists non-submitting paper preview rows with plan, preview, decision, transaction, and future trade IDs. The ledger provides durable traceability before any broker submission path exists and reserves execution-event storage for a later Stage 6B paper execution layer.
+
 `longterm/next_actions.py`
 Combines recommendation table builder output, portfolio state, automatically-derived review status, benchmark guard, and dry-run planner into a prioritized next-actions report. When the benchmark guard pauses new buys, buy candidates are shown as paused rather than actionable. If a high-conviction idea lacks active-sleeve cash, the report surfaces a `capital_needed` alert instead of pretending the buy can proceed.
 
@@ -152,7 +155,7 @@ Checks review due dates and whether current evidence matches invalidation condit
 
 ## Decision Flow
 
-Universe sources -> discovery queue -> research packet enrichment -> research batches -> research campaign manifest -> `ResearchPacket` completeness gate -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> rebalance outcome analysis -> Alpaca paper/read-only portfolio snapshot -> paper reconciliation -> benchmark guard -> dry-run account action plan -> paper order preview -> next-actions/report artifacts.
+Universe sources -> discovery queue -> research packet enrichment -> research batches -> research campaign manifest -> `ResearchPacket` completeness gate -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> rebalance outcome analysis -> Alpaca paper/read-only portfolio snapshot -> paper reconciliation -> benchmark guard -> dry-run account action plan -> paper order preview -> paper preview ledger -> next-actions/report artifacts.
 
 ## Data Flow Safety
 

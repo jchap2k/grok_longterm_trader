@@ -253,6 +253,7 @@ Build a non-submitting paper order preview from a dry-run action plan:
 ```powershell
 python scripts/longterm_paper_order_preview.py --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json
 python scripts/longterm_paper_order_preview.py --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --json
+python scripts/longterm_paper_order_preview.py --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --record-preview --ledger-db path\to\paper_ledger.db --json
 ```
 
 The preview converts `BUY` intents into buy-notional preview rows, `REBALANCE`
@@ -260,6 +261,19 @@ intents into paired sell/buy preview rows, and `REVIEW` / `BLOCKED` /
 `CAPITAL_NEEDED` intents into `no_order` rows. It carries decision IDs, risk
 metadata, blocked reasons, cash shortfall, and rebalance transaction IDs. It
 does not import Alpaca and cannot submit orders.
+
+Inspect recorded preview rows:
+
+```powershell
+python scripts/longterm_paper_preview_ledger.py list --ledger-db path\to\paper_ledger.db
+python scripts/longterm_paper_preview_ledger.py summary --ledger-db path\to\paper_ledger.db
+python scripts/longterm_paper_preview_ledger.py summary --ledger-db path\to\paper_ledger.db --json
+```
+
+Actual Alpaca paper order submission remains a later Stage 6B item. It should
+not be added until preview status is visible in journal/report surfaces and the
+execution boundary revalidates protected symbols, cash, benchmark guard, and
+rules.
 
 ## Capital-Needed Email Payloads
 

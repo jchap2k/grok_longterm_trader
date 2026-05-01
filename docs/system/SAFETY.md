@@ -48,3 +48,5 @@ Before live execution exists:
 - keep paper order previews non-submitting; preview rows may look
   broker-shaped, but `order_submission_enabled` must remain false until a
   separate approved paper-execution layer exists
+- persist preview rows before paper execution exists; the paper preview ledger
+  is audit evidence, not permission to submit orders

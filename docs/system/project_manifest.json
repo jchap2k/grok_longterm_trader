@@ -40,6 +40,7 @@
     "ai_trader/trading_agent/longterm/alpaca_paper_account.py",
     "ai_trader/trading_agent/longterm/paper_reconciliation.py",
     "ai_trader/trading_agent/longterm/paper_order_preview.py",
+    "ai_trader/trading_agent/longterm/paper_trade_ledger.py",
     "ai_trader/trading_agent/longterm/next_actions.py"
   ],
   "agent_configs": [
