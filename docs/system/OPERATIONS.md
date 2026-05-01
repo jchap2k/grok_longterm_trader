@@ -391,6 +391,10 @@ Status refresh is read-only with respect to the broker. It looks up submitted
 paper order IDs, calls Alpaca paper order-status reads, and appends status events
 such as `filled`, `partially_filled`, `rejected`, or `status_refresh_error` to
 `PaperTradeLedger`. It does not submit, cancel, replace, or modify orders.
+Because the ledger is append-only, historical status-refresh errors remain
+visible even after a later healthy status is recorded. Lifecycle/operator
+artifacts distinguish this by surfacing whether the current/latest status is
+still an error.
 
 Summarize paper fill outcomes versus `FXAIX` from explicit current prices:
 

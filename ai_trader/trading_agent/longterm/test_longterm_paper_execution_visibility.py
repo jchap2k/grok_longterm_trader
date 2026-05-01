@@ -77,6 +77,51 @@ def test_execution_status_builder_maps_latest_events_by_decision_and_symbol(tmp_
     assert by_symbol["paper_execution_latest_status"] == "filled"
 
 
+def test_execution_status_builder_distinguishes_historical_errors_from_latest_status(tmp_path):
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = "decision-1"
+    ledger.record_execution_event(
+        {
+            "timestamp": "2026-05-01T10:00:00",
+            "decision_id": decision_id,
+            "preview_log_id": "preview-log-1",
+            "preview_id": "preview-1",
+            "plan_id": "plan-1",
+            "broker_order_id": "broker-order-1",
+            "symbol": "NVDA",
+            "side": "buy",
+            "notional": 1000,
+            "status": "status_refresh_error",
+            "error": "temporary broker read error",
+            "paper_mode": True,
+            "live_mode": False,
+        }
+    )
+    ledger.record_execution_event(
+        {
+            "timestamp": "2026-05-01T10:05:00",
+            "decision_id": decision_id,
+            "preview_log_id": "preview-log-1",
+            "preview_id": "preview-1",
+            "plan_id": "plan-1",
+            "broker_order_id": "broker-order-1",
+            "symbol": "NVDA",
+            "side": "buy",
+            "notional": 1000,
+            "status": "filled",
+            "paper_mode": True,
+            "live_mode": False,
+        }
+    )
+
+    by_symbol = PaperExecutionStatusBuilder(ledger).build().by_symbol["NVDA"]
+
+    assert by_symbol["paper_execution_latest_status"] == "filled"
+    assert by_symbol["paper_execution_error_count"] == 1
+    assert by_symbol["paper_execution_historical_error_count"] == 1
+    assert by_symbol["paper_execution_current_status_is_error"] is False
+
+
 def test_recommendation_report_surfaces_latest_paper_execution_status(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     ledger = PaperTradeLedger(tmp_path / "paper.db")

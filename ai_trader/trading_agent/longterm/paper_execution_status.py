@@ -38,6 +38,10 @@ class PaperExecutionStatusBuilder:
                         "paper_execution_filled_count": 0,
                         "paper_execution_rejected_count": 0,
                         "paper_execution_error_count": 0,
+                        "paper_execution_historical_error_count": 0,
+                        "paper_execution_current_status_is_error": (
+                            normalized["paper_execution_status"] == "status_refresh_error"
+                        ),
                     },
                 )
                 status = normalized["paper_execution_status"]
@@ -47,6 +51,7 @@ class PaperExecutionStatusBuilder:
                     item["paper_execution_rejected_count"] += 1
                 elif status == "status_refresh_error":
                     item["paper_execution_error_count"] += 1
+                    item["paper_execution_historical_error_count"] += 1
         return PaperExecutionStatus(by_decision_id=by_decision, by_symbol=by_symbol)
 
 

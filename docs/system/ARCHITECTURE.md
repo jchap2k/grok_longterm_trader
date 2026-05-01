@@ -156,7 +156,7 @@ Persists non-submitting paper preview rows with plan, preview, decision, transac
 Hydrates paper preview ledger rows into read-only status maps by decision ID and symbol. Recommendation reports and next-actions can use this to show whether a candidate already has a ready, blocked, or no-order paper preview without mutating the decision journal.
 
 `longterm/paper_execution_status.py`
-Hydrates paper execution ledger events into read-only status maps by decision ID and symbol. Recommendation reports, next-actions, and position intelligence reports can show latest paper execution state, broker order ID, filled quantity/price, and error context without mutating original decision rows.
+Hydrates paper execution ledger events into read-only status maps by decision ID and symbol. Recommendation reports, next-actions, lifecycle, and position intelligence reports can show latest paper execution state, broker order ID, filled quantity/price, and error context without mutating original decision rows. Symbol summaries distinguish historical status-refresh error counts from whether the current/latest status is still an error.
 
 `longterm/paper_execution_eligibility.py`
 Builds the pre-6B paper execution eligibility contract from a dry-run account action plan, the paper preview ledger, portfolio state, and protected-symbol profile. It checks decision-id traceability, preview freshness, preview ready/blocked/no-order status, explicit paper-execution gate state, protected symbols, and intent-level blockers. It does not import Alpaca and does not submit orders.
