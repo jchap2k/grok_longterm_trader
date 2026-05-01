@@ -574,6 +574,44 @@ class LongTermDecisionJournal:
         if cursor.rowcount == 0:
             raise KeyError(f"Deferred research item not found: {deferred_id}")
 
+    def refresh_outcomes_from_price_map(self, price_map: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+        """Update open benchmark outcomes from explicit symbol price inputs."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                """
+                SELECT decision_id, symbol
+                FROM longterm_decision_journal
+                WHERE candidate_price_at_decision IS NOT NULL
+                  AND benchmark_price_at_decision IS NOT NULL
+                ORDER BY timestamp ASC
+                """
+            ).fetchall()
+        finally:
+            conn.close()
+
+        updated_ids: list[str] = []
+        normalized_prices = {str(symbol).upper(): dict(value) for symbol, value in price_map.items()}
+        for row in rows:
+            symbol = str(row["symbol"]).upper()
+            prices = normalized_prices.get(symbol)
+            if not prices:
+                continue
+            if prices.get("candidate_price") is None or prices.get("benchmark_price") is None:
+                continue
+            self.update_outcome(
+                row["decision_id"],
+                candidate_price=float(prices["candidate_price"]),
+                benchmark_price=float(prices["benchmark_price"]),
+                notes=str(prices.get("notes") or "Outcome refreshed from explicit price map."),
+            )
+            updated_ids.append(row["decision_id"])
+        return {
+            "decisions_updated": len(updated_ids),
+            "updated_decision_ids": updated_ids,
+        }
+
     def record_recommendation_rank_snapshot(self, rows: list[Mapping[str, Any]]) -> str:
         """Persist the current recommendation-table ordering for future movement."""
         snapshot_id = str(uuid.uuid4())
@@ -822,6 +860,32 @@ class LongTermDecisionJournal:
             "symbols": sorted(updated_symbols),
         }
 
+    def apply_paper_reconciliation_feedback(
+        self,
+        reconciliation: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """Merge paper reconciliation results into existing symbol profiles."""
+        updated_symbols: list[str] = []
+        for row in _reconciliation_rows(reconciliation):
+            symbol = str(row.get("symbol") or "").upper()
+            if not symbol:
+                continue
+            profile = self.get_symbol_feedback_profile(symbol)
+            if profile is None:
+                continue
+            _merge_paper_reconciliation_feedback(profile, row)
+            conn = sqlite3.connect(self.db_path)
+            try:
+                self._upsert_symbol_feedback_profile(conn, profile)
+                conn.commit()
+            finally:
+                conn.close()
+            updated_symbols.append(symbol)
+        return {
+            "profiles_updated": len(updated_symbols),
+            "symbols": sorted(updated_symbols),
+        }
+
     def get_symbol_feedback_profile(self, symbol: str) -> dict[str, Any] | None:
         """Return durable research-memory feedback for one symbol."""
         normalized_symbol = str(symbol or "").upper()
@@ -873,6 +937,12 @@ class LongTermDecisionJournal:
         blocked_reasons = profile.get("paper_preview_blocked_reasons") or []
         if blocked_reasons:
             notes.append(f"Paper preview blocked reasons: {'; '.join(blocked_reasons)}.")
+        reconciliation_note = _paper_reconciliation_feedback_note(profile)
+        if reconciliation_note:
+            notes.append(reconciliation_note)
+        reconciliation_notes = profile.get("paper_reconciliation_notes") or []
+        for note in reconciliation_notes:
+            notes.append(str(note))
         payload["source_notes"] = _dedupe_preserve_order(notes)
         return payload
 
@@ -1153,6 +1223,7 @@ def _hydrate_symbol_feedback_profile(record: dict[str, Any]) -> dict[str, Any]:
     record["thesis_history"] = _safe_json_loads(record.pop("thesis_history_json"), default=[])
     record["profile_json"] = _safe_json_loads(record.get("profile_json"), default={})
     _hydrate_paper_preview_feedback(record)
+    _hydrate_paper_reconciliation_feedback(record)
     return record
 
 
@@ -1210,6 +1281,45 @@ def _paper_preview_feedback_note(profile: Mapping[str, Any]) -> str:
         f"Paper preview feedback: ready={ready}, blocked={blocked}, "
         f"no_order={no_order}; latest={latest or 'unknown'}."
     )
+
+
+def _reconciliation_rows(reconciliation: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    rows = reconciliation.get("rows")
+    if isinstance(rows, list):
+        return [row for row in rows if isinstance(row, Mapping)]
+    mismatches = reconciliation.get("mismatches")
+    if isinstance(mismatches, list):
+        return [row for row in mismatches if isinstance(row, Mapping)]
+    return []
+
+
+def _merge_paper_reconciliation_feedback(profile: dict[str, Any], row: Mapping[str, Any]) -> None:
+    existing_json = dict(profile.get("profile_json") or {})
+    payload = {
+        "latest_status": str(row.get("status") or row.get("reconciliation_status") or ""),
+        "mismatch_count": int(row.get("mismatch_count") or row.get("mismatches") or 0),
+        "notes": _dedupe_preserve_order(
+            [str(note) for note in (row.get("notes") or row.get("reasons") or []) if str(note).strip()]
+        ),
+    }
+    existing_json["paper_reconciliation_feedback"] = payload
+    profile["profile_json"] = existing_json
+    _hydrate_paper_reconciliation_feedback(profile)
+
+
+def _hydrate_paper_reconciliation_feedback(record: dict[str, Any]) -> None:
+    feedback = (record.get("profile_json") or {}).get("paper_reconciliation_feedback") or {}
+    record["latest_reconciliation_status"] = str(feedback.get("latest_status") or "")
+    record["paper_reconciliation_mismatch_count"] = int(feedback.get("mismatch_count") or 0)
+    record["paper_reconciliation_notes"] = list(feedback.get("notes") or [])
+
+
+def _paper_reconciliation_feedback_note(profile: Mapping[str, Any]) -> str:
+    status = str(profile.get("latest_reconciliation_status") or "").strip()
+    mismatch_count = int(profile.get("paper_reconciliation_mismatch_count") or 0)
+    if not status and mismatch_count == 0:
+        return ""
+    return f"Paper reconciliation feedback: latest={status or 'unknown'}, mismatches={mismatch_count}."
 
 
 def _normalize_missing_fields(value: Any) -> list[str]:

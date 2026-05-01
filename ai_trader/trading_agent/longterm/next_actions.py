@@ -161,6 +161,7 @@ def build_next_actions_markdown(
     deferred_research_queue: list[Mapping[str, Any]] | None = None,
     paper_preview_status_by_decision: dict[str, dict] | None = None,
     paper_preview_status_by_symbol: dict[str, dict] | None = None,
+    paper_execution_eligibility: Mapping[str, Any] | None = None,
     limit: int = 10,
 ) -> str:
     guard = benchmark_guard or BenchmarkGuard()
@@ -188,6 +189,8 @@ def build_next_actions_markdown(
         benchmark_guard_result=guard_result,
         limit=limit,
     )
+    actions.extend(_paper_execution_eligibility_actions(paper_execution_eligibility))
+    actions = _prioritize_actions(actions)
 
     lines = [
         "# Long-Term Next Actions",
@@ -264,7 +267,11 @@ def _prioritize_actions(actions: list[NextAction]) -> list[NextAction]:
     category_order = {
         "urgent_review_holding": 0,
         "paper_preview_blocked": 1,
+        "paper_execution_preview_stale": 1,
+        "paper_execution_preview_blocked": 1,
+        "paper_execution_blocked": 1,
         "paper_preview_ready": 2,
+        "paper_execution_eligible": 2,
         "paused_buy_candidate": 1,
         "capital_needed": 2,
         "buy_candidate": 3,
@@ -291,6 +298,34 @@ def _category_summary_lines(actions: list[NextAction]) -> list[str]:
     for action in actions:
         counts[action.category] = counts.get(action.category, 0) + 1
     return [f"| {category} | {count} |" for category, count in counts.items()]
+
+
+def _paper_execution_eligibility_actions(
+    eligibility: Mapping[str, Any] | None,
+) -> list[NextAction]:
+    if not eligibility:
+        return []
+    actions = []
+    for item in eligibility.get("items") or []:
+        symbol = str(item.get("symbol") or "").upper()
+        status = str(item.get("status") or "")
+        action = str(item.get("action") or "")
+        reasons = "; ".join(str(reason) for reason in (item.get("blocked_reasons") or []))
+        category = "paper_execution_eligible" if item.get("eligible") else "paper_execution_blocked"
+        if status == "preview_stale":
+            category = "paper_execution_preview_stale"
+        elif status == "preview_blocked":
+            category = "paper_execution_preview_blocked"
+        actions.append(
+            NextAction(
+                priority=len(actions) + 1,
+                category=category,
+                symbol=symbol,
+                action=action,
+                reason=reasons or status,
+            )
+        )
+    return actions
 
 
 def _paper_preview_action(row: Mapping[str, Any]) -> dict[str, str]:

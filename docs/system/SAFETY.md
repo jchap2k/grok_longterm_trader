@@ -50,3 +50,7 @@ Before live execution exists:
   separate approved paper-execution layer exists
 - persist preview rows before paper execution exists; the paper preview ledger
   is audit evidence, not permission to submit orders
+- require paper execution eligibility checks before any future paper submission;
+  eligibility rows are non-submitting and must be revalidated at the broker
+  boundary
+- require decision-id traceability for every future paper execution event

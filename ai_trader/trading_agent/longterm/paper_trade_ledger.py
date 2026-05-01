@@ -81,10 +81,15 @@ class PaperTradeLedger:
         finally:
             conn.close()
 
-    def record_preview(self, preview_payload: Mapping[str, Any]) -> str:
+    def record_preview(
+        self,
+        preview_payload: Mapping[str, Any],
+        *,
+        timestamp: str | None = None,
+    ) -> str:
         """Persist each row in a paper-order preview payload."""
         preview_log_id = str(uuid.uuid4())
-        timestamp = datetime.now().isoformat()
+        timestamp = timestamp or datetime.now().isoformat()
         plan_id = str(preview_payload.get("plan_id") or "")
         order_submission_enabled = bool(preview_payload.get("order_submission_enabled"))
         rows = list(preview_payload.get("previews") or [])
@@ -125,6 +130,71 @@ class PaperTradeLedger:
         finally:
             conn.close()
         return preview_log_id
+
+    def record_execution_event(self, event: Mapping[str, Any]) -> str:
+        """Persist a paper execution event without submitting broker orders."""
+        decision_id = str(event.get("decision_id") or "").strip()
+        if not decision_id:
+            raise ValueError("Paper execution events require decision_id for traceability.")
+        event_id = str(event.get("event_id") or uuid.uuid4())
+        timestamp = str(event.get("timestamp") or datetime.now().isoformat())
+        payload = dict(event)
+        payload["event_id"] = event_id
+        payload["decision_id"] = decision_id
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute(
+                """
+                INSERT INTO longterm_paper_execution_events (
+                    event_id, timestamp, trade_id, preview_log_id, preview_id,
+                    plan_id, decision_id, broker_order_id, symbol, side,
+                    notional, status, error, event_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event_id,
+                    timestamp,
+                    event.get("trade_id"),
+                    str(event.get("preview_log_id") or ""),
+                    str(event.get("preview_id") or ""),
+                    str(event.get("plan_id") or ""),
+                    decision_id,
+                    str(event.get("broker_order_id") or ""),
+                    str(event.get("symbol") or "").upper(),
+                    str(event.get("side") or ""),
+                    float(event.get("notional") or 0.0),
+                    str(event.get("status") or ""),
+                    str(event.get("error") or ""),
+                    json.dumps(payload, sort_keys=True),
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        return event_id
+
+    def list_execution_events(self, limit: int = 50) -> list[dict[str, Any]]:
+        """List paper execution events, newest first."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM longterm_paper_execution_events
+                ORDER BY timestamp DESC, event_id ASC
+                LIMIT ?
+                """,
+                (int(limit),),
+            ).fetchall()
+        finally:
+            conn.close()
+        results = []
+        for row in rows:
+            record = dict(row)
+            record["event_json"] = json.loads(record.get("event_json") or "{}")
+            results.append(record)
+        return results
 
     def list_previews(self, limit: int = 50) -> list[dict[str, Any]]:
         """List recorded preview rows, newest first."""

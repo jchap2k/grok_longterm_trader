@@ -304,10 +304,29 @@ Recommendation reports can also show the latest paper preview status:
 python scripts/longterm_journal.py report --journal-db path\to\journal.db --paper-ledger-db path\to\paper_ledger.db
 ```
 
+Evaluate pre-6B paper execution eligibility from the same action plan and
+preview ledger:
+
+```powershell
+python scripts/longterm_paper_execution_eligibility.py --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --ledger-db path\to\paper_ledger.db
+python scripts/longterm_paper_execution_eligibility.py --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --ledger-db path\to\paper_ledger.db --paper-execution-enabled --json
+```
+
+This command is still non-submitting. It checks decision-id traceability,
+explicit paper-execution gate state, protected symbols, intent blockers,
+preview freshness, and ready/blocked/no-order preview status. A ready result is
+only permission for a future Stage 6B submit boundary to revalidate the same
+facts; it is not a broker order.
+
 Actual Alpaca paper order submission remains a later Stage 6B item. It should
 not be added until preview status is visible in journal/report surfaces and the
 execution boundary revalidates protected symbols, cash, benchmark guard, and
 rules.
+
+Paper execution events can be persisted by `PaperTradeLedger` for future
+submit-blocked/submitted/filled/rejected/reconciled audit trails. Execution
+events require `decision_id` for traceability. Current helpers only record and
+list events; they do not call a broker.
 
 ## Capital-Needed Email Payloads
 

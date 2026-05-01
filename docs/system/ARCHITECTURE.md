@@ -146,6 +146,9 @@ Persists non-submitting paper preview rows with plan, preview, decision, transac
 `longterm/paper_preview_status.py`
 Hydrates paper preview ledger rows into read-only status maps by decision ID and symbol. Recommendation reports and next-actions can use this to show whether a candidate already has a ready, blocked, or no-order paper preview without mutating the decision journal.
 
+`longterm/paper_execution_eligibility.py`
+Builds the pre-6B paper execution eligibility contract from a dry-run account action plan, the paper preview ledger, portfolio state, and protected-symbol profile. It checks decision-id traceability, preview freshness, preview ready/blocked/no-order status, explicit paper-execution gate state, protected symbols, and intent-level blockers. It does not import Alpaca and does not submit orders.
+
 `longterm/next_actions.py`
 Combines recommendation table builder output, portfolio state, automatically-derived review status, benchmark guard, and dry-run planner into a prioritized next-actions report. When the benchmark guard pauses new buys, buy candidates are shown as paused rather than actionable. If a high-conviction idea lacks active-sleeve cash, the report surfaces a `capital_needed` alert instead of pretending the buy can proceed.
 
@@ -160,7 +163,7 @@ Checks review due dates and whether current evidence matches invalidation condit
 
 ## Decision Flow
 
-Universe sources -> discovery queue -> research packet enrichment -> research batches -> research campaign manifest -> `ResearchPacket` completeness gate -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> rebalance outcome analysis -> Alpaca paper/read-only portfolio snapshot -> paper reconciliation -> benchmark guard -> dry-run account action plan -> paper order preview -> paper preview ledger -> next-actions/report artifacts.
+Universe sources -> discovery queue -> research packet enrichment -> research batches -> research campaign manifest -> `ResearchPacket` completeness gate -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> rebalance outcome analysis -> Alpaca paper/read-only portfolio snapshot -> paper reconciliation -> benchmark guard -> dry-run account action plan -> paper order preview -> paper preview ledger -> paper execution eligibility -> next-actions/report artifacts.
 
 ## Data Flow Safety
 
