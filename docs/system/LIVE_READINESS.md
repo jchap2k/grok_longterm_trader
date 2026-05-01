@@ -9,6 +9,7 @@ must be satisfied before live execution should even be considered.
 - The active sleeve must prove it can add value versus `FXAIX` before live trading.
 - Protected holdings such as `FXAIX` must remain impossible to sell, trim, rotate, or rebalance out of.
 - Alpaca paper trading can be used as a live simulator before real capital is considered.
+- The current Alpaca integration is a read-only paper account snapshot path over the standard API. It exports portfolio state for planning; it does not place orders and does not require websockets.
 
 ## Required Gates
 
@@ -35,4 +36,3 @@ python scripts/longterm_live_readiness.py --observed-file path\to\live_readiness
 
 The command reports readiness only. It does not enable live mode and does not
 place orders.
-

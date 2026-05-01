@@ -23,6 +23,9 @@ Applies optional local/cacheable metric enrichment to discovery candidates befor
 `longterm/discovery_cli.py`
 Reads candidate JSON or local source files, optionally applies local enrichment, and emits the discovery buckets. It can also export the research-ready queue as idea-batch JSON for the existing research cycle.
 
+`longterm/research_universe.py`
+Splits research-ready universe ideas into stable batch files so the operator can work through a broad stock universe in small long-term research waves instead of sending hundreds of symbols into one cycle.
+
 `longterm/research_runner.py`
 Builds context sections and runs the CGH decision committee through `CheapGrokHeavy`. It now includes a deterministic thesis challenge section so the final decision sees an explicit bull case, bear case, key risks, and kill criteria before producing a recommendation.
 
@@ -117,6 +120,9 @@ Builds the structured dry-run account action contract that future paper/live exe
 `longterm/portfolio_state.py`
 Loads read-only portfolio snapshots and separates active versus protected holdings.
 
+`longterm/alpaca_paper_account.py`
+Reads Alpaca paper-account state through the standard broker API, normalizes positions into a read-only snapshot, and can export the same `PortfolioState` contract used by next-actions, benchmark, rebalance, and capital-alert planning. It is paper-only and does not expose order placement.
+
 `longterm/next_actions.py`
 Combines recommendation table builder output, portfolio state, automatically-derived review status, benchmark guard, and dry-run planner into a prioritized next-actions report. When the benchmark guard pauses new buys, buy candidates are shown as paused rather than actionable. If a high-conviction idea lacks active-sleeve cash, the report surfaces a `capital_needed` alert instead of pretending the buy can proceed.
 
@@ -131,7 +137,7 @@ Checks review due dates and whether current evidence matches invalidation condit
 
 ## Decision Flow
 
-Universe sources -> discovery queue -> `ResearchPacket` completeness gate -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> benchmark guard -> dry-run account action plan -> next-actions/report artifacts.
+Universe sources -> discovery queue -> research batches -> `ResearchPacket` completeness gate -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> Alpaca paper/read-only portfolio snapshot -> benchmark guard -> dry-run account action plan -> next-actions/report artifacts.
 
 ## Data Flow Safety
 

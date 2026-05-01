@@ -89,6 +89,15 @@ python scripts/run_longterm_discovery.py --candidates path\to\candidates.json --
 python scripts/run_longterm_cycle.py --idea-batch path\to\research_ideas.json --journal-db path\to\journal.db
 ```
 
+For a broad universe, split the research-ready file into smaller batches before
+running the LLM committee. This keeps research work reviewable and prevents one
+oversized cycle from spending effort on too many names at once:
+
+```powershell
+python scripts/longterm_research_universe.py --research-ideas path\to\research_ideas.json --batch-size 5 --output-dir path\to\research_batches
+python scripts/run_longterm_cycle.py --idea-batch path\to\research_batches\research-batch-001.json --journal-db path\to\journal.db
+```
+
 Or let a cycle build the discovery queue directly before research:
 
 ```powershell
@@ -189,6 +198,23 @@ Evidence JSON can be either a direct symbol-to-list mapping or a richer mapping:
 ```
 
 Evidence files may not suggest sell, trim, reduce, or rebalance actions for protected symbols.
+
+## Alpaca Paper Account Snapshot
+
+For long-term paper trading, use Alpaca's standard REST/API path as the account
+state source. Websockets are unnecessary for the current long-horizon research
+loop; they can be added later only for fill/account-update monitoring after a
+separately approved execution layer exists.
+
+Read the paper account and write a portfolio-state file for next-actions:
+
+```powershell
+python scripts/longterm_alpaca_paper_snapshot.py --portfolio-state-output path\to\portfolio.json
+python scripts/longterm_next_actions.py --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --limit 10
+```
+
+The snapshot command is read-only and paper-only. It does not place, cancel, or
+modify orders.
 
 ## Capital-Needed Email Payloads
 
