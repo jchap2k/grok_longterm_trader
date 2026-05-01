@@ -14,7 +14,7 @@ def test_project_manifest_references_existing_context_files():
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     assert manifest["project_name"] == "grok_longterm_trader"
-    assert manifest["execution_state"] == "research_logging_reporting_dry_run_only"
+    assert manifest["execution_state"] == "research_logging_reporting_supervised_paper_buy_only"
     assert manifest["protected_symbol"] == "FXAIX"
 
     for key in ("primary_docs", "core_code", "agent_configs"):

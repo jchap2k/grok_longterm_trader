@@ -318,15 +318,33 @@ preview freshness, and ready/blocked/no-order preview status. A ready result is
 only permission for a future Stage 6B submit boundary to revalidate the same
 facts; it is not a broker order.
 
-Actual Alpaca paper order submission remains a later Stage 6B item. It should
-not be added until preview status is visible in journal/report surfaces and the
-execution boundary revalidates protected symbols, cash, benchmark guard, and
-rules.
+Paper execution events are persisted by `PaperTradeLedger` for
+submit-blocked/submitted/rejected audit trails, with future room for
+filled/reconciled states. Execution events require `decision_id` for
+traceability and do not mutate the original decision rows.
 
-Paper execution events can be persisted by `PaperTradeLedger` for future
-submit-blocked/submitted/filled/rejected/reconciled audit trails. Execution
-events require `decision_id` for traceability. Current helpers only record and
-list events; they do not call a broker.
+Run the supervised Stage 6B paper execution boundary in audit-only mode:
+
+```powershell
+python scripts/longterm_paper_execution.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json
+python scripts/longterm_paper_execution.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --audit-output path\to\paper_execution_audit.json --json
+```
+
+Submit eligible simple BUY previews to Alpaca paper only when explicitly
+intended:
+
+```powershell
+python scripts/longterm_paper_execution.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --submit-paper-orders --audit-output path\to\paper_execution_audit.json
+```
+
+Stage 6B is deliberately narrow:
+
+- It submits only simple `BUY` previews.
+- Rebalance, sell, and sell-to-fund-buy previews are hard-blocked with `rebalance_blocked_v1`.
+- It revalidates protected symbols, benchmark guard, thesis/review status, decision confidence/recommendation, preview freshness, cash, active-rules hash, and duplicate submission state immediately before paper submission.
+- The real submit path refreshes Alpaca paper account state before broker calls; the portfolio JSON remains useful for audit/dry-run mode.
+- It uses deterministic `client_order_id` values for broker idempotency and records `submission_attempt_id` on every event.
+- It is not scheduler-wired and cannot submit live orders.
 
 Run the feedback refresh maintenance loop:
 

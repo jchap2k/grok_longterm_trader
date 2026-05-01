@@ -2,7 +2,9 @@
 
 ## Current Execution State
 
-The project is not live-trading enabled. The current system can research, log, report, and produce dry-run action intents only.
+The project is not live-trading enabled. The current system can research, log,
+report, produce dry-run action intents, and submit explicitly approved simple
+BUY orders to Alpaca paper through the supervised Stage 6B boundary only.
 
 ## Protected Holdings
 
@@ -63,3 +65,13 @@ Before live execution exists:
   on-demand until scheduler policy is explicitly implemented; reports may
   summarize collected position research and feedback, but they must not
   authorize orders or trigger broker calls
+- keep Stage 6B limited to explicitly requested Alpaca paper `BUY` submission;
+  the boundary must revalidate active rules, protected symbols, benchmark
+  state, review/thesis state, preview freshness, cash, and duplicate
+  submission state immediately before broker calls
+- keep rebalances and sells blocked in the first paper execution slice; do not
+  submit sell-to-fund-buy flows until settlement/cash sequencing is separately
+  designed and reviewed
+- require deterministic `client_order_id`, `submission_attempt_id`, active
+  rules hash, `paper_mode=true`, and `live_mode=false` in every paper execution
+  event

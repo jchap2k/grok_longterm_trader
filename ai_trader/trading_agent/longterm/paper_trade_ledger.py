@@ -246,6 +246,32 @@ class PaperTradeLedger:
             results.append(record)
         return results
 
+    def has_submitted_execution(
+        self,
+        *,
+        preview_id: str = "",
+        client_order_id: str = "",
+    ) -> bool:
+        """Return whether a preview/client id already produced a submitted event."""
+        for row in self.list_execution_events(limit=10000):
+            if row.get("status") != "submitted":
+                continue
+            payload = row.get("event_json") or {}
+            if preview_id and str(row.get("preview_id") or "") == preview_id:
+                return True
+            if client_order_id and str(payload.get("client_order_id") or "") == client_order_id:
+                return True
+        return False
+
+    def latest_execution_by_decision(self) -> dict[str, dict[str, Any]]:
+        """Map decision ids to the latest recorded execution event."""
+        result: dict[str, dict[str, Any]] = {}
+        for row in self.list_execution_events(limit=10000):
+            decision_id = str(row.get("decision_id") or "")
+            if decision_id and decision_id not in result:
+                result[decision_id] = row
+        return result
+
     def _eligibility_event_exists(self, decision_id: str, preview_id: str, status: str) -> bool:
         conn = sqlite3.connect(self.db_path)
         try:

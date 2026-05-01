@@ -1,7 +1,7 @@
 {
   "project_name": "grok_longterm_trader",
   "purpose": "Research-first long-term quality-growth active-sleeve trader with dry-run action planning and benchmark discipline.",
-  "execution_state": "research_logging_reporting_dry_run_only",
+  "execution_state": "research_logging_reporting_supervised_paper_buy_only",
   "protected_symbol": "FXAIX",
   "benchmark_symbol": "FXAIX",
   "defensive_parking_symbol": "SPY",
@@ -43,6 +43,7 @@
     "ai_trader/trading_agent/longterm/paper_trade_ledger.py",
     "ai_trader/trading_agent/longterm/paper_preview_status.py",
     "ai_trader/trading_agent/longterm/paper_execution_eligibility.py",
+    "ai_trader/trading_agent/longterm/paper_execution.py",
     "ai_trader/trading_agent/longterm/feedback_refresh.py",
     "ai_trader/trading_agent/longterm/position_report.py",
     "ai_trader/trading_agent/longterm/next_actions.py"
