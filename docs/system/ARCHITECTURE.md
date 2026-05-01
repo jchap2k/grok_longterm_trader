@@ -140,6 +140,9 @@ Reads Alpaca paper-account state through the standard broker API, normalizes pos
 `longterm/paper_reconciliation.py`
 Compares read-only paper account state against dry-run action-plan targets, expected cash, and optional paper execution ledger events. It reports missing target symbols, extra non-protected symbols, value mismatches, protected-symbol presence, missing filled symbols, and unexpected holdings after rejected orders. It is reconciliation only and never submits orders.
 
+`longterm/paper_account_cleanliness.py`
+Checks whether a read-only paper account snapshot is reset enough for the next supervised smoke run. It flags non-protected holdings and optional cash drift from an expected cash baseline. It reads only exported portfolio-state data and never calls a broker.
+
 `longterm/paper_order_preview.py`
 Converts dry-run account action plan intents into broker-shaped paper order previews without importing Alpaca or submitting orders. Preview rows carry plan/decision traceability, risk/review metadata, cash shortfall, blocked reasons, and paired rebalance transaction IDs. `order_submission_enabled` is always `false`.
 

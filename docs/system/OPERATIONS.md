@@ -264,6 +264,18 @@ python scripts/longterm_next_actions.py --portfolio-state path\to\portfolio.json
 The snapshot command is read-only and paper-only. It does not place, cancel, or
 modify orders.
 
+Before a fresh supervised paper smoke, confirm the paper account is reset:
+
+```powershell
+python scripts/longterm_paper_account_cleanliness.py --portfolio-state path\to\portfolio.json --expected-cash 74000
+python scripts/longterm_paper_account_cleanliness.py --portfolio-state path\to\portfolio.json --expected-cash 74000 --json
+```
+
+The cleanliness check is narrower than reconciliation. It simply asks whether
+the exported paper account has no unexpected non-protected holdings and whether
+cash is near the optional expected baseline. It does not call Alpaca or alter
+the account.
+
 Reconcile the current paper snapshot against a dry-run action plan or expected
 cash before considering any paper-execution feature:
 
