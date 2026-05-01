@@ -36,9 +36,13 @@ class NextActionsPlanner:
         *,
         enricher: RecommendationEnricher | None = None,
         review_status_by_symbol: dict[str, dict] | None = None,
+        paper_preview_status_by_decision: dict[str, dict] | None = None,
+        paper_preview_status_by_symbol: dict[str, dict] | None = None,
     ):
         self.enricher = enricher
         self.review_status_by_symbol = review_status_by_symbol or {}
+        self.paper_preview_status_by_decision = paper_preview_status_by_decision or {}
+        self.paper_preview_status_by_symbol = paper_preview_status_by_symbol or {}
 
     def plan(
         self,
@@ -53,6 +57,8 @@ class NextActionsPlanner:
             journal,
             enricher=self.enricher,
             review_status_by_symbol=self.review_status_by_symbol,
+            paper_preview_status_by_decision=self.paper_preview_status_by_decision,
+            paper_preview_status_by_symbol=self.paper_preview_status_by_symbol,
         ).build(limit=limit)
         actions: list[NextAction] = []
 
@@ -95,6 +101,18 @@ class NextActionsPlanner:
                                 f"Planned buy needs ${planned.cash_shortfall:,.2f} additional "
                                 "active-sleeve cash."
                             ),
+                        )
+                    )
+                    continue
+                preview_action = _paper_preview_action(row)
+                if preview_action:
+                    actions.append(
+                        NextAction(
+                            priority=len(actions) + 1,
+                            category=preview_action["category"],
+                            symbol=symbol,
+                            action=preview_action["action"],
+                            reason=preview_action["reason"],
                         )
                     )
                     continue
@@ -141,6 +159,8 @@ def build_next_actions_markdown(
     evidence_by_symbol: Mapping[str, list[str]] | None = None,
     evidence_file: str | Path | None = None,
     deferred_research_queue: list[Mapping[str, Any]] | None = None,
+    paper_preview_status_by_decision: dict[str, dict] | None = None,
+    paper_preview_status_by_symbol: dict[str, dict] | None = None,
     limit: int = 10,
 ) -> str:
     guard = benchmark_guard or BenchmarkGuard()
@@ -157,7 +177,11 @@ def build_next_actions_markdown(
             last_review_dates_by_symbol=last_review_dates_by_symbol,
             evidence_by_symbol=evidence_by_symbol,
         ).build(limit=limit)
-    actions = NextActionsPlanner(review_status_by_symbol=review_status_by_symbol).plan(
+    actions = NextActionsPlanner(
+        review_status_by_symbol=review_status_by_symbol,
+        paper_preview_status_by_decision=paper_preview_status_by_decision,
+        paper_preview_status_by_symbol=paper_preview_status_by_symbol,
+    ).plan(
         journal,
         profile=profile,
         portfolio_state=portfolio_state,
@@ -239,6 +263,8 @@ def _markdown_cell(value: str) -> str:
 def _prioritize_actions(actions: list[NextAction]) -> list[NextAction]:
     category_order = {
         "urgent_review_holding": 0,
+        "paper_preview_blocked": 1,
+        "paper_preview_ready": 2,
         "paused_buy_candidate": 1,
         "capital_needed": 2,
         "buy_candidate": 3,
@@ -265,6 +291,28 @@ def _category_summary_lines(actions: list[NextAction]) -> list[str]:
     for action in actions:
         counts[action.category] = counts.get(action.category, 0) + 1
     return [f"| {category} | {count} |" for category, count in counts.items()]
+
+
+def _paper_preview_action(row: Mapping[str, Any]) -> dict[str, str]:
+    status = str(row.get("paper_preview_status") or "")
+    if not status:
+        return {}
+    preview_id = str(row.get("paper_preview_id") or "")
+    log_id = str(row.get("paper_preview_log_id") or "")
+    if status == "blocked":
+        reasons = ", ".join(str(item) for item in (row.get("paper_preview_blocked_reasons") or []))
+        return {
+            "category": "paper_preview_blocked",
+            "action": "NEEDS_ATTENTION",
+            "reason": f"Paper preview {preview_id} is blocked. {reasons}".strip(),
+        }
+    if status == "ready":
+        return {
+            "category": "paper_preview_ready",
+            "action": "BUY_PREVIEW_READY",
+            "reason": f"Paper preview {preview_id} is ready for operator review. Preview log {log_id}.",
+        }
+    return {}
 
 
 def _load_evidence_json(path: Path, *, protected_symbols: set[str]) -> dict[str, list[str]]:

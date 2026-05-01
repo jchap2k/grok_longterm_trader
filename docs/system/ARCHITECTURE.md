@@ -141,6 +141,9 @@ Converts dry-run account action plan intents into broker-shaped paper order prev
 `longterm/paper_trade_ledger.py`
 Persists non-submitting paper preview rows with plan, preview, decision, transaction, and future trade IDs. The ledger provides durable traceability before any broker submission path exists and reserves execution-event storage for a later Stage 6B paper execution layer.
 
+`longterm/paper_preview_status.py`
+Hydrates paper preview ledger rows into read-only status maps by decision ID and symbol. Recommendation reports and next-actions can use this to show whether a candidate already has a ready, blocked, or no-order paper preview without mutating the decision journal.
+
 `longterm/next_actions.py`
 Combines recommendation table builder output, portfolio state, automatically-derived review status, benchmark guard, and dry-run planner into a prioritized next-actions report. When the benchmark guard pauses new buys, buy candidates are shown as paused rather than actionable. If a high-conviction idea lacks active-sleeve cash, the report surfaces a `capital_needed` alert instead of pretending the buy can proceed.
 

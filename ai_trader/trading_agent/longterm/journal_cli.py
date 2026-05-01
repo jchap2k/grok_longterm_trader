@@ -6,6 +6,8 @@ import argparse
 import json
 
 from longterm.decision_journal import LongTermDecisionJournal
+from longterm.paper_preview_status import PaperPreviewStatusBuilder
+from longterm.paper_trade_ledger import PaperTradeLedger
 from longterm.report_builder import build_markdown_report
 
 
@@ -24,6 +26,7 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("--journal-db", default=None)
     report.add_argument("--limit", type=int, default=20)
     report.add_argument("--record-rank-snapshot", action="store_true")
+    report.add_argument("--paper-ledger-db", default=None)
 
     deferred_list = subparsers.add_parser("deferred-list", help="List deferred research items.")
     deferred_list.add_argument("--journal-db", default=None)
@@ -77,7 +80,20 @@ def run_cli(args: argparse.Namespace) -> int:
         return 0
 
     if args.command == "report":
-        print(build_markdown_report(journal, limit=args.limit), end="")
+        paper_status = (
+            PaperPreviewStatusBuilder(PaperTradeLedger(args.paper_ledger_db)).build()
+            if args.paper_ledger_db
+            else None
+        )
+        print(
+            build_markdown_report(
+                journal,
+                limit=args.limit,
+                paper_preview_status_by_decision=paper_status.by_decision_id if paper_status else None,
+                paper_preview_status_by_symbol=paper_status.by_symbol if paper_status else None,
+            ),
+            end="",
+        )
         if args.record_rank_snapshot:
             snapshot_id = journal.record_recommendation_rank_snapshot(
                 journal.list_recommendation_table(limit=args.limit)

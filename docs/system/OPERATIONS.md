@@ -159,6 +159,12 @@ Standalone next-actions reports also include open persisted deferred rows:
 python scripts/longterm_next_actions.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --limit 10
 ```
 
+Hydrate next-actions with recorded paper preview status:
+
+```powershell
+python scripts/longterm_next_actions.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --paper-ledger-db path\to\paper_ledger.db
+```
+
 ## Dry-Run Action Plan
 
 ```powershell
@@ -268,6 +274,12 @@ Inspect recorded preview rows:
 python scripts/longterm_paper_preview_ledger.py list --ledger-db path\to\paper_ledger.db
 python scripts/longterm_paper_preview_ledger.py summary --ledger-db path\to\paper_ledger.db
 python scripts/longterm_paper_preview_ledger.py summary --ledger-db path\to\paper_ledger.db --json
+```
+
+Recommendation reports can also show the latest paper preview status:
+
+```powershell
+python scripts/longterm_journal.py report --journal-db path\to\journal.db --paper-ledger-db path\to\paper_ledger.db
 ```
 
 Actual Alpaca paper order submission remains a later Stage 6B item. It should

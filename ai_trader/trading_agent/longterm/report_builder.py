@@ -25,12 +25,19 @@ class RecommendationTableBuilder:
         *,
         enricher: RecommendationEnricher | None = None,
         review_status_by_symbol: dict[str, dict] | None = None,
+        paper_preview_status_by_decision: dict[str, dict] | None = None,
+        paper_preview_status_by_symbol: dict[str, dict] | None = None,
     ):
         self.journal = journal
         self.enricher = enricher
         self.review_status_by_symbol = {
             symbol.upper(): status
             for symbol, status in (review_status_by_symbol or {}).items()
+        }
+        self.paper_preview_status_by_decision = paper_preview_status_by_decision or {}
+        self.paper_preview_status_by_symbol = {
+            symbol.upper(): status
+            for symbol, status in (paper_preview_status_by_symbol or {}).items()
         }
 
     def build(self, *, limit: int = 20) -> list[dict]:
@@ -40,6 +47,9 @@ class RecommendationTableBuilder:
             if self.enricher is not None:
                 row.update(self.enricher.enrich(symbol) or {})
             row.update(self.review_status_by_symbol.get(symbol, {}))
+            decision_id = str(row.get("decision_id") or "")
+            row.update(self.paper_preview_status_by_symbol.get(symbol, {}))
+            row.update(self.paper_preview_status_by_decision.get(decision_id, {}))
         return rows
 
 
@@ -71,6 +81,8 @@ def build_markdown_report(
     limit: int = 20,
     enricher: RecommendationEnricher | None = None,
     review_status_by_symbol: dict[str, dict] | None = None,
+    paper_preview_status_by_decision: dict[str, dict] | None = None,
+    paper_preview_status_by_symbol: dict[str, dict] | None = None,
     review_status_today: date | None = None,
     last_review_dates_by_symbol: Mapping[str, date] | None = None,
 ) -> str:
@@ -95,17 +107,19 @@ def build_markdown_report(
         "",
         "## Recommendation Table",
         "",
-        "| Rank | Rank Score | Decision ID | Symbol | Company | Action | Service | Price | Change | Previous Rank | Rank Move | Market Cap | Type | 1Y Rev. Growth | Return Since Rec | Rec Date | Est. Return | Est. Max Drawdown | Review Due | Thesis State | Data As Of | Times Rec'd | Notes | Rank Reason | Reason | Link |",
-        "|---:|---:|---|---|---|---|---|---:|---:|---:|---|---:|---|---:|---:|---|---:|---:|---|---|---|---:|---:|---|---|---|",
+        "| Rank | Rank Score | Decision ID | Symbol | Company | Action | Service | Price | Change | Previous Rank | Rank Move | Market Cap | Type | 1Y Rev. Growth | Return Since Rec | Rec Date | Est. Return | Est. Max Drawdown | Review Due | Thesis State | Paper Preview | Paper Preview ID | Data As Of | Times Rec'd | Notes | Rank Reason | Reason | Link |",
+        "|---:|---:|---|---|---|---|---|---:|---:|---:|---|---:|---|---:|---:|---|---:|---:|---|---|---|---|---|---:|---:|---|---|---|",
     ]
 
     for row in RecommendationTableBuilder(
         journal,
         enricher=enricher,
         review_status_by_symbol=review_status_by_symbol,
+        paper_preview_status_by_decision=paper_preview_status_by_decision,
+        paper_preview_status_by_symbol=paper_preview_status_by_symbol,
         ).build(limit=limit):
         lines.append(
-            "| {rank} | {rank_score} | {decision_id} | {symbol} | {company} | {action} | {service} | {price} | {change} | {previous_rank} | {rank_movement} | {market_cap} | {risk_type} | {growth} | {return_since_rec} | {rec_date} | {return_range} | {drawdown} | {review_due} | {thesis_state} | {data_as_of} | {times} | {notes} | {rank_reason} | {reason} | {link} |".format(
+            "| {rank} | {rank_score} | {decision_id} | {symbol} | {company} | {action} | {service} | {price} | {change} | {previous_rank} | {rank_movement} | {market_cap} | {risk_type} | {growth} | {return_since_rec} | {rec_date} | {return_range} | {drawdown} | {review_due} | {thesis_state} | {paper_preview} | {paper_preview_id} | {data_as_of} | {times} | {notes} | {rank_reason} | {reason} | {link} |".format(
                 rank=row.get("rank", ""),
                 rank_score=_fmt_number(row.get("ranking_score")),
                 decision_id=_short_id(row.get("decision_id")),
@@ -126,6 +140,8 @@ def build_markdown_report(
                 drawdown=_fmt_pct(row.get("estimated_max_drawdown_pct")),
                 review_due=row.get("review_due") if row.get("review_due") is not None else "",
                 thesis_state=row.get("thesis_state") or "",
+                paper_preview=row.get("paper_preview_status") or "",
+                paper_preview_id=row.get("paper_preview_id") or "",
                 data_as_of=row.get("data_as_of") or "",
                 times=row.get("times_recommended") or "",
                 notes=row.get("discussion_count") or "",
