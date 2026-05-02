@@ -299,8 +299,16 @@ python scripts/longterm_paper_runbook.py --journal-db path\to\journal.db --ledge
 ```
 
 The runbook is a deterministic checklist and command generator only. It does
-not read Alpaca, write ledgers, or submit orders. The supervised submit command
-it prints still requires `--confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY`.
+not read Alpaca, write ledgers, or submit orders. By default, the supervised
+submit command is redacted so the operator cannot accidentally copy it before
+reviewing the saved preflight artifacts. Reveal it only after review:
+
+```powershell
+python scripts/longterm_paper_runbook.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --output-dir path\to\paper_artifacts --profile-config path\to\profile.json --expected-cash 74000 --include-submit-command
+```
+
+Even when revealed, the supervised submit command still requires
+`--confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY`.
 When `--profile-config` is supplied, the generated snapshot, workflow-smoke,
 and supervised-submit commands reuse the same paper profile. After any future
 supervised paper buy is observed, the runbook includes a manual cleanup reminder

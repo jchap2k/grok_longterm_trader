@@ -15,6 +15,7 @@ def build_paper_runbook(
     output_dir: str,
     expected_cash: float | None = None,
     profile_config: str = "",
+    include_submit_command: bool = False,
 ) -> dict[str, Any]:
     """Build ordered operator commands for a supervised paper-trading smoke."""
     artifacts = {
@@ -28,6 +29,26 @@ def build_paper_runbook(
     }
     expected_cash_arg = f" --expected-cash {_format_number(expected_cash)}" if expected_cash is not None else ""
     profile_arg = f" --profile-config {profile_config}" if profile_config else ""
+    submit_command = (
+        "python scripts/longterm_paper_execution.py "
+        f"--journal-db {journal_db} --ledger-db {ledger_db} "
+        f"--portfolio-state {portfolio_state} --action-plan {action_plan} "
+        "--submit-paper-orders --confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY "
+        f"--runbook-check {artifacts['runbook_check']} "
+        f"--audit-output {artifacts['paper_execution_audit']}{profile_arg} --json"
+    )
+    submit_step = {
+        "step_id": "supervised_submit",
+        "title": "Submit explicitly confirmed simple BUY paper orders",
+        "command": submit_command
+        if include_submit_command
+        else (
+            "Submit command redacted. Re-run this runbook with "
+            "--include-submit-command only after saved workflow-smoke, "
+            "paper-smoke-readiness, and runbook-check artifacts are reviewed."
+        ),
+        "requires_explicit_reveal": not include_submit_command,
+    }
     steps = [
         {
             "step_id": "snapshot",
@@ -70,18 +91,7 @@ def build_paper_runbook(
                 f"--report-output {artifacts['runbook_check']} --json"
             ),
         },
-        {
-            "step_id": "supervised_submit",
-            "title": "Submit explicitly confirmed simple BUY paper orders",
-            "command": (
-                "python scripts/longterm_paper_execution.py "
-                f"--journal-db {journal_db} --ledger-db {ledger_db} "
-                f"--portfolio-state {portfolio_state} --action-plan {action_plan} "
-                "--submit-paper-orders --confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY "
-                f"--runbook-check {artifacts['runbook_check']} "
-                f"--audit-output {artifacts['paper_execution_audit']}{profile_arg} --json"
-            ),
-        },
+        submit_step,
         {
             "step_id": "status_refresh",
             "title": "Refresh submitted paper order statuses",
@@ -122,6 +132,7 @@ def build_paper_runbook(
         "order_submission_enabled": False,
         "expected_cash": expected_cash,
         "profile_config": profile_config,
+        "include_submit_command": include_submit_command,
         "artifacts": artifacts,
         "steps": steps,
         "notes": [

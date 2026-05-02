@@ -17,6 +17,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--profile-config", default="")
     parser.add_argument("--expected-cash", type=float, default=None)
+    parser.add_argument(
+        "--include-submit-command",
+        action="store_true",
+        help="Reveal the supervised paper submit command in the generated runbook.",
+    )
     parser.add_argument("--json", action="store_true")
     return parser
 
@@ -30,6 +35,7 @@ def run_cli(args: argparse.Namespace) -> int:
         output_dir=args.output_dir,
         expected_cash=args.expected_cash,
         profile_config=args.profile_config,
+        include_submit_command=args.include_submit_command,
     )
     if args.json:
         print(json.dumps(runbook, indent=2, sort_keys=True))
