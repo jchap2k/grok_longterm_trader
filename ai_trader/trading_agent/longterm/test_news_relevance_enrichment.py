@@ -108,6 +108,76 @@ def test_rank_relevant_news_drops_broad_market_roundups_even_from_quality_source
     assert ranked == []
 
 
+def test_rank_relevant_news_drops_peer_mentions_when_target_is_not_primary_subject():
+    ranked = rank_relevant_news(
+        "AMZN",
+        [
+            {
+                "title": "Meta stock struggles despite heavy AI spending after Q1 earnings",
+                "url": "https://example.com/meta-ai-spending",
+                "published_utc": "2026-05-01T15:00:00Z",
+                "publisher": {"name": "The Motley Fool"},
+                "description": (
+                    "Meta increased AI infrastructure spending. Competitors like Amazon, "
+                    "Alphabet, and Nvidia have rebounded faster from the earlier tech slump."
+                ),
+                "tickers": ["META", "AMZN", "GOOGL", "NVDA"],
+            }
+        ],
+        business_context="Amazon AWS cloud advertising AI logistics ecommerce",
+        company_name="Amazon",
+    )
+
+    assert ranked == []
+
+
+def test_rank_relevant_news_drops_multi_ticker_article_when_target_only_appears_in_summary():
+    ranked = rank_relevant_news(
+        "AMZN",
+        [
+            {
+                "title": "What's Going on With Meta Stock?",
+                "url": "https://example.com/meta-stock",
+                "published_utc": "2026-05-01T15:00:00Z",
+                "publisher": {"name": "The Motley Fool"},
+                "description": (
+                    "Meta stock has declined despite Q1 earnings and major AI investments. "
+                    "Competitors like Amazon, Alphabet, and Nvidia have rebounded faster."
+                ),
+                "tickers": ["META", "GOOGL", "AMZN", "NVDA"],
+            }
+        ],
+        business_context="Amazon AWS cloud advertising AI logistics ecommerce",
+        company_name="Amazon",
+    )
+
+    assert ranked == []
+
+
+def test_rank_relevant_news_keeps_company_primary_article_with_multiple_tickers():
+    ranked = rank_relevant_news(
+        "AMZN",
+        [
+            {
+                "title": "Amazon expands AWS AI chip partnership with Anthropic",
+                "url": "https://example.com/amazon-anthropic-ai",
+                "published_utc": "2026-05-01T15:00:00Z",
+                "publisher": {"name": "Reuters"},
+                "description": (
+                    "Amazon said AWS demand and its Anthropic partnership are increasing "
+                    "AI infrastructure utilization."
+                ),
+                "tickers": ["AMZN", "NVDA", "MSFT"],
+            }
+        ],
+        business_context="Amazon AWS cloud advertising AI logistics ecommerce",
+        company_name="Amazon",
+    )
+
+    assert [item["url"] for item in ranked] == ["https://example.com/amazon-anthropic-ai"]
+    assert ranked[0]["primary_subject_score"] > 0
+
+
 def test_enrich_idea_with_relevant_news_adds_packet_context_and_source_note():
     provider = FakeNewsProvider({"AMZN": _articles()})
     idea = {

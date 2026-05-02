@@ -117,9 +117,12 @@ ratings must remain labeled as `model_estimate`; they are research context, not
 Motley Fool proprietary scores and not execution authority.
 
 Before Grok synthesis, enrich the idea batch with high-signal ticker news. The
-news pass filters duplicate URLs and generic price-action headlines, then keeps
-only thesis-relevant articles with catalyst categories such as earnings,
+news pass filters duplicate URLs, generic price-action headlines, and peer-only
+mentions where the target ticker is not a primary article subject. It then
+keeps only thesis-relevant articles with catalyst categories such as earnings,
 product/technology, contracts, regulatory events, M&A, or management changes.
+Lower article counts are acceptable and often preferable; thin primary coverage
+should surface as lower confidence rather than being padded with noisy articles.
 
 Also enrich the batch with Python-computed fundamental metric tables before
 Grok synthesis. This closes part of the gap with Fool company pages without

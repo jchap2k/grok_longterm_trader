@@ -162,6 +162,7 @@ def enrich_idea_with_relevant_news(
         symbol,
         articles,
         business_context=_idea_context(payload),
+        company_name=str(payload.get("company_name") or ""),
         max_items=max_items,
         as_of_date=as_of_date,
     )
@@ -233,6 +234,7 @@ def rank_relevant_news(
     articles: list[Mapping[str, Any]],
     *,
     business_context: str = "",
+    company_name: str = "",
     max_items: int = 5,
     as_of_date: str | None = None,
 ) -> list[dict[str, Any]]:
@@ -246,6 +248,9 @@ def rank_relevant_news(
             continue
         seen_urls.add(url)
         if _is_noise(normalized):
+            continue
+        primary_subject_score = _primary_subject_score(symbol, normalized, company_name)
+        if not _passes_primary_subject_gate(symbol, normalized, primary_subject_score, company_name):
             continue
         score = _relevance_score(symbol, normalized, business_context)
         if score < 0.35:
@@ -261,6 +266,7 @@ def rank_relevant_news(
                 "impact_category": impact,
                 "source": normalized["source"],
                 "tickers": normalized["tickers"],
+                "primary_subject_score": round(primary_subject_score, 3),
                 "as_of_date": as_of_date or date.today().isoformat(),
             }
         )
@@ -313,6 +319,73 @@ def _relevance_score(symbol: str, article: Mapping[str, Any], business_context: 
     score += min(0.30, catalyst_hits * 0.045)
     score += _source_quality(source)
     return min(1.0, score)
+
+
+def _primary_subject_score(symbol: str, article: Mapping[str, Any], company_name: str = "") -> float:
+    title = str(article.get("title") or "").lower()
+    summary = str(article.get("summary") or "").lower()
+    tickers = [str(item).upper() for item in article.get("tickers") or []]
+    symbol_text = symbol.lower()
+    company_terms = _company_subject_terms(company_name)
+    score = 0.0
+    if symbol_text and symbol_text in title:
+        score += 0.50
+    elif symbol_text and symbol_text in summary[:240]:
+        score += 0.25
+    if any(term in title for term in company_terms):
+        score += 0.50
+    elif any(term in summary[:240] for term in company_terms):
+        score += 0.25
+    if tickers and tickers[0] == symbol.upper():
+        score += 0.25
+    if len(tickers) == 1 and symbol.upper() in tickers:
+        score += 0.20
+    return min(1.0, score)
+
+
+def _passes_primary_subject_gate(
+    symbol: str,
+    article: Mapping[str, Any],
+    primary_subject_score: float,
+    company_name: str = "",
+) -> bool:
+    tickers = [str(item).upper() for item in article.get("tickers") or []]
+    if tickers and symbol.upper() not in tickers:
+        return False
+    if len(tickers) > 1 and not _title_mentions_subject(symbol, article, company_name):
+        return False
+    if primary_subject_score >= 0.25:
+        return True
+    # If a provider returns only the requested ticker, allow high-context articles
+    # whose title omits the company name, such as "This Cloud Stock Reports...".
+    return len(tickers) == 1 and symbol.upper() in tickers
+
+
+def _title_mentions_subject(symbol: str, article: Mapping[str, Any], company_name: str = "") -> bool:
+    title = str(article.get("title") or "").lower()
+    symbol_text = symbol.lower()
+    return bool(
+        (symbol_text and symbol_text in title)
+        or any(term in title for term in _company_subject_terms(company_name))
+    )
+
+
+def _company_subject_terms(company_name: str) -> set[str]:
+    cleaned = "".join(ch.lower() if ch.isalnum() else " " for ch in str(company_name)).split()
+    stop = {
+        "inc",
+        "corp",
+        "corporation",
+        "company",
+        "holdings",
+        "holding",
+        "class",
+        "plc",
+        "ltd",
+        "limited",
+        "the",
+    }
+    return {term for term in cleaned if len(term) >= 4 and term not in stop}
 
 
 def _source_quality(source: str) -> float:
