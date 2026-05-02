@@ -153,7 +153,7 @@ Combines paper account cleanliness, broker capability compatibility, and optiona
 Generates an ordered, read-only Monday paper-trading runbook with expected artifact paths and commands for snapshot, workflow smoke, readiness, supervised submit, status refresh, paper-trading verification, and live-readiness evidence. It does not call brokers or submit orders.
 
 `longterm/paper_runbook_check.py`
-Reads saved workflow-smoke and paper-smoke-readiness artifacts and verifies they are ready before the operator runs the supervised submit command. It emits a generated timestamp and workflow plan ID so the submit CLI can reject missing, stale, mismatched, malformed, or not-ready pre-submit evidence before refreshing broker state. It is read-only and does not call brokers or mutate ledgers.
+Reads saved workflow-smoke and paper-smoke-readiness artifacts and verifies they are ready before the operator runs the supervised submit command. It emits a generated timestamp, workflow plan ID, and canonical action-plan hash so the submit CLI can reject missing, stale, mismatched, malformed, or not-ready pre-submit evidence before refreshing broker state. It is read-only and does not call brokers or mutate ledgers.
 
 `longterm/paper_workflow_smoke.py`
 Runs an audit-only whole-share paper workflow from action plan to read-only price map, recorded preview, and paper execution audit. It does not submit orders and is meant to prove the operator artifacts are clean before a supervised paper submit.

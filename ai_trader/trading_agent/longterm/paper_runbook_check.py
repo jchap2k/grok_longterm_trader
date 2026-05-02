@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Mapping
@@ -12,12 +13,15 @@ def build_paper_runbook_check(
     *,
     workflow_smoke: str | Path,
     paper_smoke_readiness: str | Path,
+    action_plan: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Validate saved pre-submit paper artifacts before supervised submit."""
     workflow_payload, workflow_error = _load_optional_json(workflow_smoke)
     readiness_payload, readiness_error = _load_optional_json(paper_smoke_readiness)
+    action_plan = action_plan or {}
     blockers: list[str] = []
     plan_id = _workflow_plan_id(workflow_payload)
+    action_plan_hash = hash_action_plan(action_plan) if action_plan else ""
     if workflow_error:
         blockers.append(f"workflow_smoke_{workflow_error}")
     elif not bool(workflow_payload.get("ready_for_supervised_submit")):
@@ -31,6 +35,7 @@ def build_paper_runbook_check(
         "mode": "paper_runbook_check",
         "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "plan_id": plan_id,
+        "action_plan_hash": action_plan_hash,
         "order_submission_enabled": False,
         "ready_for_supervised_submit": not blockers,
         "blocker_count": len(blockers),
@@ -91,4 +96,9 @@ def _workflow_plan_id(payload: Mapping[str, Any]) -> str:
     return str(payload.get("plan_id") or "") if isinstance(payload, Mapping) else ""
 
 
-__all__ = ["build_paper_runbook_check", "build_paper_runbook_check_markdown"]
+def hash_action_plan(action_plan: Mapping[str, Any]) -> str:
+    canonical = json.dumps(action_plan, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+__all__ = ["build_paper_runbook_check", "build_paper_runbook_check_markdown", "hash_action_plan"]

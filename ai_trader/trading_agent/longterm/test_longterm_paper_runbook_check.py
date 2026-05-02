@@ -17,11 +17,17 @@ def test_paper_runbook_check_passes_when_artifacts_are_ready(tmp_path):
     )
     readiness.write_text(json.dumps({"ready_for_supervised_smoke": True}), encoding="utf-8")
 
-    report = build_paper_runbook_check(workflow_smoke=workflow, paper_smoke_readiness=readiness)
+    action_plan = {"plan_id": "plan-1", "intents": [{"symbol": "NVDA", "decision_id": "decision-1"}]}
+    report = build_paper_runbook_check(
+        workflow_smoke=workflow,
+        paper_smoke_readiness=readiness,
+        action_plan=action_plan,
+    )
 
     assert report["mode"] == "paper_runbook_check"
     assert report["ready_for_supervised_submit"] is True
     assert report["plan_id"] == "plan-1"
+    assert report["action_plan_hash"]
     assert report["generated_at"]
     assert report["blockers"] == []
     assert "Ready for supervised submit: yes" in build_paper_runbook_check_markdown(report)
@@ -43,6 +49,11 @@ def test_paper_runbook_check_cli_outputs_json(tmp_path, capsys):
     workflow = tmp_path / "paper_workflow_smoke.json"
     readiness = tmp_path / "paper_smoke_readiness.json"
     report_path = tmp_path / "paper_runbook_check.json"
+    action_plan_path = tmp_path / "action_plan.json"
+    action_plan_path.write_text(
+        json.dumps({"plan_id": "plan-1", "intents": [{"symbol": "NVDA", "decision_id": "decision-1"}]}),
+        encoding="utf-8",
+    )
     workflow.write_text(
         json.dumps({"ready_for_supervised_submit": True, "execution_audit": {"plan_id": "plan-1"}}),
         encoding="utf-8",
@@ -54,6 +65,8 @@ def test_paper_runbook_check_cli_outputs_json(tmp_path, capsys):
             str(workflow),
             "--paper-smoke-readiness",
             str(readiness),
+            "--action-plan",
+            str(action_plan_path),
             "--report-output",
             str(report_path),
             "--json",
@@ -65,4 +78,5 @@ def test_paper_runbook_check_cli_outputs_json(tmp_path, capsys):
     file_payload = json.loads(report_path.read_text(encoding="utf-8"))
 
     assert payload["ready_for_supervised_submit"] is True
+    assert payload["action_plan_hash"]
     assert file_payload["ready_for_supervised_submit"] is True

@@ -311,7 +311,8 @@ python scripts/longterm_paper_runbook_check.py --workflow-smoke path\to\paper_wo
 
 The check reads saved artifacts only. It blocks if the workflow smoke or
 paper-smoke readiness artifact is missing, malformed, or not ready. The saved
-check includes the workflow plan ID and generation timestamp.
+check includes the workflow plan ID, canonical action-plan hash, and generation
+timestamp.
 
 Reconcile the current paper snapshot against a dry-run action plan or expected
 cash before considering any paper-execution feature:
@@ -426,7 +427,7 @@ Stage 6B is deliberately narrow:
 
 - It submits only simple `BUY` previews.
 - `--submit-paper-orders` also requires the exact `--confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY` latch; without it, the command exits before refreshing broker state or constructing the submit adapter.
-- `--submit-paper-orders` also requires a ready, fresh `--runbook-check` artifact whose plan ID matches the action plan.
+- `--submit-paper-orders` also requires a ready, fresh `--runbook-check` artifact whose plan ID and canonical action-plan hash match the action plan being submitted.
 - Rebalance, sell, and sell-to-fund-buy previews are hard-blocked with `rebalance_blocked_v1`.
 - It revalidates protected symbols, benchmark guard, thesis/review status, decision confidence/recommendation, preview freshness, cash, active-rules hash, and duplicate submission state immediately before paper submission.
 - The real submit path refreshes Alpaca paper account state before broker calls; the portfolio JSON remains useful for audit/dry-run mode.

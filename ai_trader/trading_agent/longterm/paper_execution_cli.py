@@ -16,6 +16,7 @@ from longterm.paper_execution import (
     build_paper_execution_markdown,
 )
 from longterm.paper_trade_ledger import PaperTradeLedger
+from longterm.paper_runbook_check import hash_action_plan
 from longterm.portfolio_state import PortfolioState
 from longterm.decision_journal import LongTermDecisionJournal
 from portfolio.portfolio_profile import PortfolioProfile
@@ -203,6 +204,12 @@ def _validate_runbook_check(
         observed_plan_id = str(payload.get("plan_id") or "")
         if expected_plan_id and observed_plan_id and observed_plan_id != expected_plan_id:
             blockers.append("runbook_check_plan_mismatch")
+        observed_hash = str(payload.get("action_plan_hash") or "")
+        expected_hash = hash_action_plan(action_plan)
+        if observed_hash and observed_hash != expected_hash:
+            blockers.append("runbook_check_action_plan_hash_mismatch")
+        elif not observed_hash:
+            blockers.append("runbook_check_missing_action_plan_hash")
         generated_at = str(payload.get("generated_at") or "")
         if not generated_at:
             blockers.append("runbook_check_missing_generated_at")

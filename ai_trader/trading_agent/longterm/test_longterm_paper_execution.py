@@ -17,6 +17,7 @@ from longterm.paper_trade_ledger import PaperTradeLedger
 from longterm.portfolio_state import PortfolioState
 from portfolio.portfolio_profile import PortfolioProfile
 from research.intake import create_research_packet_from_idea
+from longterm.paper_runbook_check import hash_action_plan
 
 
 class FakePaperBroker:
@@ -488,6 +489,7 @@ def test_paper_execution_cli_real_submit_path_refreshes_paper_account_state(tmp_
             {
                 "ready_for_supervised_submit": True,
                 "plan_id": "plan-1",
+                "action_plan_hash": hash_action_plan(_action_plan(decision_id, trade_value=4000)),
                 "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             }
         ),
@@ -629,6 +631,7 @@ def test_paper_execution_cli_submit_requires_ready_matching_runbook_check(tmp_pa
     payload = json.loads(capsys.readouterr().out)
     assert payload["mode"] == "paper_execution_submit_precheck"
     assert "runbook_check_not_ready" in payload["blockers"]
+    assert "runbook_check_missing_action_plan_hash" in payload["blockers"]
     assert calls == {"refreshed": 0, "broker": 0}
     assert ledger.list_execution_events(limit=10) == []
 
@@ -646,7 +649,14 @@ def test_paper_execution_cli_blocks_missing_and_mismatched_runbook_check_before_
     portfolio_path.write_text(json.dumps({"cash": 5000, "protected_symbols": ["FXAIX"]}), encoding="utf-8")
     plan_path.write_text(json.dumps(_action_plan(decision_id)), encoding="utf-8")
     runbook_check_path.write_text(
-        json.dumps({"ready_for_supervised_submit": True, "plan_id": "other-plan"}),
+        json.dumps(
+            {
+                "ready_for_supervised_submit": True,
+                "plan_id": "other-plan",
+                "action_plan_hash": hash_action_plan(_action_plan(decision_id)),
+                "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            }
+        ),
         encoding="utf-8",
     )
     calls = {"refreshed": 0}
@@ -683,6 +693,63 @@ def test_paper_execution_cli_blocks_missing_and_mismatched_runbook_check_before_
     assert calls == {"refreshed": 0}
 
 
+def test_paper_execution_cli_blocks_action_plan_hash_mismatch_before_refresh(tmp_path, capsys, monkeypatch):
+    import longterm.paper_execution_cli as cli
+
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = _record_decision(journal)
+    _record_preview(ledger, decision_id)
+    portfolio_path = tmp_path / "portfolio.json"
+    plan_path = tmp_path / "plan.json"
+    runbook_check_path = tmp_path / "paper_runbook_check.json"
+    action_plan = _action_plan(decision_id)
+    portfolio_path.write_text(json.dumps({"cash": 5000, "protected_symbols": ["FXAIX"]}), encoding="utf-8")
+    plan_path.write_text(json.dumps(action_plan), encoding="utf-8")
+    runbook_check_path.write_text(
+        json.dumps(
+            {
+                "ready_for_supervised_submit": True,
+                "plan_id": "plan-1",
+                "action_plan_hash": hash_action_plan({**action_plan, "intents": []}),
+                "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            }
+        ),
+        encoding="utf-8",
+    )
+    calls = {"refreshed": 0}
+    monkeypatch.setattr(
+        cli,
+        "_fresh_alpaca_paper_state",
+        lambda profile: calls.__setitem__("refreshed", calls["refreshed"] + 1)
+        or PortfolioState(cash=8000, protected_symbols=profile.protected_symbols),
+        raising=False,
+    )
+    args = build_parser().parse_args(
+        [
+            "--journal-db",
+            str(journal.db_path),
+            "--ledger-db",
+            str(ledger.db_path),
+            "--portfolio-state",
+            str(portfolio_path),
+            "--action-plan",
+            str(plan_path),
+            "--submit-paper-orders",
+            "--confirm-paper-submit",
+            "SUPERVISED_PAPER_BUY_ONLY",
+            "--runbook-check",
+            str(runbook_check_path),
+            "--json",
+        ]
+    )
+
+    assert run_cli(args) == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert "runbook_check_action_plan_hash_mismatch" in payload["blockers"]
+    assert calls == {"refreshed": 0}
+
+
 def test_paper_execution_cli_blocks_missing_and_stale_runbook_check_before_refresh(tmp_path, capsys, monkeypatch):
     import longterm.paper_execution_cli as cli
 
@@ -700,6 +767,7 @@ def test_paper_execution_cli_blocks_missing_and_stale_runbook_check_before_refre
             {
                 "ready_for_supervised_submit": True,
                 "plan_id": "plan-1",
+                "action_plan_hash": hash_action_plan(_action_plan(decision_id)),
                 "generated_at": (datetime.now(UTC) - timedelta(days=3)).isoformat().replace("+00:00", "Z"),
             }
         ),

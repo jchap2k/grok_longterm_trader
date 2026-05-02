@@ -16,6 +16,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Check saved Monday paper runbook artifacts.")
     parser.add_argument("--workflow-smoke", required=True)
     parser.add_argument("--paper-smoke-readiness", required=True)
+    parser.add_argument("--action-plan", default="")
     parser.add_argument("--report-output", default="")
     parser.add_argument("--json", action="store_true")
     return parser
@@ -25,6 +26,7 @@ def run_cli(args: argparse.Namespace) -> int:
     report = build_paper_runbook_check(
         workflow_smoke=args.workflow_smoke,
         paper_smoke_readiness=args.paper_smoke_readiness,
+        action_plan=_load_json(args.action_plan) if args.action_plan else {},
     )
     if args.report_output:
         Path(args.report_output).write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
@@ -37,6 +39,13 @@ def run_cli(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     return run_cli(build_parser().parse_args(argv))
+
+
+def _load_json(path: str | Path) -> dict:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"Expected JSON object in {path}.")
+    return payload
 
 
 __all__ = ["build_parser", "main", "run_cli"]

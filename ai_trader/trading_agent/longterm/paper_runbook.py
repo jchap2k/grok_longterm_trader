@@ -64,6 +64,7 @@ def build_paper_runbook(
                 "python scripts/longterm_paper_runbook_check.py "
                 f"--workflow-smoke {artifacts['workflow_smoke']} "
                 f"--paper-smoke-readiness {artifacts['paper_smoke_readiness']} "
+                f"--action-plan {action_plan} "
                 f"--report-output {artifacts['runbook_check']} --json"
             ),
         },
