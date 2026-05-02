@@ -291,6 +291,17 @@ intentionally blocks Schwab API live compatibility; use
 `--required-order-model whole_share` only when the planned smoke/live path has
 been adapted to whole-share sizing.
 
+Generate an ordered Monday paper-trading runbook:
+
+```powershell
+python scripts/longterm_paper_runbook.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --output-dir path\to\paper_artifacts --expected-cash 74000
+python scripts/longterm_paper_runbook.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --output-dir path\to\paper_artifacts --expected-cash 74000 --json
+```
+
+The runbook is a deterministic checklist and command generator only. It does
+not read Alpaca, write ledgers, or submit orders. The supervised submit command
+it prints still requires `--confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY`.
+
 Reconcile the current paper snapshot against a dry-run action plan or expected
 cash before considering any paper-execution feature:
 
