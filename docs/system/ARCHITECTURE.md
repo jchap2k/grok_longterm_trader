@@ -180,7 +180,7 @@ Builds the pre-6B paper execution eligibility contract from a dry-run account ac
 Provides the supervised Stage 6B Alpaca paper execution boundary. V1 submits only simple `BUY` paper previews after revalidating protected symbols, benchmark guard, review/thesis state, journal decision quality, preview freshness, cash, duplicate submission state, and the active-rules hash. Rebalance/sell previews are hard-blocked with `rebalance_blocked_v1`. Execution truth is append-only in `PaperTradeLedger`; original decision rows remain immutable. The real CLI submit path refreshes the Alpaca paper account snapshot before broker calls, emits a pre-flight audit, and never enables live trading or scheduler automation.
 
 `longterm/paper_order_status_refresh.py`
-Refreshes already-submitted Alpaca paper order statuses by reading broker order IDs from `PaperTradeLedger`, calling a read-only broker status API, and appending status events such as `filled`, `partially_filled`, `rejected`, or `status_refresh_error`. It does not submit, cancel, or modify orders.
+Refreshes already-submitted Alpaca paper order statuses by reading broker order IDs from `PaperTradeLedger`, calling a read-only broker status API, and appending status events such as `filled`, `partially_filled`, `rejected`, or `status_refresh_error`. Its CLI can write a saved JSON status-refresh artifact for the Monday runbook. It does not submit, cancel, or modify orders.
 
 `longterm/paper_outcomes.py`
 Builds provider-free paper fill outcome summaries from `PaperTradeLedger` fill events and an explicit current-price map. It compares paper fill return against `FXAIX` from the fill baseline and does not mutate journal decisions or call a broker.

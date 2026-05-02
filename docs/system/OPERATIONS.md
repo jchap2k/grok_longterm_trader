@@ -326,6 +326,17 @@ paper-smoke readiness artifact is missing, malformed, or not ready. The saved
 check includes the workflow plan ID, canonical action-plan hash, and generation
 timestamp.
 
+After any supervised paper submit, save the read-only order-status refresh
+artifact:
+
+```powershell
+python scripts/longterm_paper_order_status_refresh.py --ledger-db path\to\paper_ledger.db --report-output path\to\paper_order_status_refresh.json --json
+```
+
+The Monday runbook includes this artifact path automatically. Status refresh
+does not submit, cancel, or modify orders; it only appends read-only broker
+status events to the paper ledger and writes the JSON report when requested.
+
 Reconcile the current paper snapshot against a dry-run action plan or expected
 cash before considering any paper-execution feature:
 

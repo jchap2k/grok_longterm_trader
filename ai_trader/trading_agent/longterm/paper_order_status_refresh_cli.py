@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 from typing import Callable
 
 from longterm.paper_order_status_refresh import (
@@ -18,6 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Refresh submitted Alpaca paper order statuses.")
     parser.add_argument("--ledger-db", default=None)
     parser.add_argument("--limit", type=int, default=100)
+    parser.add_argument("--report-output", default="")
     parser.add_argument("--json", action="store_true")
     return parser
 
@@ -33,6 +35,9 @@ def run_cli(
         broker=broker,
         limit=args.limit,
     )
+    if args.report_output:
+        Path(args.report_output).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.report_output).write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:

@@ -178,3 +178,27 @@ def test_status_refresh_cli_outputs_json_and_markdown_with_injected_broker(tmp_p
     markdown = build_paper_order_status_refresh_markdown(payload)
     assert "# Paper Order Status Refresh" in markdown
     assert "partially_filled" in markdown
+
+
+def test_status_refresh_cli_writes_report_output_with_injected_broker(tmp_path, capsys):
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    _submitted_event(ledger)
+    broker = FakeStatusBroker({"order-1": _order()})
+    report_path = tmp_path / "paper_order_status_refresh.json"
+
+    args = build_parser().parse_args(
+        [
+            "--ledger-db",
+            str(ledger.db_path),
+            "--report-output",
+            str(report_path),
+            "--json",
+        ]
+    )
+
+    assert run_cli(args, broker_factory=lambda: broker) == 0
+    printed = json.loads(capsys.readouterr().out)
+    saved = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert printed["status_counts"]["filled"] == 1
+    assert saved["status_counts"]["filled"] == 1

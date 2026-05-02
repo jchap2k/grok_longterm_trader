@@ -24,6 +24,7 @@ def build_paper_runbook(
         "paper_smoke_readiness": _artifact(output_dir, "paper_smoke_readiness.json"),
         "runbook_check": _artifact(output_dir, "paper_runbook_check.json"),
         "paper_execution_audit": _artifact(output_dir, "paper_execution_audit.json"),
+        "paper_order_status_refresh": _artifact(output_dir, "paper_order_status_refresh.json"),
         "paper_trading_observed": _artifact(output_dir, "paper_trading_observed.json"),
         "live_readiness_bundle": _artifact(output_dir, "live_readiness_bundle.json"),
     }
@@ -95,7 +96,11 @@ def build_paper_runbook(
         {
             "step_id": "status_refresh",
             "title": "Refresh submitted paper order statuses",
-            "command": f"python scripts/longterm_paper_order_status_refresh.py --ledger-db {ledger_db} --json",
+            "command": (
+                "python scripts/longterm_paper_order_status_refresh.py "
+                f"--ledger-db {ledger_db} "
+                f"--report-output {artifacts['paper_order_status_refresh']} --json"
+            ),
         },
         {
             "step_id": "paper_cleanup_reminder",
