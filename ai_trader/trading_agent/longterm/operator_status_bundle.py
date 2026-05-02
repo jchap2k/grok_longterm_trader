@@ -51,15 +51,19 @@ def build_operator_status_bundle(
         if portfolio_state is not None
         else ""
     )
+    monday_summary = _monday_operator_check_summary(monday_operator_check)
+    live_summary = _live_readiness_summary(live_readiness_bundle)
+    status_summary = _status_refresh_summary(status_refresh)
     return {
         "schema_version": 1,
         "mode": "operator_status_bundle",
         "order_submission_enabled": False,
         "paper_lifecycle": lifecycle,
         "buy_promotion_summary": _buy_promotion_summary(action_plan),
-        "monday_operator_check_summary": _monday_operator_check_summary(monday_operator_check),
-        "live_readiness_summary": _live_readiness_summary(live_readiness_bundle),
-        "status_refresh_summary": _status_refresh_summary(status_refresh),
+        "monday_operator_check_summary": monday_summary,
+        "live_readiness_summary": live_summary,
+        "status_refresh_summary": status_summary,
+        "agent_next_step": _agent_next_step(monday_summary, status_summary),
         "scheduler_readiness": readiness,
         "position_report_markdown": position_report,
         "notes": [
@@ -84,6 +88,7 @@ def build_operator_status_markdown(payload: Mapping[str, Any]) -> str:
     ]
     for state, count in sorted((payload.get("paper_lifecycle", {}).get("state_counts") or {}).items()):
         lines.append(f"| {state} | {count} |")
+    lines.extend(_agent_next_step_markdown_lines(payload.get("agent_next_step") or {}))
     lines.extend(_buy_promotion_markdown_lines(payload.get("buy_promotion_summary") or {}))
     lines.extend(_monday_operator_check_markdown_lines(payload.get("monday_operator_check_summary") or {}))
     lines.extend(_live_readiness_markdown_lines(payload.get("live_readiness_summary") or {}))
@@ -94,6 +99,65 @@ def build_operator_status_markdown(payload: Mapping[str, Any]) -> str:
     if position_report:
         lines.extend(["", "## Position Intelligence", "", position_report])
     return "\n".join(lines) + "\n"
+
+
+def _agent_next_step(
+    monday_summary: Mapping[str, Any],
+    status_summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    blockers = [str(value) for value in (monday_summary.get("blockers") or [])]
+    status_errors = int(status_summary.get("error_count") or 0)
+    submitted_orders = int(status_summary.get("submitted_order_count") or 0)
+    if status_errors:
+        state = "review_status_errors"
+        message = "Resolve paper order status-refresh errors before relying on paper feedback."
+    elif blockers:
+        state = "blocked_preflight"
+        message = "Regenerate or fix blocked Monday paper artifacts before revealing a submit command."
+    elif submitted_orders:
+        state = "monitor_submitted_orders"
+        message = "Review submitted paper order status and complete cleanup before the next smoke."
+    elif monday_summary.get("ready_for_review") and not monday_summary.get("submit_command_revealed"):
+        state = "ready_to_reveal_submit_command"
+        message = "Saved preflight artifacts are reviewable; reveal submit command only for supervised paper BUY testing."
+    elif monday_summary.get("submit_command_revealed"):
+        state = "submit_command_revealed_review_required"
+        message = "Submit command is visible; confirm artifacts are still current before any supervised paper submit."
+    else:
+        state = "collect_preflight_artifacts"
+        message = "Generate workflow smoke, smoke readiness, runbook check, and Monday operator check artifacts."
+    return {
+        "state": state,
+        "message": message,
+        "blockers": blockers,
+        "status_error_count": status_errors,
+        "submitted_order_count": submitted_orders,
+        "order_submission_enabled": False,
+    }
+
+
+def _agent_next_step_markdown_lines(summary: Mapping[str, Any]) -> list[str]:
+    if not summary:
+        return []
+    lines = [
+        "",
+        "## Agent Next Step",
+        "",
+        f"- State: `{_cell(str(summary.get('state') or ''))}`",
+        f"- Message: {_cell(str(summary.get('message') or ''))}",
+        f"- Order submission enabled: `{str(bool(summary.get('order_submission_enabled'))).lower()}`",
+        f"- Status errors: {int(summary.get('status_error_count') or 0)}",
+        f"- Submitted orders: {int(summary.get('submitted_order_count') or 0)}",
+        "",
+        "### Next-Step Blockers",
+        "",
+    ]
+    blockers = summary.get("blockers") or []
+    if blockers:
+        lines.extend(f"- {blocker}" for blocker in blockers)
+    else:
+        lines.append("- none")
+    return lines
 
 
 def _buy_promotion_summary(action_plan: Mapping[str, Any] | None) -> dict[str, Any]:

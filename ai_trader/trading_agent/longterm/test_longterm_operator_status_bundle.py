@@ -207,6 +207,59 @@ def test_operator_status_bundle_surfaces_status_refresh_summary(tmp_path):
     assert "| filled | 1 |" in markdown
 
 
+def test_operator_status_bundle_adds_agent_next_step_rollup(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ready_bundle = build_operator_status_bundle(
+        journal,
+        monday_operator_check={
+            "ready_for_review": True,
+            "blocker_count": 0,
+            "submit_command_revealed": False,
+        },
+        status_refresh={
+            "submitted_order_count": 0,
+            "error_count": 0,
+            "status_counts": {},
+        },
+    )
+    blocked_bundle = build_operator_status_bundle(
+        journal,
+        monday_operator_check={
+            "ready_for_review": False,
+            "blocker_count": 1,
+            "blockers": ["paper_account_not_clean"],
+            "submit_command_revealed": False,
+        },
+        status_refresh={
+            "submitted_order_count": 0,
+            "error_count": 0,
+            "status_counts": {},
+        },
+    )
+    status_error_bundle = build_operator_status_bundle(
+        journal,
+        monday_operator_check={
+            "ready_for_review": True,
+            "blocker_count": 0,
+            "submit_command_revealed": False,
+        },
+        status_refresh={
+            "submitted_order_count": 1,
+            "error_count": 1,
+            "status_counts": {"status_refresh_error": 1},
+        },
+    )
+
+    assert ready_bundle["agent_next_step"]["state"] == "ready_to_reveal_submit_command"
+    assert ready_bundle["agent_next_step"]["order_submission_enabled"] is False
+    assert blocked_bundle["agent_next_step"]["state"] == "blocked_preflight"
+    assert "paper_account_not_clean" in blocked_bundle["agent_next_step"]["blockers"]
+    assert status_error_bundle["agent_next_step"]["state"] == "review_status_errors"
+    markdown = build_operator_status_markdown(ready_bundle)
+    assert "## Agent Next Step" in markdown
+    assert "- State: `ready_to_reveal_submit_command`" in markdown
+
+
 def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     decision_id = _record_decision(journal)

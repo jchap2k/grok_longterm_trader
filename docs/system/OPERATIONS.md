@@ -747,7 +747,9 @@ The bundle combines paper lifecycle, buy-promotion state, optional Monday
 artifact status, optional live-readiness evidence, optional paper status-refresh
 state, advisory scheduler readiness, and position intelligence into one
 operator surface. It is intended for manual review before any later scheduler
-automation design and keeps order submission disabled.
+automation design and keeps order submission disabled. Its `agent_next_step`
+rollup is guidance only; it can tell the operator/agent what to review next, but
+it never authorizes broker submission.
 
 ## Position Intelligence Report
 
