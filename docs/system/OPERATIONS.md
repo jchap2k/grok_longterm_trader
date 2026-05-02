@@ -623,6 +623,9 @@ Stage 6B is deliberately narrow:
 - `--submit-paper-orders` also requires a ready, fresh `--runbook-check` artifact whose plan ID and canonical action-plan hash match the action plan being submitted.
 - The runbook-check artifact must be schema v2 or newer, proving the saved
   evidence came from the promotion-aware workflow/readiness path.
+- The runbook-check artifact must include a clean `promotion_summary`; missing
+  or blocked promotion evidence stops the submit CLI before any Alpaca paper
+  state refresh.
 - `--submit-paper-orders` blocks when the Alpaca paper market clock is closed, so market BUY smoke orders are not left pending after hours.
 - Rebalance, sell, and sell-to-fund-buy previews are hard-blocked with `rebalance_blocked_v1`.
 - It revalidates protected symbols, actionable buy-promotion state, benchmark guard, thesis/review status, decision confidence/recommendation, preview freshness, cash, active-rules hash, and duplicate submission state immediately before paper submission.

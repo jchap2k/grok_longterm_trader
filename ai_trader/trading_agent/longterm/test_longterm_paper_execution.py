@@ -633,6 +633,14 @@ def test_paper_execution_cli_real_submit_path_refreshes_paper_account_state(tmp_
                 "ready_for_supervised_submit": True,
                 "plan_id": "plan-1",
                 "action_plan_hash": hash_action_plan(_action_plan(decision_id, trade_value=4000)),
+                "promotion_summary": {
+                    "workflow_blocked_count": 0,
+                    "workflow_missing_count": 0,
+                    "workflow_non_actionable_count": 0,
+                    "readiness_blocked_count": 0,
+                    "readiness_missing_count": 0,
+                    "readiness_non_actionable_count": 0,
+                },
                 "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             }
         ),
@@ -693,6 +701,14 @@ def test_paper_execution_cli_blocks_submit_when_market_is_closed_before_refresh(
                 "ready_for_supervised_submit": True,
                 "plan_id": "plan-1",
                 "action_plan_hash": hash_action_plan(action_plan),
+                "promotion_summary": {
+                    "workflow_blocked_count": 0,
+                    "workflow_missing_count": 0,
+                    "workflow_non_actionable_count": 0,
+                    "readiness_blocked_count": 0,
+                    "readiness_missing_count": 0,
+                    "readiness_non_actionable_count": 0,
+                },
                 "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             }
         ),
@@ -902,6 +918,103 @@ def test_paper_execution_cli_rejects_old_runbook_check_before_refresh(tmp_path, 
     assert run_cli(args) == 2
     payload = json.loads(capsys.readouterr().out)
     assert "runbook_check_schema_too_old" in payload["blockers"]
+    assert calls == {"refreshed": 0}
+
+
+def test_paper_execution_cli_rejects_runbook_check_with_missing_or_blocked_promotion_summary(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    import longterm.paper_execution_cli as cli
+
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = _record_decision(journal)
+    _record_preview(ledger, decision_id)
+    portfolio_path = tmp_path / "portfolio.json"
+    plan_path = tmp_path / "plan.json"
+    missing_summary_path = tmp_path / "missing_summary_runbook_check.json"
+    blocked_summary_path = tmp_path / "blocked_summary_runbook_check.json"
+    action_plan = _action_plan(decision_id)
+    portfolio_path.write_text(json.dumps({"cash": 5000, "protected_symbols": ["FXAIX"]}), encoding="utf-8")
+    plan_path.write_text(json.dumps(action_plan), encoding="utf-8")
+    base_payload = {
+        "schema_version": 2,
+        "ready_for_supervised_submit": True,
+        "plan_id": "plan-1",
+        "action_plan_hash": hash_action_plan(action_plan),
+        "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+    }
+    missing_summary_path.write_text(json.dumps(base_payload), encoding="utf-8")
+    blocked_summary_path.write_text(
+        json.dumps(
+            {
+                **base_payload,
+                "promotion_summary": {
+                    "workflow_blocked_count": 1,
+                    "workflow_missing_count": 0,
+                    "workflow_non_actionable_count": 1,
+                    "readiness_blocked_count": 0,
+                    "readiness_missing_count": 0,
+                    "readiness_non_actionable_count": 0,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    calls = {"refreshed": 0}
+    monkeypatch.setattr(
+        cli,
+        "_fresh_alpaca_paper_state",
+        lambda profile: calls.__setitem__("refreshed", calls["refreshed"] + 1)
+        or PortfolioState(cash=8000, protected_symbols=profile.protected_symbols),
+        raising=False,
+    )
+
+    missing_args = build_parser().parse_args(
+        [
+            "--journal-db",
+            str(journal.db_path),
+            "--ledger-db",
+            str(ledger.db_path),
+            "--portfolio-state",
+            str(portfolio_path),
+            "--action-plan",
+            str(plan_path),
+            "--submit-paper-orders",
+            "--confirm-paper-submit",
+            "SUPERVISED_PAPER_BUY_ONLY",
+            "--runbook-check",
+            str(missing_summary_path),
+            "--json",
+        ]
+    )
+    blocked_args = build_parser().parse_args(
+        [
+            "--journal-db",
+            str(journal.db_path),
+            "--ledger-db",
+            str(ledger.db_path),
+            "--portfolio-state",
+            str(portfolio_path),
+            "--action-plan",
+            str(plan_path),
+            "--submit-paper-orders",
+            "--confirm-paper-submit",
+            "SUPERVISED_PAPER_BUY_ONLY",
+            "--runbook-check",
+            str(blocked_summary_path),
+            "--json",
+        ]
+    )
+
+    assert run_cli(missing_args) == 2
+    missing_payload = json.loads(capsys.readouterr().out)
+    assert "runbook_check_missing_promotion_summary" in missing_payload["blockers"]
+    assert run_cli(blocked_args) == 2
+    blocked_payload = json.loads(capsys.readouterr().out)
+    assert "runbook_check_buy_promotion_blockers" in blocked_payload["blockers"]
     assert calls == {"refreshed": 0}
 
 

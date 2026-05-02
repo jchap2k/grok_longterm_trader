@@ -237,6 +237,11 @@ def _validate_runbook_check(
     if payload:
         if _schema_version(payload) < 2:
             blockers.append("runbook_check_schema_too_old")
+        promotion_summary = payload.get("promotion_summary")
+        if not isinstance(promotion_summary, dict):
+            blockers.append("runbook_check_missing_promotion_summary")
+        elif _promotion_summary_blocked_count(promotion_summary) > 0:
+            blockers.append("runbook_check_buy_promotion_blockers")
         if not bool(payload.get("ready_for_supervised_submit")):
             blockers.append("runbook_check_not_ready")
         expected_plan_id = str(action_plan.get("plan_id") or "")
@@ -266,6 +271,16 @@ def _schema_version(payload: dict) -> int:
         return int(payload.get("schema_version") or 1)
     except (TypeError, ValueError):
         return 1
+
+
+def _promotion_summary_blocked_count(summary: dict) -> int:
+    total = 0
+    for key in ("workflow_blocked_count", "readiness_blocked_count"):
+        try:
+            total += int(summary.get(key) or 0)
+        except (TypeError, ValueError):
+            total += 1
+    return total
 
 
 def _is_stale(generated_at: str, *, max_age_hours: int) -> bool:

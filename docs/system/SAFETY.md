@@ -61,6 +61,8 @@ Before live execution exists:
   eligibility result, workflow smoke, or supervised Stage 6B submit can be
   considered ready; pending-evidence BUYs remain research tasks, not order
   candidates
+- require pre-submit runbook-check evidence to include a clean promotion summary;
+  malformed or hand-edited schema-v2 checks must not allow Alpaca state refresh
 - require decision-id traceability for every future paper execution event
 - treat eligibility events and feedback refresh outputs as audit/review
   artifacts only; they must include revalidation requirements and must not be
