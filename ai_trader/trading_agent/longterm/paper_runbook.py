@@ -25,6 +25,7 @@ def build_paper_runbook(
         "runbook_check": _artifact(output_dir, "paper_runbook_check.json"),
         "paper_execution_audit": _artifact(output_dir, "paper_execution_audit.json"),
         "paper_order_status_refresh": _artifact(output_dir, "paper_order_status_refresh.json"),
+        "paper_lifecycle": _artifact(output_dir, "paper_lifecycle.json"),
         "paper_trading_observed": _artifact(output_dir, "paper_trading_observed.json"),
         "live_readiness_bundle": _artifact(output_dir, "live_readiness_bundle.json"),
     }
@@ -110,6 +111,14 @@ def build_paper_runbook(
                 "sell/cancel any temporary paper position in Alpaca paper before the next run."
             ),
             "manual_step": True,
+        },
+        {
+            "step_id": "paper_lifecycle",
+            "title": "Build paper lifecycle summary",
+            "command": (
+                "python scripts/longterm_paper_lifecycle.py "
+                f"--ledger-db {ledger_db} --report-output {artifacts['paper_lifecycle']} --json"
+            ),
         },
         {
             "step_id": "paper_trading_verification",

@@ -24,6 +24,7 @@ def test_paper_runbook_lists_monday_artifacts_and_ordered_commands():
     assert runbook["artifacts"]["workflow_smoke"] == "artifacts\\paper_workflow_smoke.json"
     assert runbook["artifacts"]["paper_smoke_readiness"] == "artifacts\\paper_smoke_readiness.json"
     assert runbook["artifacts"]["paper_order_status_refresh"] == "artifacts\\paper_order_status_refresh.json"
+    assert runbook["artifacts"]["paper_lifecycle"] == "artifacts\\paper_lifecycle.json"
     assert "--profile-config profile.json" in runbook["steps"][0]["command"]
     assert "--portfolio-state-output portfolio.json" in runbook["steps"][0]["command"]
     assert "--profile-config profile.json" in runbook["steps"][1]["command"]
@@ -36,6 +37,7 @@ def test_paper_runbook_lists_monday_artifacts_and_ordered_commands():
         "supervised_submit",
         "status_refresh",
         "paper_cleanup_reminder",
+        "paper_lifecycle",
         "paper_trading_verification",
         "live_readiness_bundle",
     ]
@@ -48,7 +50,8 @@ def test_paper_runbook_lists_monday_artifacts_and_ordered_commands():
     assert "--report-output artifacts\\paper_runbook_check.json" in runbook["steps"][3]["command"]
     assert "sell or cancel the temporary paper position" in runbook["steps"][6]["title"].lower()
     assert "--report-output artifacts\\paper_order_status_refresh.json" in runbook["steps"][5]["command"]
-    assert "--report-output artifacts\\live_readiness_bundle.json" in runbook["steps"][8]["command"]
+    assert "--report-output artifacts\\paper_lifecycle.json" in runbook["steps"][7]["command"]
+    assert "--report-output artifacts\\live_readiness_bundle.json" in runbook["steps"][9]["command"]
     assert "Monday Paper Trading Runbook" in build_paper_runbook_markdown(runbook)
 
 

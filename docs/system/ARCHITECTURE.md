@@ -189,7 +189,7 @@ Refreshes already-submitted Alpaca paper order statuses by reading broker order 
 Builds provider-free paper fill outcome summaries from `PaperTradeLedger` fill events and an explicit current-price map. It compares paper fill return against `FXAIX` from the fill baseline and does not mutate journal decisions or call a broker.
 
 `longterm/paper_lifecycle.py`
-Builds a read-only symbol lifecycle summary across paper previews, paper execution events, and optional provider-free paper outcomes. It classifies symbols as preview-ready, preview-blocked, submitted, filled with pending outcome, outcome-evaluated, rejected, or status-error without submitting or modifying broker orders.
+Builds a read-only symbol lifecycle summary across paper previews, paper execution events, and optional provider-free paper outcomes. It classifies symbols as preview-ready, preview-blocked, submitted, filled with pending outcome, outcome-evaluated, rejected, canceled, or status-error without submitting or modifying broker orders. Its CLI can write a saved JSON lifecycle artifact for the Monday runbook.
 
 `longterm/feedback_refresh.py`
 Runs explicit dry-run feedback maintenance. It can rebuild symbol profiles, apply paper-preview feedback, apply paper execution feedback, apply reconciliation feedback, refresh active-vs-FXAIX outcomes from explicit price maps, compute ephemeral outcome freshness, summarize review/thesis state, compute benchmark-guard context, persist idempotent eligibility evaluation events, and produce analysis-only tuning inputs. It does not mutate ranking, sizing, planner weights, or broker state.

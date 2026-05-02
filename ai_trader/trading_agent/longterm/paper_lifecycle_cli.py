@@ -14,6 +14,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Summarize paper preview/execution/outcome lifecycle state.")
     parser.add_argument("--ledger-db", default=None)
     parser.add_argument("--price-map", default=None)
+    parser.add_argument("--report-output", default="")
     parser.add_argument("--json", action="store_true")
     return parser
 
@@ -23,6 +24,9 @@ def run_cli(args: argparse.Namespace) -> int:
         PaperTradeLedger(args.ledger_db),
         price_map=_load_json(args.price_map) if args.price_map else None,
     )
+    if args.report_output:
+        Path(args.report_output).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.report_output).write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:

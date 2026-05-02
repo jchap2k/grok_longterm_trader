@@ -156,3 +156,30 @@ def test_paper_lifecycle_cli_outputs_json(tmp_path, capsys):
     assert run_cli(args) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["state_counts"]["outcome_evaluated"] == 1
+
+
+def test_paper_lifecycle_cli_writes_report_output(tmp_path, capsys):
+    ledger_path = tmp_path / "paper.db"
+    report_path = tmp_path / "paper_lifecycle.json"
+    ledger = PaperTradeLedger(ledger_path)
+    ledger.record_execution_event(
+        {
+            "decision_id": "decision-nvda",
+            "symbol": "NVDA",
+            "side": "buy",
+            "notional": 1000,
+            "status": "canceled",
+            "paper_mode": True,
+            "live_mode": False,
+        }
+    )
+    args = build_parser().parse_args(
+        ["--ledger-db", str(ledger_path), "--report-output", str(report_path), "--json"]
+    )
+
+    assert run_cli(args) == 0
+    printed = json.loads(capsys.readouterr().out)
+    saved = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert printed["state_counts"]["execution_canceled"] == 1
+    assert saved["state_counts"]["execution_canceled"] == 1

@@ -350,6 +350,23 @@ The Monday operator check is artifact-only. It reports whether workflow smoke,
 paper-smoke readiness, runbook-check evidence, action-plan hash, submit-command
 redaction, status-refresh errors, and paper-account cleanliness look reviewable.
 
+Market-hours supervised paper-smoke sequence:
+
+1. Generate the redacted runbook and review the artifact commands.
+2. Run workflow smoke, paper-smoke readiness, and runbook check.
+3. Run `longterm_paper_monday_check.py` against the redacted runbook; it should
+   be review-ready with no blockers.
+4. During market hours only, regenerate the runbook with
+   `--include-submit-command`.
+5. Submit only if the command still has
+   `--confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY` and the runbook-check
+   hash matches the current action plan.
+6. Immediately run status refresh, lifecycle, paper-trading verification, a
+   fresh Alpaca snapshot, and account cleanliness.
+7. If the paper order is pending after the smoke, cancel it before leaving the
+   desk. If it filled, manually close the temporary paper position and verify
+   the final snapshot shows no leftover position.
+
 Reconcile the current paper snapshot against a dry-run action plan or expected
 cash before considering any paper-execution feature:
 
@@ -524,11 +541,15 @@ paper outcomes:
 ```powershell
 python scripts/longterm_paper_lifecycle.py --ledger-db path\to\paper_ledger.db
 python scripts/longterm_paper_lifecycle.py --ledger-db path\to\paper_ledger.db --price-map path\to\prices.json --json
+python scripts/longterm_paper_lifecycle.py --ledger-db path\to\paper_ledger.db --report-output path\to\paper_lifecycle.json --json
 ```
 
 Lifecycle summaries are read-only and classify symbols as `preview_ready`,
 `preview_blocked`, `submitted_pending_fill`, `filled_outcome_pending`,
 `outcome_evaluated`, `execution_rejected`, or `execution_status_error`.
+The Monday runbook saves this artifact after status refresh and cleanup so the
+operator can see whether the latest paper order is filled, canceled, rejected,
+or still pending.
 
 Run the feedback refresh maintenance loop:
 
