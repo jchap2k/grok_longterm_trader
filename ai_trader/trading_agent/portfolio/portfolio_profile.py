@@ -18,6 +18,8 @@ class PortfolioProfile:
     protected_symbols: List[str] = field(default_factory=list)
     benchmark_symbol: str = ""
     defensive_parking_symbol: str = ""
+    low_risk_parking_symbol: str = "SGOV"
+    duration_hedge_symbol: str = "TLT"
     cash_symbol: str = "CASH"
 
     def __post_init__(self) -> None:
@@ -29,6 +31,8 @@ class PortfolioProfile:
         ]
         self.benchmark_symbol = (self.benchmark_symbol or "").upper()
         self.defensive_parking_symbol = (self.defensive_parking_symbol or "").upper()
+        self.low_risk_parking_symbol = (self.low_risk_parking_symbol or "SGOV").upper()
+        self.duration_hedge_symbol = (self.duration_hedge_symbol or "TLT").upper()
         self.cash_symbol = (self.cash_symbol or "CASH").upper()
 
     @property

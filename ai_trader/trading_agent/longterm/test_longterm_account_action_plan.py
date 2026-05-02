@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from longterm.account_action_plan import AccountActionPlanBuilder
 from longterm.benchmark_guard import BenchmarkGuard
 from longterm.decision_journal import LongTermDecisionJournal
+from longterm.idle_cash_policy import MarketRegimeSnapshot
 from longterm.portfolio_state import PortfolioState
 from portfolio.portfolio_profile import PortfolioProfile
 from research.intake import create_research_packet_from_idea
@@ -155,3 +156,141 @@ def test_account_action_plan_blocks_protected_symbol_trade(tmp_path):
     assert plan.intents[0].allowed is False
     assert "protected" in plan.intents[0].reason.lower()
     assert any("protected" in reason.lower() for reason in plan.intents[0].risk_review["veto_reasons"])
+
+
+def test_account_action_plan_parks_leftover_cash_in_spy_during_normal_regime(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    _record(journal, "AMZN", recommendation="BUY", confidence=78, size=2.5)
+    profile = PortfolioProfile(
+        tradable_capital=34000,
+        protected_symbols=["FXAIX"],
+        defensive_parking_symbol="SPY",
+    )
+    state = PortfolioState(cash=5000, protected_symbols=["FXAIX"])
+
+    plan = AccountActionPlanBuilder(
+        market_regime=MarketRegimeSnapshot(risk_regime="normal")
+    ).build(
+        journal,
+        profile=profile,
+        portfolio_state=state,
+    )
+
+    assert [intent.intent_type for intent in plan.intents] == ["BUY", "PARK_IDLE_CASH"]
+    assert plan.intents[0].symbol == "AMZN"
+    assert plan.intents[0].trade_value == 850.0
+    parking = plan.intents[1]
+    assert parking.symbol == "SPY"
+    assert parking.order_intent == "BUY"
+    assert parking.trade_value == 4150.0
+    assert parking.allowed is True
+    assert "idle active cash" in parking.reason
+
+
+def test_account_action_plan_caps_parking_to_active_sleeve_budget(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    _record(journal, "AMZN", recommendation="BUY", confidence=78, size=2.5)
+    profile = PortfolioProfile(
+        total_account_value=74000,
+        tradable_capital=34000,
+        protected_symbols=["FXAIX"],
+        defensive_parking_symbol="SPY",
+    )
+    state = PortfolioState(cash=74000, protected_symbols=["FXAIX"])
+
+    plan = AccountActionPlanBuilder(
+        market_regime=MarketRegimeSnapshot(risk_regime="normal")
+    ).build(
+        journal,
+        profile=profile,
+        portfolio_state=state,
+    )
+
+    parking = [intent for intent in plan.intents if intent.intent_type == "PARK_IDLE_CASH"][0]
+    assert plan.intents[0].trade_value == 850.0
+    assert parking.trade_value == 33150.0
+
+
+def test_account_action_plan_splits_idle_cash_when_uncertainty_is_elevated(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    _record(journal, "AMZN", recommendation="BUY", confidence=78, size=2.5)
+    profile = PortfolioProfile(
+        tradable_capital=34000,
+        protected_symbols=["FXAIX"],
+        defensive_parking_symbol="SPY",
+        low_risk_parking_symbol="SGOV",
+    )
+    state = PortfolioState(cash=5000, protected_symbols=["FXAIX"])
+
+    plan = AccountActionPlanBuilder(
+        market_regime=MarketRegimeSnapshot(risk_regime="elevated_uncertainty")
+    ).build(
+        journal,
+        profile=profile,
+        portfolio_state=state,
+    )
+
+    parking = [intent for intent in plan.intents if intent.intent_type == "PARK_IDLE_CASH"]
+    assert [(intent.symbol, intent.trade_value) for intent in parking] == [
+        ("SPY", 2075.0),
+        ("SGOV", 2075.0),
+    ]
+
+
+def test_account_action_plan_uses_sgov_not_tlt_when_vix_spikes_with_rising_yields(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    _record(journal, "AMZN", recommendation="BUY", confidence=78, size=2.5)
+    profile = PortfolioProfile(
+        tradable_capital=34000,
+        protected_symbols=["FXAIX"],
+        defensive_parking_symbol="SPY",
+        low_risk_parking_symbol="SGOV",
+        duration_hedge_symbol="TLT",
+    )
+    state = PortfolioState(cash=5000, protected_symbols=["FXAIX"])
+    regime = MarketRegimeSnapshot.from_signals(
+        vix_level=35,
+        spy_above_200d=False,
+        ten_year_yield_trend="rising",
+    )
+
+    plan = AccountActionPlanBuilder(market_regime=regime).build(
+        journal,
+        profile=profile,
+        portfolio_state=state,
+    )
+
+    defensive = [intent for intent in plan.intents if intent.intent_type == "PARK_DEFENSIVE_CASH"]
+    assert regime.risk_regime == "inflation_rate_shock"
+    assert [(intent.symbol, intent.trade_value) for intent in defensive] == [("SGOV", 4150.0)]
+    assert "TLT" not in [intent.symbol for intent in plan.intents]
+
+
+def test_account_action_plan_caps_tlt_when_equity_panic_has_falling_yields(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    _record(journal, "AMZN", recommendation="BUY", confidence=78, size=2.5)
+    profile = PortfolioProfile(
+        tradable_capital=34000,
+        protected_symbols=["FXAIX"],
+        low_risk_parking_symbol="SGOV",
+        duration_hedge_symbol="TLT",
+    )
+    state = PortfolioState(cash=5000, protected_symbols=["FXAIX"])
+    regime = MarketRegimeSnapshot.from_signals(
+        vix_level=35,
+        spy_above_200d=False,
+        ten_year_yield_trend="falling",
+    )
+
+    plan = AccountActionPlanBuilder(market_regime=regime).build(
+        journal,
+        profile=profile,
+        portfolio_state=state,
+    )
+
+    defensive = [intent for intent in plan.intents if intent.intent_type == "PARK_DEFENSIVE_CASH"]
+    assert regime.risk_regime == "equity_panic_falling_rates"
+    assert [(intent.symbol, intent.trade_value) for intent in defensive] == [
+        ("SGOV", 2905.0),
+        ("TLT", 1245.0),
+    ]

@@ -9,7 +9,7 @@ Defines the canonical `ResearchPacket` and Lynch-style company categories.
 Normalizes raw idea dictionaries into research packets and applies portfolio profile defaults.
 
 `portfolio/portfolio_profile.py`
-Defines account-level constraints: protected symbols, benchmark, defensive parking symbol, cash symbol, and tradable capital.
+Defines account-level constraints: protected symbols, benchmark, defensive parking symbol, low-risk parking symbol, duration-hedge symbol, cash symbol, and tradable capital.
 
 `longterm/discovery.py`
 Builds the upstream stock universe for research. It merges candidate rows from sources such as S&P 500/Russell/Nasdaq lists, ETF holdings, manual watchlists, quality-growth screens, and Motley Fool premium captures; scores them with a lightweight quality-growth pre-filter; then buckets them into `research_queue`, `watchlist`, or `rejected`. Discovery is not allowed to read portfolio state or create trade intents.
@@ -85,6 +85,9 @@ Builds informational capital-needed alerts and provider-agnostic email payloads 
 `longterm/risk_review.py`
 Builds deterministic dry-run risk reviews for account-action intents. Reviews check protected symbols, benchmark gate state, thesis/review status, position-size warnings, and active-sleeve cash warnings before actions are surfaced as machine-readable plan intents.
 
+`longterm/idle_cash_policy.py`
+Classifies a supplied market-regime snapshot and chooses where leftover active-sleeve cash should wait after approved stock picks are sized. Normal regimes park in the configured equity index parking symbol such as `SPY`; elevated uncertainty splits parking between equity index exposure and short-duration Treasury exposure such as `SGOV`; inflation/rate-shock volatility defaults to low-risk parking; and classic equity panic with falling yields permits a capped duration hedge such as `TLT`. VIX alone is not treated as permission to buy long-duration bonds.
+
 `longterm/live_readiness.py`
 Builds a dry-run live-readiness checklist. It reports unmet gates such as benchmark proof, paper trading, broker-capability match, protected-symbol enforcement, manual approval, kill switch, audit logs, broker-read reconciliation, explicit live-mode config, and secrets hygiene. The broker-capability gate prevents Alpaca paper notional/fractional behavior from being treated as proof that a future live broker supports the same sizing model. It does not enable live execution.
 
@@ -138,7 +141,7 @@ Builds read-only evidence for future review-aware rebalance tuning. It groups ev
 Converts a structured decision into a non-executing proposed `BUY`, `SELL`, or `NONE` intent.
 
 `longterm/account_action_plan.py`
-Builds the structured dry-run account action contract that future paper/live execution should consume. It aggregates recommendation-table rows, portfolio state, benchmark gating, capital-shortfall suppression, review status, and rebalance proposals into JSON-compatible intents (`BUY`, `REBALANCE`, `REVIEW`, `CAPITAL_NEEDED`, or `BLOCKED`). It does not place orders.
+Builds the structured dry-run account action contract that future paper/live execution should consume. It aggregates recommendation-table rows, portfolio state, benchmark gating, capital-shortfall suppression, review status, optional idle-cash parking policy, and rebalance proposals into JSON-compatible intents (`BUY`, `PARK_IDLE_CASH`, `PARK_DEFENSIVE_CASH`, `REBALANCE`, `REVIEW`, `CAPITAL_NEEDED`, or `BLOCKED`). It does not place orders.
 
 `longterm/portfolio_state.py`
 Loads read-only portfolio snapshots and separates active versus protected holdings.

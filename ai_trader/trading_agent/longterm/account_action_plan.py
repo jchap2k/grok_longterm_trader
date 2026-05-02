@@ -11,6 +11,7 @@ from longterm.action_planner import ActionPlanner
 from longterm.benchmark_guard import BenchmarkGuard
 from longterm.capital_alert import _capital_request_suppression_reason
 from longterm.decision_journal import LongTermDecisionJournal
+from longterm.idle_cash_policy import IdleCashDeploymentPolicy, MarketRegimeSnapshot
 from longterm.portfolio_state import PortfolioState
 from longterm.rebalance_planner import RebalancePlanner
 from longterm.report_builder import RecommendationTableBuilder
@@ -62,12 +63,16 @@ class AccountActionPlanBuilder:
         generated_at_func: Callable[[], str] | None = None,
         plan_id_func: Callable[[], str] | None = None,
         risk_review_builder: RiskReviewBuilder | None = None,
+        idle_cash_policy: IdleCashDeploymentPolicy | None = None,
+        market_regime: MarketRegimeSnapshot | None = None,
     ):
         self.benchmark_guard = benchmark_guard or BenchmarkGuard()
         self.rebalance_planner = rebalance_planner or RebalancePlanner()
         self.generated_at_func = generated_at_func or _now_iso
         self.plan_id_func = plan_id_func or (lambda: str(uuid.uuid4()))
         self.risk_review_builder = risk_review_builder or RiskReviewBuilder()
+        self.idle_cash_policy = idle_cash_policy or IdleCashDeploymentPolicy()
+        self.market_regime = market_regime
 
     def build(
         self,
@@ -219,6 +224,17 @@ class AccountActionPlanBuilder:
                 )
             )
 
+        if self.market_regime is not None:
+            intents.extend(
+                _idle_cash_intents(
+                    profile=profile,
+                    portfolio_state=portfolio_state,
+                    intents=intents,
+                    policy=self.idle_cash_policy,
+                    market_regime=self.market_regime,
+                )
+            )
+
         status = "ready" if intents and not blocked_reasons else "blocked" if blocked_reasons else "no_action"
         return AccountActionPlan(
             schema_version=1,
@@ -244,6 +260,66 @@ def _blocked_intent(row: dict, reason: str, *, risk_review: dict | None = None) 
         decision_id=str(row.get("decision_id") or ""),
         risk_review=risk_review or {},
     )
+
+
+def _idle_cash_intents(
+    *,
+    profile: PortfolioProfile,
+    portfolio_state: PortfolioState,
+    intents: list[AccountActionIntent],
+    policy: IdleCashDeploymentPolicy,
+    market_regime: MarketRegimeSnapshot,
+) -> list[AccountActionIntent]:
+    committed_cash = sum(
+        intent.trade_value
+        for intent in intents
+        if intent.allowed
+        and intent.intent_type == "BUY"
+        and intent.order_intent == "BUY"
+    )
+    available_cash = max(0.0, float(portfolio_state.cash or 0.0) - committed_cash)
+    active_budget_remaining = available_cash
+    if float(profile.tradable_capital or 0.0) > 0:
+        active_budget_remaining = max(
+            0.0,
+            float(profile.tradable_capital)
+            - float(portfolio_state.active_market_value or 0.0)
+            - committed_cash,
+        )
+    idle_cash = round(min(available_cash, active_budget_remaining), 2)
+    if idle_cash <= 0:
+        return []
+
+    results: list[AccountActionIntent] = []
+    for allocation in policy.allocations(profile=profile, market_regime=market_regime):
+        trade_value = round(idle_cash * float(allocation.weight), 2)
+        if trade_value <= 0:
+            continue
+        symbol = allocation.symbol.upper()
+        results.append(
+            AccountActionIntent(
+                symbol=symbol,
+                intent_type=allocation.intent_type,
+                order_intent="BUY",
+                trade_value=trade_value,
+                target_value=portfolio_state.holding_value(symbol) + trade_value,
+                allowed=True,
+                reason=(
+                    f"{allocation.reason} Regime={market_regime.risk_regime}; "
+                    f"idle active cash=${idle_cash:,.2f}."
+                ),
+                risk_review={
+                    "symbol": symbol,
+                    "intent_type": allocation.intent_type,
+                    "allowed": True,
+                    "risk_level": "low" if allocation.intent_type == "PARK_DEFENSIVE_CASH" else "medium",
+                    "veto_reasons": [],
+                    "warnings": [],
+                    "market_regime": market_regime.risk_regime,
+                },
+            )
+        )
+    return results
 
 
 def _now_iso() -> str:
