@@ -32,6 +32,9 @@ Tracks multi-batch research campaigns after universe batching. It creates a mani
 `longterm/research_packet_enrichment.py`
 Merges local/cacheable enrichment rows into research ideas before `ResearchPacket` intake. It scores packet readiness with `completeness_score`, `completeness_bucket`, and `missing_fields`, while keeping provider-specific metrics transient unless a later decision explicitly journals them.
 
+`longterm/grok_research_enrichment.py`
+Adds a source-backed Grok catalyst synthesis layer for wider-universe names, especially when Motley Fool company pages are unavailable or thin. It accepts optional cheap factual inputs such as Finnhub snapshots, normalizes Grok's structured JSON into packet-ready business/thesis context, requires source URLs or warning flags, and labels generated scores as `model_estimate`. Hard financial numbers and future Moneyball-style quant scores should be computed in Python/provider code first, then supplied to Grok as facts for narrative synthesis rather than invented by the model.
+
 `longterm/research_runner.py`
 Builds context sections and runs the CGH decision committee through `CheapGrokHeavy`. It includes the current `ai_trader/rules/active_rules.txt` content as `active_rules_context` for the configured long-term agents, optional read-only current portfolio holdings/cash context, plus deterministic reviews and a thesis challenge section so the final decision sees the operating rules, bull case, bear case, key risks, current exposure, and kill criteria before producing a recommendation.
 

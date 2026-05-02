@@ -109,6 +109,25 @@ provider metrics transient, adds source notes, and reports
 consume committee calls. Enriched dictionaries remain compatible with
 `ResearchPacket` intake; unknown transient keys are ignored by packet creation.
 
+For wider-universe names where Motley Fool company pages are unavailable or too
+thin, use Grok catalyst enrichment as a source-backed synthesis layer. Feed
+cheap factual snapshots first, such as Finnhub profile/metric JSON, and let Grok
+produce deeper catalyst, bull/bear, earnings, and thesis-watch context. Generated
+ratings must remain labeled as `model_estimate`; they are research context, not
+Motley Fool proprietary scores and not execution authority.
+
+Offline/snapshot mode for development:
+
+```powershell
+python scripts/longterm_grok_research_enrichment.py --idea-batch path\to\research_ideas.json --facts-file path\to\finnhub_facts.json --snapshot-file path\to\grok_snapshots.json --output path\to\research_ideas.grok_enriched.json
+```
+
+Live xAI mode, when `XAI_API_KEY` is configured:
+
+```powershell
+python scripts/longterm_grok_research_enrichment.py --idea-batch path\to\research_ideas.json --facts-file path\to\finnhub_facts.json --output path\to\research_ideas.grok_enriched.json --limit 5
+```
+
 Write research-ready candidates as an idea batch for the existing research
 cycle:
 
