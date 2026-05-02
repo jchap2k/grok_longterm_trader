@@ -53,8 +53,12 @@ Operating Income
 941.0M
 Free Cash Flow
 1.4B
+View Full Earnings Report
+Q2 Earnings
 Synthetic Earnings Headline For Parser Testing
-Synthetic vehicle and energy company summary for parser testing.
+Tesla
+[@portabletext/react] Unknown block type "inlineTicker", specify a component for it in the `components.types` prop
+makes synthetic vehicle and energy products for parser testing.
 Key Financial Takeaways
 Revenue: $22.4 billion (up 16% YoY)
 Diluted EPS (non-GAAP): $0.41 (up 52% YoY)
@@ -130,7 +134,7 @@ def test_enrich_idea_from_company_snapshot_maps_fool_iq_sections_to_packet_field
 
     enriched = enrich_idea_from_company_snapshot(idea, _tsla_snapshot())
 
-    assert enriched["business_summary"].startswith("Synthetic vehicle and energy")
+    assert enriched["business_summary"].startswith("Tesla makes synthetic vehicle and energy")
     assert "Synthetic software revenue expanded." in enriched["confirming_signals"]
     assert "Synthetic inventory risk increased." in enriched["invalidation_conditions"]
     assert enriched["quality_score"] == 38.0
@@ -142,6 +146,8 @@ def test_enrich_idea_from_company_snapshot_maps_fool_iq_sections_to_packet_field
     assert enrichment["growth_metrics"]["3_yr_revenue_growth"] == "5.19%"
     assert enrichment["valuation_metrics"]["price_earnings"] == "329.7x"
     assert enrichment["recent_earnings"]["present"] is True
+    assert enrichment["recent_earnings"]["article_title"] == "Synthetic Earnings Headline For Parser Testing"
+    assert enrichment["recent_earnings"]["summary"].startswith("Tesla makes synthetic vehicle and energy")
     assert "recent_earnings" in enrichment["sections_found"]
 
 

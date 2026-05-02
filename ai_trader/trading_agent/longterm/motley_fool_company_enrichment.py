@@ -35,7 +35,6 @@ FOOTER_LABELS = {
 EARNINGS_STOP_LABELS = {
     *FOOTER_LABELS,
     "Upcoming Earnings",
-    "View Full Earnings Report",
     "Watch & Listen",
     "Potential Bull Cases",
     "Potential Bear Cases",
@@ -462,7 +461,7 @@ def _parse_recent_earnings(lines: list[str], links: list[Mapping[str, str]], *, 
         if _looks_like_earnings_article_title(line, symbol=symbol):
                 article_title = line
                 break
-    summary = _line_after(window, article_title)
+    summary = _summary_after_article_title(window, article_title)
     if _is_noise_line(summary):
         summary = ""
     return {
@@ -650,6 +649,24 @@ def _line_after(lines: list[str], label: str) -> str:
     return lines[index + 1] if index + 1 < len(lines) else ""
 
 
+def _summary_after_article_title(lines: list[str], article_title: str) -> str:
+    index = _index_of(lines, article_title)
+    if index is None:
+        return ""
+    prefix = ""
+    for line in lines[index + 1 :]:
+        if _matches_any_stop_label(line, {"Key Financial Takeaways", "Latest Developments", *EARNINGS_STOP_LABELS}):
+            break
+        if len(line) <= 25 and not _is_noise_line(line):
+            prefix = line
+            continue
+        if len(line) > 25 and not _is_noise_line(line):
+            if prefix and line[:1].islower():
+                return f"{prefix} {line}"
+            return line
+    return ""
+
+
 def _collect_until_label(lines: list[str], label: str, stop_labels: set[str]) -> list[str]:
     index = _index_of(lines, label)
     if index is None:
@@ -684,6 +701,8 @@ def _matches_any_stop_label(line: str, stop_labels: set[str]) -> bool:
 def _is_noise_line(line: str) -> bool:
     text = str(line or "").strip()
     if not text:
+        return True
+    if text.startswith("[@portabletext/react]"):
         return True
     return _matches_any_stop_label(text, FOOTER_LABELS) or text in {
         "View Full Earnings Report",
