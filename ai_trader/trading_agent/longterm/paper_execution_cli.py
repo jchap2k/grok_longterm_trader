@@ -45,6 +45,7 @@ def run_cli(
     args: argparse.Namespace,
     *,
     broker_factory: Callable[[], PaperSubmitBroker] | None = None,
+    market_clock_factory: Callable[[], bool] | None = None,
 ) -> int:
     profile = PortfolioProfile.from_file(args.profile_config)
     state = PortfolioState.from_file(args.portfolio_state, profile=profile)
@@ -63,6 +64,11 @@ def run_cli(
         if runbook_check["blockers"]:
             result = _precheck_required_result(action_plan, runbook_check=runbook_check)
             _emit_result(result, args=args, markdown_builder=_precheck_required_markdown)
+            return 2
+        market_is_open = market_clock_factory() if market_clock_factory else _alpaca_paper_market_is_open()
+        if not market_is_open:
+            result = _market_closed_result(action_plan)
+            _emit_result(result, args=args, markdown_builder=_market_closed_markdown)
             return 2
         if broker_factory:
             broker = broker_factory()
@@ -142,6 +148,23 @@ def _precheck_required_result(action_plan: dict, *, runbook_check: dict) -> dict
     }
 
 
+def _market_closed_result(action_plan: dict) -> dict:
+    return {
+        "schema_version": 1,
+        "mode": "paper_execution_market_closed",
+        "paper_mode": True,
+        "live_mode": False,
+        "submit_requested": True,
+        "order_submission_enabled": False,
+        "plan_id": str(action_plan.get("plan_id") or ""),
+        "blockers": ["market_closed"],
+        "notes": [
+            "Paper submission was requested, but the Alpaca paper market clock is closed.",
+            "No paper orders were submitted.",
+        ],
+    }
+
+
 def _confirmation_required_markdown(result: dict) -> str:
     return "\n".join(
         [
@@ -172,6 +195,20 @@ def _precheck_required_markdown(result: dict) -> str:
     ]
     lines.extend(f"- {blocker}" for blocker in blockers)
     return "\n".join(lines) + "\n"
+
+
+def _market_closed_markdown(result: dict) -> str:
+    return "\n".join(
+        [
+            "# Paper Execution Market Closed",
+            "",
+            "Paper submission was requested, but the market is closed.",
+            "",
+            f"- Submit requested: `{str(result.get('submit_requested')).lower()}`",
+            f"- Order submission enabled: `{str(result.get('order_submission_enabled')).lower()}`",
+            "",
+        ]
+    )
 
 
 def _validate_runbook_check(
@@ -245,6 +282,19 @@ def _fresh_alpaca_paper_state(profile: PortfolioProfile) -> PortfolioState:
         paper_trading=True,
     ).read_snapshot(profile=profile)
     return paper_account_snapshot_to_portfolio_state(snapshot)
+
+
+def _alpaca_paper_market_is_open() -> bool:
+    """Read the Alpaca paper clock before allowing market-order submission."""
+    from brokers.alpaca_broker import AlpacaBroker
+
+    broker = AlpacaBroker(paper_trading=True)
+    if not broker.connect():
+        raise RuntimeError("Could not connect to Alpaca paper account for market clock.")
+    try:
+        return bool(broker.is_market_open())
+    finally:
+        broker.disconnect()
 
 
 

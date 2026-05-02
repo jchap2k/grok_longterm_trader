@@ -523,11 +523,77 @@ def test_paper_execution_cli_real_submit_path_refreshes_paper_account_state(tmp_
         ]
     )
 
-    assert run_cli(args) == 0
+    assert run_cli(args, market_clock_factory=lambda: True) == 0
     payload = json.loads(capsys.readouterr().out)
     assert calls["refreshed"] == 1
     assert payload["submitted_count"] == 1
     assert fake_broker.calls[0]["notional"] == 4000.0
+
+
+def test_paper_execution_cli_blocks_submit_when_market_is_closed_before_refresh(tmp_path, capsys, monkeypatch):
+    import longterm.paper_execution_cli as cli
+
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = _record_decision(journal)
+    _record_preview(ledger, decision_id)
+    portfolio_path = tmp_path / "portfolio.json"
+    plan_path = tmp_path / "plan.json"
+    runbook_check_path = tmp_path / "paper_runbook_check.json"
+    action_plan = _action_plan(decision_id)
+    portfolio_path.write_text(json.dumps({"cash": 5000, "protected_symbols": ["FXAIX"]}), encoding="utf-8")
+    plan_path.write_text(json.dumps(action_plan), encoding="utf-8")
+    runbook_check_path.write_text(
+        json.dumps(
+            {
+                "ready_for_supervised_submit": True,
+                "plan_id": "plan-1",
+                "action_plan_hash": hash_action_plan(action_plan),
+                "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            }
+        ),
+        encoding="utf-8",
+    )
+    calls = {"refreshed": 0, "broker": 0}
+    monkeypatch.setattr(
+        cli,
+        "_fresh_alpaca_paper_state",
+        lambda profile: calls.__setitem__("refreshed", calls["refreshed"] + 1)
+        or PortfolioState(cash=8000, protected_symbols=profile.protected_symbols),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        cli.AlpacaPaperSubmitAdapter,
+        "from_env",
+        staticmethod(lambda: calls.__setitem__("broker", calls["broker"] + 1) or FakePaperBroker()),
+    )
+    args = build_parser().parse_args(
+        [
+            "--journal-db",
+            str(journal.db_path),
+            "--ledger-db",
+            str(ledger.db_path),
+            "--portfolio-state",
+            str(portfolio_path),
+            "--action-plan",
+            str(plan_path),
+            "--submit-paper-orders",
+            "--confirm-paper-submit",
+            "SUPERVISED_PAPER_BUY_ONLY",
+            "--runbook-check",
+            str(runbook_check_path),
+            "--json",
+        ]
+    )
+
+    assert run_cli(args, market_clock_factory=lambda: False) == 2
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["mode"] == "paper_execution_market_closed"
+    assert payload["order_submission_enabled"] is False
+    assert "market_closed" in payload["blockers"]
+    assert calls == {"refreshed": 0, "broker": 0}
+    assert ledger.list_execution_events(limit=10) == []
 
 
 def test_paper_execution_cli_submit_requires_confirmation_token(tmp_path, capsys, monkeypatch):
