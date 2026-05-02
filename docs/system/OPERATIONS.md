@@ -197,6 +197,29 @@ Live xAI mode, when `XAI_API_KEY` is configured:
 python scripts/longterm_grok_research_enrichment.py --idea-batch path\to\research_ideas.earnings_enriched.json --facts-file path\to\finnhub_facts.json --output path\to\research_ideas.grok_enriched.json --limit 5
 ```
 
+For repeatable batch work, use the combined evidence pipeline instead of
+hand-chaining each enrichment command. It runs the same stages in order:
+fundamentals, relevant news, latest earnings, deterministic scorecard, optional
+Grok catalyst/article synthesis, and final versioned `evidence_brief` creation.
+This is the preferred path when expanding a small smoke run into a wider Motley
+Fool, S&P 500, or custom-universe research batch.
+
+Snapshot/offline example:
+
+```powershell
+python scripts/longterm_evidence_enrichment_pipeline.py --idea-batch path\to\research_ideas.json --fundamentals-snapshot-file path\to\fundamentals_raw.json --news-snapshot-file path\to\raw_news.json --grok-snapshot-file path\to\grok_snapshots.json --output path\to\research_ideas.evidence_ready.json --summary-output path\to\evidence_summary.json
+```
+
+Live/provider example with free-tier pacing:
+
+```powershell
+python scripts/longterm_evidence_enrichment_pipeline.py --idea-batch path\to\research_ideas.json --fundamentals-provider yfinance --polygon-news --news-cache-path path\to\polygon_news_cache.json --xai-grok --limit 10 --rate-limit-batch-size 5 --rate-limit-pause-seconds 66 --output path\to\research_ideas.evidence_ready.json --summary-output path\to\evidence_summary.json
+```
+
+The pipeline still does not create decisions or orders. Feed its output into
+`run_longterm_cycle.py --idea-batch ...` when the enriched names are ready for
+committee review.
+
 When `relevant_news` is present, Grok enrichment should produce
 `article_evidence_summaries` for the strongest primary-company articles. These
 summaries are snippet-grounded: they summarize only the article title, provider

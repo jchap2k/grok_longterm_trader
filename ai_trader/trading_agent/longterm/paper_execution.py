@@ -59,16 +59,24 @@ class ActiveRulesLoader:
         self.path = Path(path)
 
     def load(self, *, required: bool = True) -> ActiveRulesReference:
-        if not self.path.exists():
+        path = self._resolved_path()
+        if not path.exists():
             if required:
                 raise FileNotFoundError(f"active rules file not found: {self.path}")
             return ActiveRulesReference(path=str(self.path), sha256="", excerpt="")
-        text = self.path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8")
         return ActiveRulesReference(
-            path=str(self.path),
+            path=str(path),
             sha256=hashlib.sha256(text.encode("utf-8")).hexdigest(),
             excerpt=_rules_excerpt(text),
         )
+
+    def _resolved_path(self) -> Path:
+        if self.path.exists() or self.path.is_absolute():
+            return self.path
+        if self.path.as_posix().endswith("ai_trader/rules/active_rules.txt"):
+            return DEFAULT_RULES_PATH
+        return self.path
 
 
 class AlpacaPaperSubmitAdapter:
