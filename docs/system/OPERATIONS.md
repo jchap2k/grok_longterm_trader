@@ -713,8 +713,11 @@ python scripts/longterm_scheduler_readiness.py --journal-db path\to\journal.db -
 Scheduler readiness is not automation. V1 always reports
 `scheduler_submission_enabled=false` and `ready_for_scheduler_paper_submit=false`.
 It surfaces blockers and warnings around protected symbols, benchmark guard,
-review/thesis state, active rules, feedback freshness, lifecycle errors, and
-decision traceability before any future scheduler-submit design is considered.
+review/thesis state, buy-promotion state, active rules, feedback freshness,
+lifecycle errors, and decision traceability before any future scheduler-submit
+design is considered. A stock `BUY` order intent without an actionable promotion
+review is a blocker; pending promotion follow-up with `order_intent=NONE`
+remains visible as a warning.
 
 Build the full read-only operator status bundle:
 

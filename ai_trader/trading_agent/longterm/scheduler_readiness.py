@@ -43,6 +43,7 @@ def build_scheduler_readiness_report(
     _add_benchmark_check(checks, journal, feedback_summary)
     _add_review_checks(checks, journal)
     _add_action_plan_checks(checks, journal, action_plan or {}, protected_symbols)
+    _add_buy_promotion_checks(checks, action_plan or {})
     _add_lifecycle_checks(checks, paper_lifecycle_summary or {})
     _add_deferred_research_check(checks, feedback_summary)
     checks.append(
@@ -243,6 +244,76 @@ def _add_action_plan_checks(
     )
 
 
+def _add_buy_promotion_checks(
+    checks: list[dict[str, Any]],
+    action_plan: Mapping[str, Any],
+) -> None:
+    intents = [item for item in (action_plan.get("intents") or []) if isinstance(item, Mapping)]
+    relevant_buy_orders: list[str] = []
+    missing_promotion: list[str] = []
+    non_actionable_order: list[str] = []
+    pending_items: list[dict[str, Any]] = []
+    counts: dict[str, int] = {}
+
+    for item in intents:
+        symbol = str(item.get("symbol") or "").upper()
+        intent_type = str(item.get("intent_type") or "").upper()
+        order_intent = str(item.get("order_intent") or "").upper()
+        if intent_type == "BUY" and order_intent == "BUY":
+            relevant_buy_orders.append(symbol)
+        review = _promotion_review_from_intent(item)
+        if not review:
+            if intent_type == "BUY" and order_intent == "BUY":
+                missing_promotion.append(symbol)
+            continue
+        decision = str(review.get("promotion_decision") or "UNKNOWN")
+        counts[decision] = counts.get(decision, 0) + 1
+        if intent_type == "BUY" and order_intent == "BUY" and decision != "ACTIONABLE_BUY":
+            non_actionable_order.append(symbol)
+        elif decision != "ACTIONABLE_BUY":
+            pending_items.append(
+                {
+                    "symbol": symbol,
+                    "promotion_decision": decision,
+                    "followups": list(review.get("followups") or []),
+                    "blockers": list(review.get("blockers") or []),
+                }
+            )
+
+    if missing_promotion or non_actionable_order:
+        status = "blocker"
+        problems = []
+        if missing_promotion:
+            problems.append(f"missing promotion review for BUY intents: {', '.join(missing_promotion)}")
+        if non_actionable_order:
+            problems.append(f"non-actionable promotion attached to BUY intents: {', '.join(non_actionable_order)}")
+        message = "Buy promotion state blocks automation: " + "; ".join(problems) + "."
+    elif pending_items:
+        status = "warning"
+        message = "Buy promotion follow-up remains: " + "; ".join(
+            _promotion_item_message(item) for item in pending_items
+        )
+    else:
+        status = "pass"
+        if relevant_buy_orders:
+            message = "All stock BUY order intents have actionable promotion reviews."
+        else:
+            message = "No stock BUY order intents require promotion review."
+
+    checks.append(
+        {
+            "check_id": "buy_promotion_state",
+            "status": status,
+            "message": message,
+            "promotion_counts": counts,
+            "actionable_count": counts.get("ACTIONABLE_BUY", 0),
+            "pending_count": len(pending_items),
+            "missing_promotion_count": len(missing_promotion),
+            "non_actionable_order_count": len(non_actionable_order),
+        }
+    )
+
+
 def _add_lifecycle_checks(checks: list[dict[str, Any]], paper_lifecycle_summary: Mapping[str, Any]) -> None:
     items = [item for item in (paper_lifecycle_summary.get("items") or []) if isinstance(item, Mapping)]
     error_symbols = [
@@ -305,6 +376,24 @@ def _decision_exists(journal: LongTermDecisionJournal, decision_id: str) -> bool
         return True
     except KeyError:
         return False
+
+
+def _promotion_review_from_intent(intent: Mapping[str, Any]) -> Mapping[str, Any]:
+    review = intent.get("promotion_review")
+    if isinstance(review, Mapping):
+        return review
+    risk_review = intent.get("risk_review")
+    if isinstance(risk_review, Mapping):
+        nested = risk_review.get("buy_promotion")
+        if isinstance(nested, Mapping):
+            return nested
+    return {}
+
+
+def _promotion_item_message(item: Mapping[str, Any]) -> str:
+    details = [*list(item.get("followups") or []), *list(item.get("blockers") or [])]
+    suffix = f" ({', '.join(str(detail) for detail in details)})" if details else ""
+    return f"{item.get('symbol')}: {item.get('promotion_decision')}{suffix}"
 
 
 def _recommended_next_steps(checks: list[Mapping[str, Any]]) -> list[str]:

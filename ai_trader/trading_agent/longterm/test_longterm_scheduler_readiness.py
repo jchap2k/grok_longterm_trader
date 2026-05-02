@@ -36,7 +36,15 @@ def _record_decision(journal, symbol="NVDA"):
     )
 
 
-def _action_plan(decision_id, *, symbol="NVDA", source_symbol="", order_intent="BUY"):
+def _action_plan(
+    decision_id,
+    *,
+    symbol="NVDA",
+    source_symbol="",
+    order_intent="BUY",
+    promotion_decision="ACTIONABLE_BUY",
+    followups=None,
+):
     return {
         "plan_id": "plan-1",
         "mode": "dry_run",
@@ -49,6 +57,12 @@ def _action_plan(decision_id, *, symbol="NVDA", source_symbol="", order_intent="
                 "allowed": True,
                 "decision_id": decision_id,
                 "trade_value": 1000,
+                "promotion_review": {
+                    "symbol": symbol,
+                    "promotion_decision": promotion_decision,
+                    "followups": list(followups or []),
+                    "blockers": [],
+                },
             }
         ],
     }
@@ -74,6 +88,7 @@ def test_scheduler_readiness_is_advisory_even_when_inputs_are_clean(tmp_path):
     assert report["scheduler_submission_enabled"] is False
     assert report["ready_for_scheduler_paper_submit"] is False
     assert report["blocker_count"] == 0
+    assert any(check["check_id"] == "buy_promotion_state" and check["status"] == "pass" for check in report["checks"])
     assert any(check["check_id"] == "scheduler_advisory_only_v1" for check in report["checks"])
     assert "Scheduler Readiness" in build_scheduler_readiness_markdown(report)
 
@@ -112,6 +127,54 @@ def test_scheduler_readiness_blocks_lifecycle_errors_and_warns_on_rejections(tmp
 
     assert any(check["check_id"] == "paper_lifecycle_errors" and check["status"] == "blocker" for check in report["checks"])
     assert any(check["check_id"] == "paper_execution_rejections" and check["status"] == "warning" for check in report["checks"])
+
+
+def test_scheduler_readiness_warns_on_pending_non_order_promotion(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    decision_id = _record_decision(journal, symbol="VEEV")
+    action_plan = _action_plan(
+        decision_id,
+        symbol="VEEV",
+        order_intent="NONE",
+        promotion_decision="WATCHLIST_PENDING_EVIDENCE",
+        followups=["missing_earnings_article"],
+    )
+
+    report = build_scheduler_readiness_report(
+        journal,
+        portfolio_state=PortfolioState(cash=5000, holdings=[]),
+        action_plan=action_plan,
+        feedback_summary={"order_submission_enabled": False},
+    )
+
+    check = next(check for check in report["checks"] if check["check_id"] == "buy_promotion_state")
+    assert check["status"] == "warning"
+    assert check["pending_count"] == 1
+    assert "missing_earnings_article" in check["message"]
+
+
+def test_scheduler_readiness_blocks_non_actionable_order_intent(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    decision_id = _record_decision(journal, symbol="VEEV")
+    action_plan = _action_plan(
+        decision_id,
+        symbol="VEEV",
+        order_intent="BUY",
+        promotion_decision="WATCHLIST_PENDING_EVIDENCE",
+        followups=["missing_earnings_article"],
+    )
+
+    report = build_scheduler_readiness_report(
+        journal,
+        portfolio_state=PortfolioState(cash=5000, holdings=[]),
+        action_plan=action_plan,
+        feedback_summary={"order_submission_enabled": False},
+    )
+
+    check = next(check for check in report["checks"] if check["check_id"] == "buy_promotion_state")
+    assert check["status"] == "blocker"
+    assert check["non_actionable_order_count"] == 1
+    assert report["blocker_count"] >= 1
 
 
 def test_scheduler_readiness_cli_outputs_json(tmp_path, capsys):
