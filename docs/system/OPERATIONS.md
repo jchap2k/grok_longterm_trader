@@ -336,13 +336,14 @@ and writes the plain `{symbol: price}` JSON consumed by `--price-map`.
 Run an audit-only whole-share workflow smoke before any supervised paper submit:
 
 ```powershell
-python scripts/longterm_paper_workflow_smoke.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --json
+python scripts/longterm_paper_workflow_smoke.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --report-output path\to\paper_workflow_smoke.json --json
 ```
 
 The workflow smoke fetches a read-only price map, records a whole-share preview
 to the paper ledger, and runs the paper execution boundary with submission
 disabled. It returns `ready_for_supervised_submit=true` only when the price map,
-preview, and execution audit are all clean.
+preview, and execution audit are all clean. `--report-output` can persist the
+JSON artifact for operator review before a supervised submit.
 
 Inspect recorded preview rows:
 

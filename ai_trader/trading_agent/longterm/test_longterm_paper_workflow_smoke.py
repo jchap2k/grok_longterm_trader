@@ -145,3 +145,40 @@ def test_paper_workflow_smoke_cli_outputs_json(tmp_path, capsys):
 
     assert payload["ready_for_supervised_submit"] is True
     assert payload["order_submission_enabled"] is False
+
+
+def test_paper_workflow_smoke_cli_writes_report_output(tmp_path, capsys):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    decision_id = _record_decision(journal)
+    profile_path = tmp_path / "profile.json"
+    portfolio_path = tmp_path / "portfolio.json"
+    action_plan_path = tmp_path / "action_plan.json"
+    report_path = tmp_path / "paper_workflow_smoke.json"
+    profile_path.write_text(json.dumps({"protected_symbols": ["FXAIX"]}), encoding="utf-8")
+    portfolio_path.write_text(json.dumps({"cash": 5000, "protected_symbols": ["FXAIX"]}), encoding="utf-8")
+    action_plan_path.write_text(json.dumps(_action_plan(decision_id)), encoding="utf-8")
+    args = build_parser().parse_args(
+        [
+            "--journal-db",
+            str(journal.db_path),
+            "--ledger-db",
+            str(tmp_path / "paper.db"),
+            "--profile-config",
+            str(profile_path),
+            "--portfolio-state",
+            str(portfolio_path),
+            "--action-plan",
+            str(action_plan_path),
+            "--report-output",
+            str(report_path),
+            "--json",
+        ]
+    )
+
+    assert run_cli(args, quote_provider_factory=lambda: FakeQuoteProvider({"NVDA": 193.5})) == 0
+    stdout_payload = json.loads(capsys.readouterr().out)
+    file_payload = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert stdout_payload["ready_for_supervised_submit"] is True
+    assert file_payload["ready_for_supervised_submit"] is True
+    assert file_payload["preview"]["preview_count"] == 1

@@ -27,6 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--portfolio-state", required=True)
     parser.add_argument("--action-plan", required=True)
     parser.add_argument("--max-preview-age-hours", type=int, default=24)
+    parser.add_argument("--report-output", default=None)
     parser.add_argument("--json", action="store_true")
     return parser
 
@@ -49,6 +50,8 @@ def run_cli(
         quote_provider=provider,
         max_preview_age_hours=args.max_preview_age_hours,
     )
+    if args.report_output:
+        Path(args.report_output).write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:
