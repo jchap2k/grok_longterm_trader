@@ -239,6 +239,36 @@ def test_paper_order_preview_turns_review_and_blocked_intents_into_no_order_rows
     assert preview["previews"][1]["allowed"] is False
 
 
+def test_paper_order_preview_excludes_parking_intents_without_blocking_simple_buy():
+    profile = PortfolioProfile(protected_symbols=["FXAIX"])
+    state = PortfolioState(cash=5000, protected_symbols=["FXAIX"])
+    plan = {
+        "plan_id": "plan-parking",
+        "intents": [
+            {"symbol": "AMZN", "intent_type": "BUY", "trade_value": 850, "allowed": True},
+            {
+                "symbol": "SPY",
+                "intent_type": "PARK_IDLE_CASH",
+                "order_intent": "BUY",
+                "trade_value": 4150,
+                "allowed": True,
+                "reason": "Normal regime parking.",
+            },
+        ],
+    }
+
+    preview = build_paper_order_preview(plan, portfolio_state=state, profile=profile)
+
+    by_symbol = {row["symbol"]: row for row in preview["previews"]}
+    assert preview["allowed_count"] == 1
+    assert preview["blocked_count"] == 0
+    assert preview["no_order_count"] == 1
+    assert by_symbol["AMZN"]["side"] == "buy"
+    assert by_symbol["SPY"]["side"] == "none"
+    assert by_symbol["SPY"]["order_type"] == "excluded_v1"
+    assert "planning-only parking intent" in by_symbol["SPY"]["reason"].lower()
+
+
 def test_paper_order_preview_cli_outputs_markdown_and_json(tmp_path, capsys):
     profile_path = tmp_path / "profile.json"
     portfolio_path = tmp_path / "portfolio.json"

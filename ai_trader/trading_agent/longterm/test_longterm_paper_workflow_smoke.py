@@ -95,6 +95,39 @@ def test_paper_workflow_smoke_builds_price_preview_and_execution_audit(tmp_path)
     assert ledger.list_execution_events(limit=10) == []
 
 
+def test_paper_workflow_smoke_stays_ready_when_action_plan_contains_parking_intent(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = _record_decision(journal, symbol="AMZN")
+    action_plan = _action_plan(decision_id)
+    action_plan["intents"][0]["symbol"] = "AMZN"
+    action_plan["intents"].append(
+        {
+            "symbol": "SPY",
+            "intent_type": "PARK_IDLE_CASH",
+            "order_intent": "BUY",
+            "trade_value": 4150,
+            "allowed": True,
+            "reason": "Normal regime parking.",
+        }
+    )
+
+    report = build_paper_workflow_smoke_report(
+        action_plan,
+        journal=journal,
+        ledger=ledger,
+        profile=PortfolioProfile(protected_symbols=["FXAIX"]),
+        portfolio_state=PortfolioState(cash=5000, protected_symbols=["FXAIX"]),
+        quote_provider=FakeQuoteProvider({"AMZN": 200.0}),
+    )
+
+    assert report["ready_for_supervised_submit"] is True
+    assert report["preview"]["allowed_count"] == 1
+    assert report["preview"]["no_order_count"] == 1
+    assert report["execution_audit"]["ready_count"] == 1
+    assert report["execution_audit"]["excluded_count"] == 1
+
+
 def test_paper_workflow_smoke_blocks_when_price_map_missing_symbol(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     ledger = PaperTradeLedger(tmp_path / "paper.db")

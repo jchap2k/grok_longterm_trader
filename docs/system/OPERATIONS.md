@@ -789,6 +789,12 @@ If `risk_regime` is supplied directly, it is used as the explicit operator
 classification. Otherwise, the file is classified from the supplied signals.
 This remains dry-run planning only; it does not submit broker orders.
 
+Stage 6B supervised paper execution remains narrower than the account action
+plan. `PARK_IDLE_CASH` and `PARK_DEFENSIVE_CASH` intents are rendered for
+operator visibility but are excluded from V1 paper submission readiness. The
+V1 submit boundary still submits only explicit simple `BUY` previews; rebalances
+remain hard-blocked.
+
 Cycle result JSON includes operator artifacts:
 - `idea_provenance_summary`
 - `packet_completeness_warnings`

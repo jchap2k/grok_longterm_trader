@@ -371,6 +371,47 @@ def test_paper_execution_hard_blocks_protected_and_rebalance_previews(tmp_path):
     assert {event["status"] for event in ledger.list_execution_events(limit=10)} == {"submit_blocked"}
 
 
+def test_paper_execution_excludes_parking_intents_without_blocking_simple_buy(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = _record_decision(journal, symbol="AMZN")
+    _record_preview(ledger, decision_id, symbol="AMZN", notional=850)
+    plan = {
+        "plan_id": "plan-1",
+        "intents": [
+            {"symbol": "AMZN", "intent_type": "BUY", "allowed": True, "decision_id": decision_id},
+            {
+                "symbol": "SPY",
+                "intent_type": "PARK_IDLE_CASH",
+                "order_intent": "BUY",
+                "trade_value": 4150,
+                "allowed": True,
+                "reason": "Normal regime parking.",
+            },
+        ],
+    }
+    broker = FakePaperBroker(status="pending_new", order_id="alpaca-paper-amzn")
+
+    result = _boundary(tmp_path).run(
+        plan,
+        journal=journal,
+        ledger=ledger,
+        profile=PortfolioProfile(protected_symbols=["FXAIX"]),
+        portfolio_state=PortfolioState(cash=5000, protected_symbols=["FXAIX"]),
+        submit=True,
+        broker=broker,
+    )
+
+    assert result["ready_count"] == 1
+    assert result["blocked_count"] == 0
+    assert result["excluded_count"] == 1
+    assert result["submitted_count"] == 1
+    assert [call["symbol"] for call in broker.calls] == ["AMZN"]
+    by_symbol = {item["symbol"]: item for item in result["items"]}
+    assert by_symbol["SPY"]["status"] == "excluded_v1"
+    assert ledger.list_execution_events(limit=10)[0]["symbol"] == "AMZN"
+
+
 def test_paper_execution_blocks_benchmark_review_decision_quality_and_cash(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     ledger = PaperTradeLedger(tmp_path / "paper.db")

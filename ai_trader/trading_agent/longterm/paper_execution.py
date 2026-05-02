@@ -219,7 +219,8 @@ class PaperExecutionBoundary:
                 "excerpt": rules.excerpt,
             },
             "ready_count": sum(1 for item in items if item["ready_to_submit"]),
-            "blocked_count": sum(1 for item in items if not item["ready_to_submit"]),
+            "blocked_count": sum(1 for item in items if item["status"] == "submit_blocked"),
+            "excluded_count": sum(1 for item in items if item["status"] == "excluded_v1"),
             "submitted_count": 0,
             "rejected_count": 0,
             "items": items,
@@ -256,6 +257,18 @@ class PaperExecutionBoundary:
         benchmark = self.benchmark_guard.evaluate(journal.summarize_benchmark_performance())
         items = []
         for intent in action_plan.get("intents") or []:
+            intent_type = str(intent.get("intent_type") or "").upper()
+            if _is_v1_excluded_parking_intent(intent_type):
+                items.append(
+                    _excluded_v1_item(
+                        intent,
+                        plan_id=str(action_plan.get("plan_id") or ""),
+                        submission_attempt_id=submission_attempt_id,
+                        benchmark_reason=benchmark.reason,
+                        rules=rules,
+                    )
+                )
+                continue
             decision_id = str(intent.get("decision_id") or "")
             preview = previews.get(decision_id)
             symbol = str((preview or intent).get("symbol") or "").upper()
@@ -387,6 +400,8 @@ class PaperExecutionBoundary:
         rules: ActiveRulesReference,
     ) -> None:
         for item in result["items"]:
+            if item.get("status") == "excluded_v1":
+                continue
             if not item["ready_to_submit"]:
                 ledger.record_execution_event(_event_for_item(item, status="submit_blocked", rules=rules))
                 continue
@@ -430,6 +445,7 @@ class PaperExecutionBoundary:
             except Exception as exc:
                 self._record_rejected(result, ledger, item, rules, str(exc), "")
         result["blocked_count"] = sum(1 for item in result["items"] if item.get("status") == "submit_blocked")
+        result["excluded_count"] = sum(1 for item in result["items"] if item.get("status") == "excluded_v1")
 
     def _record_rejected(
         self,
@@ -464,6 +480,43 @@ def deterministic_client_order_id(
 ) -> str:
     raw = "|".join([preview_id, preview_log_id, plan_id, decision_id])
     return "lt-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+
+
+def _excluded_v1_item(
+    intent: Mapping[str, Any],
+    *,
+    plan_id: str,
+    submission_attempt_id: str,
+    benchmark_reason: str,
+    rules: ActiveRulesReference,
+) -> dict[str, Any]:
+    symbol = str(intent.get("symbol") or "").upper()
+    return {
+        "decision_id": str(intent.get("decision_id") or ""),
+        "symbol": symbol,
+        "side": "none",
+        "order_type": "excluded_v1",
+        "notional": 0.0,
+        "quantity": 0.0,
+        "requested_notional": float(intent.get("trade_value") or 0.0),
+        "estimated_price": 0.0,
+        "preview_id": "",
+        "preview_log_id": "",
+        "plan_id": plan_id,
+        "client_order_id": "",
+        "submission_attempt_id": submission_attempt_id,
+        "ready_to_submit": False,
+        "status": "excluded_v1",
+        "blocked_reasons": [],
+        "exclusion_reason": "Planning-only parking intent is excluded from Stage 6B supervised paper submission.",
+        "benchmark_guard_reason": benchmark_reason,
+        "review_status": {},
+        "active_rules_hash": rules.sha256,
+    }
+
+
+def _is_v1_excluded_parking_intent(intent_type: str) -> bool:
+    return intent_type in {"PARK_IDLE_CASH", "PARK_DEFENSIVE_CASH"}
 
 
 def build_paper_execution_markdown(result: Mapping[str, Any]) -> str:

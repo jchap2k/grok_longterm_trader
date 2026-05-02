@@ -80,8 +80,9 @@ def build_paper_order_preview(
         "order_model": normalized_order_model,
         "plan_id": plan_id,
         "preview_count": len(rows),
-        "allowed_count": sum(1 for row in rows if row["allowed"]),
-        "blocked_count": sum(1 for row in rows if not row["allowed"]),
+        "allowed_count": sum(1 for row in rows if row["side"] != "none" and row["allowed"]),
+        "blocked_count": sum(1 for row in rows if row["side"] != "none" and not row["allowed"]),
+        "no_order_count": sum(1 for row in rows if row["side"] == "none"),
         "previews": rows,
         "notes": [
             "Preview only. No Alpaca paper or live orders were submitted.",
@@ -154,6 +155,15 @@ def _previews_for_intent(
             order_model=order_model,
             price_map=price_map,
         )
+    if _is_v1_excluded_parking_intent(intent_type):
+        return [
+            _excluded_v1_preview(
+                intent,
+                index=index,
+                plan_id=plan_id,
+                benchmark_reason=benchmark_reason,
+            )
+        ]
     return [
         _no_order_preview(
             intent,
@@ -300,6 +310,28 @@ def _rebalance_previews(
     return [sell, buy]
 
 
+def _excluded_v1_preview(
+    intent: Mapping[str, Any],
+    *,
+    index: int,
+    plan_id: str,
+    benchmark_reason: str,
+) -> PaperOrderPreview:
+    return _preview(
+        intent,
+        preview_id=f"{plan_id or 'plan'}-{index:03d}-excluded",
+        plan_id=plan_id,
+        symbol=_symbol(intent),
+        side="none",
+        order_type="excluded_v1",
+        notional=0.0,
+        allowed=False,
+        reason="Planning-only parking intent is excluded from Stage 6B supervised paper submission.",
+        benchmark_reason=benchmark_reason,
+        blocked=[],
+    )
+
+
 def _no_order_preview(
     intent: Mapping[str, Any],
     *,
@@ -424,6 +456,10 @@ def _reason(intent: Mapping[str, Any], blocked: list[str]) -> str:
     if blocked:
         return "; ".join(blocked)
     return str(intent.get("reason") or "Preview passed dry-run checks.")
+
+
+def _is_v1_excluded_parking_intent(intent_type: str) -> bool:
+    return intent_type in {"PARK_IDLE_CASH", "PARK_DEFENSIVE_CASH"}
 
 
 __all__ = ["PaperOrderPreview", "build_paper_order_preview", "build_paper_order_preview_markdown"]
