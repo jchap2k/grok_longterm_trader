@@ -133,6 +133,11 @@ Live Polygon mode, when `POLYGON_API_KEY` is configured:
 python scripts/longterm_news_relevance_enrichment.py --idea-batch path\to\research_ideas.json --cache-path path\to\polygon_news_cache.json --published-after 2026-04-01 --output path\to\research_ideas.news_enriched.json --limit 5
 ```
 
+For broad universe work, prefer overnight batches over paid speed upgrades.
+Polygon's free-tier cadence is acceptable when requests are paced, cached, and
+resumable; a 20-minute enrichment job is fine for long-term research if it
+avoids unnecessary recurring spend.
+
 If Polygon's free tier is too restrictive or its structured feed is thin for
 long-tail names, a Perplexity-style answer API can be added later as another
 `NewsProvider`. It should return article candidates with title, URL, date,
