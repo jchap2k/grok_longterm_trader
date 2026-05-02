@@ -228,6 +228,12 @@ def build_grok_research_messages(
         "as_of_date": target_date,
         "idea": dict(idea),
         "finnhub_or_free_facts": dict(free_facts or {}),
+        "relevant_news": list(idea.get("relevant_news") or []),
+        "news_instruction": (
+            "If relevant_news is supplied, use only those article titles, URLs, "
+            "dates, summaries, relevance scores, and impact categories when "
+            "writing latest developments or news-backed catalysts."
+        ),
         "required_output": {
             "symbol": "upper-case ticker",
             "company_name": "company name",

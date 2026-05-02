@@ -129,7 +129,17 @@ def test_enrich_ideas_with_grok_research_uses_symbol_keyed_free_facts():
 
 def test_prompt_asks_for_source_backed_catalysts_not_motley_fool_impersonation():
     messages = build_grok_research_messages(
-        {"symbol": "AMZN", "company_name": "Amazon"},
+        {
+            "symbol": "AMZN",
+            "company_name": "Amazon",
+            "relevant_news": [
+                {
+                    "title": "Amazon signs AWS AI deal",
+                    "url": "https://example.com/aws-ai",
+                    "impact_category": "Major Contract - High",
+                }
+            ],
+        },
         free_facts={"market_cap": "$2.8T"},
         as_of_date="2026-05-02",
     )
@@ -139,6 +149,8 @@ def test_prompt_asks_for_source_backed_catalysts_not_motley_fool_impersonation()
     assert "Do not claim to be Motley Fool" in joined
     assert "Finnhub/free factual inputs" in joined
     assert "model_estimate" in joined
+    assert "relevant_news" in joined
+    assert "Amazon signs AWS AI deal" in joined
 
 
 def test_grok_research_enrichment_cli_can_normalize_offline_snapshots(tmp_path, capsys):

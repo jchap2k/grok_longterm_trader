@@ -35,6 +35,9 @@ Merges local/cacheable enrichment rows into research ideas before `ResearchPacke
 `longterm/grok_research_enrichment.py`
 Adds a source-backed Grok catalyst synthesis layer for wider-universe names, especially when Motley Fool company pages are unavailable or thin. It accepts optional cheap factual inputs such as Finnhub snapshots, normalizes Grok's structured JSON into packet-ready business/thesis context, requires source URLs or warning flags, and labels generated scores as `model_estimate`. Hard financial numbers and future Moneyball-style quant scores should be computed in Python/provider code first, then supplied to Grok as facts for narrative synthesis rather than invented by the model.
 
+`longterm/news_relevance_enrichment.py`
+Fetches or replays raw ticker news, filters price-action noise and duplicate URLs, scores long-term thesis relevance, classifies catalyst impact, and attaches a compact `relevant_news` list to research ideas. Polygon is the first live provider seam, with optional daily JSON caching and offline snapshot mode for repeatable tests. This news layer is meant to run before Grok catalyst synthesis so Grok sees only high-signal articles instead of generic headline noise.
+
 `longterm/research_runner.py`
 Builds context sections and runs the CGH decision committee through `CheapGrokHeavy`. It includes the current `ai_trader/rules/active_rules.txt` content as `active_rules_context` for the configured long-term agents, optional read-only current portfolio holdings/cash context, plus deterministic reviews and a thesis challenge section so the final decision sees the operating rules, bull case, bear case, key risks, current exposure, and kill criteria before producing a recommendation.
 

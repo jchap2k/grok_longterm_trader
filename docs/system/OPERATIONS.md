@@ -116,16 +116,39 @@ produce deeper catalyst, bull/bear, earnings, and thesis-watch context. Generate
 ratings must remain labeled as `model_estimate`; they are research context, not
 Motley Fool proprietary scores and not execution authority.
 
+Before Grok synthesis, enrich the idea batch with high-signal ticker news. The
+news pass filters duplicate URLs and generic price-action headlines, then keeps
+only thesis-relevant articles with catalyst categories such as earnings,
+product/technology, contracts, regulatory events, M&A, or management changes.
+
 Offline/snapshot mode for development:
 
 ```powershell
-python scripts/longterm_grok_research_enrichment.py --idea-batch path\to\research_ideas.json --facts-file path\to\finnhub_facts.json --snapshot-file path\to\grok_snapshots.json --output path\to\research_ideas.grok_enriched.json
+python scripts/longterm_news_relevance_enrichment.py --idea-batch path\to\research_ideas.json --snapshot-file path\to\raw_news.json --output path\to\research_ideas.news_enriched.json
+```
+
+Live Polygon mode, when `POLYGON_API_KEY` is configured:
+
+```powershell
+python scripts/longterm_news_relevance_enrichment.py --idea-batch path\to\research_ideas.json --cache-path path\to\polygon_news_cache.json --published-after 2026-04-01 --output path\to\research_ideas.news_enriched.json --limit 5
+```
+
+If Polygon's free tier is too restrictive or its structured feed is thin for
+long-tail names, a Perplexity-style answer API can be added later as another
+`NewsProvider`. It should return article candidates with title, URL, date,
+source, and snippet, then let this same deterministic relevance scorer filter
+noise before Grok synthesis.
+
+Offline/snapshot mode for development:
+
+```powershell
+python scripts/longterm_grok_research_enrichment.py --idea-batch path\to\research_ideas.news_enriched.json --facts-file path\to\finnhub_facts.json --snapshot-file path\to\grok_snapshots.json --output path\to\research_ideas.grok_enriched.json
 ```
 
 Live xAI mode, when `XAI_API_KEY` is configured:
 
 ```powershell
-python scripts/longterm_grok_research_enrichment.py --idea-batch path\to\research_ideas.json --facts-file path\to\finnhub_facts.json --output path\to\research_ideas.grok_enriched.json --limit 5
+python scripts/longterm_grok_research_enrichment.py --idea-batch path\to\research_ideas.news_enriched.json --facts-file path\to\finnhub_facts.json --output path\to\research_ideas.grok_enriched.json --limit 5
 ```
 
 Write research-ready candidates as an idea batch for the existing research
