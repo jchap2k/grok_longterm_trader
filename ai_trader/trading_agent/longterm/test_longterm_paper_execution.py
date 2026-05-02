@@ -182,6 +182,29 @@ def test_paper_execution_dry_run_builds_audit_but_does_not_submit(tmp_path):
     assert result["active_rules"]["sha256"]
 
 
+def test_paper_execution_markdown_includes_excluded_count():
+    markdown = build_paper_execution_markdown(
+        {
+            "submit_requested": False,
+            "paper_mode": True,
+            "live_mode": False,
+            "ready_count": 1,
+            "submitted_count": 0,
+            "blocked_count": 0,
+            "excluded_count": 1,
+            "rejected_count": 0,
+            "active_rules": {"sha256": "abc123"},
+            "items": [
+                {"symbol": "AMZN", "status": "ready_to_submit", "notional": 813.03, "blocked_reasons": []},
+                {"symbol": "SPY", "status": "excluded_v1", "notional": 0.0, "blocked_reasons": []},
+            ],
+        }
+    )
+
+    assert "- Excluded: 1" in markdown
+    assert "| SPY | excluded_v1 | $0.00 |  |" in markdown
+
+
 def test_paper_execution_submit_records_submitted_with_deterministic_client_order_id(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     ledger = PaperTradeLedger(tmp_path / "paper.db")

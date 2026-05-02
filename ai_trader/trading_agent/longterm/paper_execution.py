@@ -531,6 +531,7 @@ def build_paper_execution_markdown(result: Mapping[str, Any]) -> str:
         f"- Ready: {result.get('ready_count', 0)}",
         f"- Submitted: {result.get('submitted_count', 0)}",
         f"- Blocked: {result.get('blocked_count', 0)}",
+        f"- Excluded: {result.get('excluded_count', 0)}",
         f"- Rejected: {result.get('rejected_count', 0)}",
         f"- Active rules hash: `{(result.get('active_rules') or {}).get('sha256') or ''}`",
         "",
