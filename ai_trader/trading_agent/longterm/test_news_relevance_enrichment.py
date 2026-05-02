@@ -10,6 +10,7 @@ from longterm.news_relevance_enrichment import (
     PolygonNewsProvider,
     enrich_idea_with_relevant_news,
     enrich_ideas_with_relevant_news,
+    enrich_ideas_with_relevant_news_paced,
     rank_relevant_news,
 )
 from longterm.news_relevance_enrichment_cli import build_parser, run_cli
@@ -99,6 +100,24 @@ def test_enrich_ideas_with_relevant_news_uses_symbol_specific_context():
     assert enriched[0]["relevant_news"][0]["impact_category"] == "Major Contract - High"
 
 
+def test_enrich_ideas_with_relevant_news_paced_sleeps_after_each_batch_not_after_final_batch():
+    sleep_calls = []
+    symbols = ["AAA", "BBB", "CCC", "DDD", "EEE", "FFF", "GGG"]
+    provider = FakeNewsProvider({symbol: _articles() for symbol in symbols})
+
+    enriched = enrich_ideas_with_relevant_news_paced(
+        [{"symbol": symbol, "business_summary": "AWS AI cloud"} for symbol in symbols],
+        provider=provider,
+        batch_size=5,
+        pause_seconds=66,
+        sleep=sleep_calls.append,
+        as_of_date="2026-05-02",
+    )
+
+    assert [item["symbol"] for item in enriched] == symbols
+    assert sleep_calls == [66]
+
+
 def test_cached_news_provider_reuses_daily_symbol_cache(tmp_path):
     calls = []
 
@@ -178,3 +197,4 @@ def test_news_relevance_cli_enriches_from_snapshot_file(tmp_path, capsys):
     assert payload[0]["relevant_news"][0]["url"] == "https://example.com/aws-ai-contract"
     assert summary["mode"] == "snapshot_file"
     assert summary["enriched_count"] == 1
+    assert summary["rate_limit_pause_seconds"] == 0.0

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -189,6 +190,38 @@ def enrich_ideas_with_relevant_news(
     ]
 
 
+def enrich_ideas_with_relevant_news_paced(
+    ideas: list[Mapping[str, Any]],
+    *,
+    provider: NewsProvider,
+    batch_size: int = 5,
+    pause_seconds: float = 66.0,
+    sleep: Callable[[float], Any] = time.sleep,
+    as_of_date: str | None = None,
+    max_items: int = 5,
+    published_after: str | None = None,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    """Enrich ideas while pausing between provider request batches."""
+    selected = ideas[:limit] if limit is not None else ideas
+    if batch_size <= 0:
+        batch_size = len(selected) or 1
+    enriched: list[dict[str, Any]] = []
+    for index, idea in enumerate(selected, start=1):
+        enriched.append(
+            enrich_idea_with_relevant_news(
+                idea,
+                provider=provider,
+                as_of_date=as_of_date,
+                max_items=max_items,
+                published_after=published_after,
+            )
+        )
+        if index < len(selected) and index % batch_size == 0 and pause_seconds > 0:
+            sleep(float(pause_seconds))
+    return enriched
+
+
 def rank_relevant_news(
     symbol: str,
     articles: list[Mapping[str, Any]],
@@ -351,5 +384,6 @@ __all__ = [
     "PolygonNewsProvider",
     "enrich_idea_with_relevant_news",
     "enrich_ideas_with_relevant_news",
+    "enrich_ideas_with_relevant_news_paced",
     "rank_relevant_news",
 ]

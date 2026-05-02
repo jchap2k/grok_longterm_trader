@@ -130,13 +130,14 @@ python scripts/longterm_news_relevance_enrichment.py --idea-batch path\to\resear
 Live Polygon mode, when `POLYGON_API_KEY` is configured:
 
 ```powershell
-python scripts/longterm_news_relevance_enrichment.py --idea-batch path\to\research_ideas.json --cache-path path\to\polygon_news_cache.json --published-after 2026-04-01 --output path\to\research_ideas.news_enriched.json --limit 5
+python scripts/longterm_news_relevance_enrichment.py --idea-batch path\to\research_ideas.json --cache-path path\to\polygon_news_cache.json --published-after 2026-04-01 --output path\to\research_ideas.news_enriched.json --rate-limit-batch-size 5 --rate-limit-pause-seconds 66
 ```
 
 For broad universe work, prefer overnight batches over paid speed upgrades.
-Polygon's free-tier cadence is acceptable when requests are paced, cached, and
-resumable; a 20-minute enrichment job is fine for long-term research if it
-avoids unnecessary recurring spend.
+Polygon's free-tier cadence is acceptable when requests are paced in groups of
+five with a little more than one minute of pause, cached, and resumable; a
+20-minute enrichment job is fine for long-term research if it avoids unnecessary
+recurring spend.
 
 If Polygon's free tier is too restrictive or its structured feed is thin for
 long-tail names, a Perplexity-style answer API can be added later as another

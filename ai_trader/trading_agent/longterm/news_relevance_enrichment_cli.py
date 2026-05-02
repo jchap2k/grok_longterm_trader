@@ -11,7 +11,7 @@ from longterm.news_relevance_enrichment import (
     CachedNewsProvider,
     FakeNewsProvider,
     PolygonNewsProvider,
-    enrich_ideas_with_relevant_news,
+    enrich_ideas_with_relevant_news_paced,
 )
 
 
@@ -27,6 +27,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--published-after", default="")
     parser.add_argument("--max-items", type=int, default=5)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--rate-limit-batch-size", type=int, default=0)
+    parser.add_argument("--rate-limit-pause-seconds", type=float, default=66.0)
     parser.add_argument("--api-key-env", default="POLYGON_API_KEY")
     parser.add_argument("--timeout-seconds", type=float, default=20.0)
     return parser
@@ -50,13 +52,19 @@ def run_cli(args: argparse.Namespace) -> int:
             provider = polygon
             mode = "polygon"
 
-    enriched = enrich_ideas_with_relevant_news(
+    batch_size = int(args.rate_limit_batch_size or 0)
+    if batch_size <= 0:
+        batch_size = len(ideas) or 1
+    pause_seconds = 0.0 if args.snapshot_file else float(args.rate_limit_pause_seconds or 0.0)
+    enriched = enrich_ideas_with_relevant_news_paced(
         ideas,
         provider=provider,
         as_of_date=args.as_of_date or None,
         max_items=args.max_items,
         published_after=args.published_after or None,
         limit=args.limit,
+        batch_size=batch_size,
+        pause_seconds=pause_seconds,
     )
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -67,6 +75,8 @@ def run_cli(args: argparse.Namespace) -> int:
         "enriched_count": len(enriched),
         "output": str(output_path),
         "max_items": args.max_items,
+        "rate_limit_batch_size": batch_size,
+        "rate_limit_pause_seconds": pause_seconds,
     }
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0
