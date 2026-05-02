@@ -66,6 +66,26 @@ def test_operator_status_bundle_combines_lifecycle_readiness_and_position_report
                 "decision_id": decision_id,
                 "trade_value": 1000,
                 "allowed": True,
+                "promotion_review": {
+                    "symbol": "NVDA",
+                    "promotion_decision": "ACTIONABLE_BUY",
+                    "followups": [],
+                    "blockers": [],
+                },
+            },
+            {
+                "symbol": "VEEV",
+                "intent_type": "REVIEW",
+                "order_intent": "NONE",
+                "decision_id": "decision-veev",
+                "trade_value": 0,
+                "allowed": True,
+                "promotion_review": {
+                    "symbol": "VEEV",
+                    "promotion_decision": "WATCHLIST_PENDING_EVIDENCE",
+                    "followups": ["missing_earnings_article"],
+                    "blockers": [],
+                },
             }
         ],
     }
@@ -82,10 +102,15 @@ def test_operator_status_bundle_combines_lifecycle_readiness_and_position_report
     assert bundle["mode"] == "operator_status_bundle"
     assert bundle["order_submission_enabled"] is False
     assert bundle["paper_lifecycle"]["state_counts"]["outcome_evaluated"] == 1
+    assert bundle["buy_promotion_summary"]["counts"]["ACTIONABLE_BUY"] == 1
+    assert bundle["buy_promotion_summary"]["counts"]["WATCHLIST_PENDING_EVIDENCE"] == 1
+    assert bundle["buy_promotion_summary"]["items"][1]["symbol"] == "VEEV"
     assert bundle["scheduler_readiness"]["ready_for_scheduler_paper_submit"] is False
     assert "Paper outcome vs FXAIX: 10.0%" in bundle["position_report_markdown"]
     markdown = build_operator_status_markdown(bundle)
     assert "# Long-Term Operator Status Bundle" in markdown
+    assert "## Buy Promotion" in markdown
+    assert "| VEEV | WATCHLIST_PENDING_EVIDENCE | missing_earnings_article |  |" in markdown
     assert "## Scheduler Readiness" in markdown
 
 
@@ -112,7 +137,24 @@ def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
         }
     )
     portfolio_path.write_text(json.dumps({"cash": 5000, "holdings": [{"symbol": "NVDA", "market_value": 4200}]}), encoding="utf-8")
-    action_plan_path.write_text(json.dumps({"intents": [{"symbol": "NVDA", "order_intent": "BUY", "decision_id": decision_id}]}), encoding="utf-8")
+    action_plan_path.write_text(
+        json.dumps(
+            {
+                "intents": [
+                    {
+                        "symbol": "NVDA",
+                        "order_intent": "BUY",
+                        "decision_id": decision_id,
+                        "promotion_review": {
+                            "symbol": "NVDA",
+                            "promotion_decision": "ACTIONABLE_BUY",
+                        },
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
     price_map_path.write_text(json.dumps({"NVDA": 120, "FXAIX": 110}), encoding="utf-8")
     feedback_path.write_text(json.dumps({"order_submission_enabled": False}), encoding="utf-8")
     parser = build_parser()
@@ -137,4 +179,5 @@ def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
     assert run_cli(args) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["mode"] == "operator_status_bundle"
+    assert payload["buy_promotion_summary"]["counts"]["ACTIONABLE_BUY"] == 1
     assert payload["paper_lifecycle"]["state_counts"]["outcome_evaluated"] == 1

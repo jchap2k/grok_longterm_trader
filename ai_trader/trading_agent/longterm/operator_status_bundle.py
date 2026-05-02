@@ -53,10 +53,12 @@ def build_operator_status_bundle(
         "mode": "operator_status_bundle",
         "order_submission_enabled": False,
         "paper_lifecycle": lifecycle,
+        "buy_promotion_summary": _buy_promotion_summary(action_plan),
         "scheduler_readiness": readiness,
         "position_report_markdown": position_report,
         "notes": [
             "Read-only operator bundle. No broker orders were submitted or modified.",
+            "Operator means the current supervised control surface and the future autonomous agent control surface.",
             "Scheduler readiness remains advisory-only in V1.",
         ],
     }
@@ -76,12 +78,77 @@ def build_operator_status_markdown(payload: Mapping[str, Any]) -> str:
     ]
     for state, count in sorted((payload.get("paper_lifecycle", {}).get("state_counts") or {}).items()):
         lines.append(f"| {state} | {count} |")
+    lines.extend(_buy_promotion_markdown_lines(payload.get("buy_promotion_summary") or {}))
     lines.extend(["", "## Scheduler Readiness", ""])
     lines.extend(readiness_markdown.splitlines()[2:])
     position_report = str(payload.get("position_report_markdown") or "").strip()
     if position_report:
         lines.extend(["", "## Position Intelligence", "", position_report])
     return "\n".join(lines) + "\n"
+
+
+def _buy_promotion_summary(action_plan: Mapping[str, Any] | None) -> dict[str, Any]:
+    counts: dict[str, int] = {}
+    items: list[dict[str, Any]] = []
+    for intent in (action_plan or {}).get("intents") or []:
+        if not isinstance(intent, Mapping):
+            continue
+        review = intent.get("promotion_review")
+        if not isinstance(review, Mapping):
+            review = (intent.get("risk_review") or {}).get("buy_promotion")
+        if not isinstance(review, Mapping):
+            continue
+        decision = str(review.get("promotion_decision") or "UNKNOWN")
+        counts[decision] = counts.get(decision, 0) + 1
+        items.append(
+            {
+                "symbol": str(review.get("symbol") or intent.get("symbol") or "").upper(),
+                "promotion_decision": decision,
+                "followups": list(review.get("followups") or []),
+                "blockers": list(review.get("blockers") or []),
+                "intent_type": str(intent.get("intent_type") or ""),
+                "order_intent": str(intent.get("order_intent") or ""),
+                "allowed": bool(intent.get("allowed")),
+            }
+        )
+    return {
+        "counts": counts,
+        "items": items,
+        "actionable_count": counts.get("ACTIONABLE_BUY", 0),
+        "pending_count": sum(
+            count for decision, count in counts.items()
+            if decision.startswith("WATCHLIST_") or decision == "REVIEW_EXISTING_POSITION"
+        ),
+        "blocked_count": counts.get("BLOCKED", 0),
+    }
+
+
+def _buy_promotion_markdown_lines(summary: Mapping[str, Any]) -> list[str]:
+    items = summary.get("items") or []
+    if not items:
+        return []
+    lines = [
+        "",
+        "## Buy Promotion",
+        "",
+        "| Symbol | Decision | Followups | Blockers |",
+        "|---|---|---|---|",
+    ]
+    for item in items:
+        if not isinstance(item, Mapping):
+            continue
+        lines.append(
+            "| "
+            f"{_cell(str(item.get('symbol') or ''))} | "
+            f"{_cell(str(item.get('promotion_decision') or ''))} | "
+            f"{_cell(', '.join(str(value) for value in (item.get('followups') or [])))} | "
+            f"{_cell(', '.join(str(value) for value in (item.get('blockers') or [])))} |"
+        )
+    return lines
+
+
+def _cell(value: str) -> str:
+    return value.replace("|", "/").replace("\n", " ")
 
 
 __all__ = ["build_operator_status_bundle", "build_operator_status_markdown"]

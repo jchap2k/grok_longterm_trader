@@ -235,6 +235,11 @@ the result JSON also includes `buy_promotion_markdown` and
 operator artifact stream as the recommendation report, next-actions report, and
 account action plan.
 
+In these docs, `operator` means the control surface that is supervised by us
+today and consumed by the autonomous long-term agent later. Operator artifacts
+should therefore be both human-readable and machine-readable. They are evidence
+and planning context, not trade authorization.
+
 Write research-ready candidates as an idea batch for the existing research
 cycle:
 
