@@ -1,6 +1,6 @@
 import json
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -480,8 +480,19 @@ def test_paper_execution_cli_real_submit_path_refreshes_paper_account_state(tmp_
     _record_preview(ledger, decision_id, notional=4000)
     stale_portfolio_path = tmp_path / "portfolio.json"
     plan_path = tmp_path / "plan.json"
+    runbook_check_path = tmp_path / "paper_runbook_check.json"
     stale_portfolio_path.write_text(json.dumps({"cash": 500, "protected_symbols": ["FXAIX"]}), encoding="utf-8")
     plan_path.write_text(json.dumps(_action_plan(decision_id, trade_value=4000)), encoding="utf-8")
+    runbook_check_path.write_text(
+        json.dumps(
+            {
+                "ready_for_supervised_submit": True,
+                "plan_id": "plan-1",
+                "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            }
+        ),
+        encoding="utf-8",
+    )
     fake_broker = FakePaperBroker()
     calls = {"refreshed": 0}
 
@@ -504,6 +515,8 @@ def test_paper_execution_cli_real_submit_path_refreshes_paper_account_state(tmp_
             "--submit-paper-orders",
             "--confirm-paper-submit",
             "SUPERVISED_PAPER_BUY_ONLY",
+            "--runbook-check",
+            str(runbook_check_path),
             "--json",
         ]
     )
@@ -561,6 +574,188 @@ def test_paper_execution_cli_submit_requires_confirmation_token(tmp_path, capsys
     assert "missing_or_invalid_confirm_paper_submit" in payload["blockers"]
     assert calls == {"refreshed": 0, "broker": 0}
     assert ledger.list_execution_events(limit=10) == []
+
+
+def test_paper_execution_cli_submit_requires_ready_matching_runbook_check(tmp_path, capsys, monkeypatch):
+    import longterm.paper_execution_cli as cli
+
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = _record_decision(journal)
+    _record_preview(ledger, decision_id)
+    portfolio_path = tmp_path / "portfolio.json"
+    plan_path = tmp_path / "plan.json"
+    runbook_check_path = tmp_path / "paper_runbook_check.json"
+    portfolio_path.write_text(json.dumps({"cash": 5000, "protected_symbols": ["FXAIX"]}), encoding="utf-8")
+    plan_path.write_text(json.dumps(_action_plan(decision_id)), encoding="utf-8")
+    runbook_check_path.write_text(
+        json.dumps({"ready_for_supervised_submit": False, "plan_id": "plan-1"}),
+        encoding="utf-8",
+    )
+    calls = {"refreshed": 0, "broker": 0}
+
+    monkeypatch.setattr(
+        cli,
+        "_fresh_alpaca_paper_state",
+        lambda profile: calls.__setitem__("refreshed", calls["refreshed"] + 1)
+        or PortfolioState(cash=8000, protected_symbols=profile.protected_symbols),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        cli.AlpacaPaperSubmitAdapter,
+        "from_env",
+        staticmethod(lambda: calls.__setitem__("broker", calls["broker"] + 1) or FakePaperBroker()),
+    )
+    args = build_parser().parse_args(
+        [
+            "--journal-db",
+            str(journal.db_path),
+            "--ledger-db",
+            str(ledger.db_path),
+            "--portfolio-state",
+            str(portfolio_path),
+            "--action-plan",
+            str(plan_path),
+            "--submit-paper-orders",
+            "--confirm-paper-submit",
+            "SUPERVISED_PAPER_BUY_ONLY",
+            "--runbook-check",
+            str(runbook_check_path),
+            "--json",
+        ]
+    )
+
+    assert run_cli(args) == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["mode"] == "paper_execution_submit_precheck"
+    assert "runbook_check_not_ready" in payload["blockers"]
+    assert calls == {"refreshed": 0, "broker": 0}
+    assert ledger.list_execution_events(limit=10) == []
+
+
+def test_paper_execution_cli_blocks_missing_and_mismatched_runbook_check_before_refresh(tmp_path, capsys, monkeypatch):
+    import longterm.paper_execution_cli as cli
+
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = _record_decision(journal)
+    _record_preview(ledger, decision_id)
+    portfolio_path = tmp_path / "portfolio.json"
+    plan_path = tmp_path / "plan.json"
+    runbook_check_path = tmp_path / "paper_runbook_check.json"
+    portfolio_path.write_text(json.dumps({"cash": 5000, "protected_symbols": ["FXAIX"]}), encoding="utf-8")
+    plan_path.write_text(json.dumps(_action_plan(decision_id)), encoding="utf-8")
+    runbook_check_path.write_text(
+        json.dumps({"ready_for_supervised_submit": True, "plan_id": "other-plan"}),
+        encoding="utf-8",
+    )
+    calls = {"refreshed": 0}
+    monkeypatch.setattr(
+        cli,
+        "_fresh_alpaca_paper_state",
+        lambda profile: calls.__setitem__("refreshed", calls["refreshed"] + 1)
+        or PortfolioState(cash=8000, protected_symbols=profile.protected_symbols),
+        raising=False,
+    )
+
+    args = build_parser().parse_args(
+        [
+            "--journal-db",
+            str(journal.db_path),
+            "--ledger-db",
+            str(ledger.db_path),
+            "--portfolio-state",
+            str(portfolio_path),
+            "--action-plan",
+            str(plan_path),
+            "--submit-paper-orders",
+            "--confirm-paper-submit",
+            "SUPERVISED_PAPER_BUY_ONLY",
+            "--runbook-check",
+            str(runbook_check_path),
+            "--json",
+        ]
+    )
+
+    assert run_cli(args) == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert "runbook_check_plan_mismatch" in payload["blockers"]
+    assert calls == {"refreshed": 0}
+
+
+def test_paper_execution_cli_blocks_missing_and_stale_runbook_check_before_refresh(tmp_path, capsys, monkeypatch):
+    import longterm.paper_execution_cli as cli
+
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = _record_decision(journal)
+    _record_preview(ledger, decision_id)
+    portfolio_path = tmp_path / "portfolio.json"
+    plan_path = tmp_path / "plan.json"
+    stale_check_path = tmp_path / "stale_runbook_check.json"
+    portfolio_path.write_text(json.dumps({"cash": 5000, "protected_symbols": ["FXAIX"]}), encoding="utf-8")
+    plan_path.write_text(json.dumps(_action_plan(decision_id)), encoding="utf-8")
+    stale_check_path.write_text(
+        json.dumps(
+            {
+                "ready_for_supervised_submit": True,
+                "plan_id": "plan-1",
+                "generated_at": (datetime.now(UTC) - timedelta(days=3)).isoformat().replace("+00:00", "Z"),
+            }
+        ),
+        encoding="utf-8",
+    )
+    calls = {"refreshed": 0}
+    monkeypatch.setattr(
+        cli,
+        "_fresh_alpaca_paper_state",
+        lambda profile: calls.__setitem__("refreshed", calls["refreshed"] + 1)
+        or PortfolioState(cash=8000, protected_symbols=profile.protected_symbols),
+        raising=False,
+    )
+
+    missing_args = build_parser().parse_args(
+        [
+            "--journal-db",
+            str(journal.db_path),
+            "--ledger-db",
+            str(ledger.db_path),
+            "--portfolio-state",
+            str(portfolio_path),
+            "--action-plan",
+            str(plan_path),
+            "--submit-paper-orders",
+            "--confirm-paper-submit",
+            "SUPERVISED_PAPER_BUY_ONLY",
+            "--json",
+        ]
+    )
+    stale_args = build_parser().parse_args(
+        [
+            "--journal-db",
+            str(journal.db_path),
+            "--ledger-db",
+            str(ledger.db_path),
+            "--portfolio-state",
+            str(portfolio_path),
+            "--action-plan",
+            str(plan_path),
+            "--submit-paper-orders",
+            "--confirm-paper-submit",
+            "SUPERVISED_PAPER_BUY_ONLY",
+            "--runbook-check",
+            str(stale_check_path),
+            "--json",
+        ]
+    )
+
+    assert run_cli(missing_args) == 2
+    missing_payload = json.loads(capsys.readouterr().out)
+    assert "runbook_check_missing" in missing_payload["blockers"]
+    assert run_cli(stale_args) == 2
+    stale_payload = json.loads(capsys.readouterr().out)
+    assert "runbook_check_stale" in stale_payload["blockers"]
+    assert calls == {"refreshed": 0}
 
 
 def test_alpaca_paper_submit_adapter_rejects_non_paper_base_url():

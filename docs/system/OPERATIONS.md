@@ -306,11 +306,12 @@ Check saved pre-submit runbook artifacts:
 
 ```powershell
 python scripts/longterm_paper_runbook_check.py --workflow-smoke path\to\paper_workflow_smoke.json --paper-smoke-readiness path\to\paper_smoke_readiness.json
-python scripts/longterm_paper_runbook_check.py --workflow-smoke path\to\paper_workflow_smoke.json --paper-smoke-readiness path\to\paper_smoke_readiness.json --json
+python scripts/longterm_paper_runbook_check.py --workflow-smoke path\to\paper_workflow_smoke.json --paper-smoke-readiness path\to\paper_smoke_readiness.json --report-output path\to\paper_runbook_check.json --json
 ```
 
 The check reads saved artifacts only. It blocks if the workflow smoke or
-paper-smoke readiness artifact is missing, malformed, or not ready.
+paper-smoke readiness artifact is missing, malformed, or not ready. The saved
+check includes the workflow plan ID and generation timestamp.
 
 Reconcile the current paper snapshot against a dry-run action plan or expected
 cash before considering any paper-execution feature:
@@ -418,13 +419,14 @@ Submit eligible simple BUY previews to Alpaca paper only when explicitly
 intended:
 
 ```powershell
-python scripts/longterm_paper_execution.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --submit-paper-orders --confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY --audit-output path\to\paper_execution_audit.json
+python scripts/longterm_paper_execution.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --submit-paper-orders --confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY --runbook-check path\to\paper_runbook_check.json --audit-output path\to\paper_execution_audit.json
 ```
 
 Stage 6B is deliberately narrow:
 
 - It submits only simple `BUY` previews.
 - `--submit-paper-orders` also requires the exact `--confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY` latch; without it, the command exits before refreshing broker state or constructing the submit adapter.
+- `--submit-paper-orders` also requires a ready, fresh `--runbook-check` artifact whose plan ID matches the action plan.
 - Rebalance, sell, and sell-to-fund-buy previews are hard-blocked with `rebalance_blocked_v1`.
 - It revalidates protected symbols, benchmark guard, thesis/review status, decision confidence/recommendation, preview freshness, cash, active-rules hash, and duplicate submission state immediately before paper submission.
 - The real submit path refreshes Alpaca paper account state before broker calls; the portfolio JSON remains useful for audit/dry-run mode.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -16,6 +17,7 @@ def build_paper_runbook_check(
     workflow_payload, workflow_error = _load_optional_json(workflow_smoke)
     readiness_payload, readiness_error = _load_optional_json(paper_smoke_readiness)
     blockers: list[str] = []
+    plan_id = _workflow_plan_id(workflow_payload)
     if workflow_error:
         blockers.append(f"workflow_smoke_{workflow_error}")
     elif not bool(workflow_payload.get("ready_for_supervised_submit")):
@@ -27,6 +29,8 @@ def build_paper_runbook_check(
     return {
         "schema_version": 1,
         "mode": "paper_runbook_check",
+        "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "plan_id": plan_id,
         "order_submission_enabled": False,
         "ready_for_supervised_submit": not blockers,
         "blocker_count": len(blockers),
@@ -75,6 +79,16 @@ def _load_optional_json(path: str | Path) -> tuple[dict[str, Any], str]:
     if not isinstance(payload, dict):
         return {}, "malformed"
     return payload, ""
+
+
+def _workflow_plan_id(payload: Mapping[str, Any]) -> str:
+    execution_audit = payload.get("execution_audit") if isinstance(payload, Mapping) else {}
+    if isinstance(execution_audit, Mapping) and execution_audit.get("plan_id"):
+        return str(execution_audit.get("plan_id") or "")
+    preview = payload.get("preview") if isinstance(payload, Mapping) else {}
+    if isinstance(preview, Mapping) and preview.get("plan_id"):
+        return str(preview.get("plan_id") or "")
+    return str(payload.get("plan_id") or "") if isinstance(payload, Mapping) else ""
 
 
 __all__ = ["build_paper_runbook_check", "build_paper_runbook_check_markdown"]

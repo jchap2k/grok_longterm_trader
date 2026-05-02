@@ -63,9 +63,9 @@ def build_paper_runbook(
             "command": (
                 "python scripts/longterm_paper_runbook_check.py "
                 f"--workflow-smoke {artifacts['workflow_smoke']} "
-                f"--paper-smoke-readiness {artifacts['paper_smoke_readiness']} --json"
+                f"--paper-smoke-readiness {artifacts['paper_smoke_readiness']} "
+                f"--report-output {artifacts['runbook_check']} --json"
             ),
-            "save_stdout_to": artifacts["runbook_check"],
         },
         {
             "step_id": "supervised_submit",
@@ -75,6 +75,7 @@ def build_paper_runbook(
                 f"--journal-db {journal_db} --ledger-db {ledger_db} "
                 f"--portfolio-state {portfolio_state} --action-plan {action_plan} "
                 "--submit-paper-orders --confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY "
+                f"--runbook-check {artifacts['runbook_check']} "
                 f"--audit-output {artifacts['paper_execution_audit']} --json"
             ),
         },
