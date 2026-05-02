@@ -28,14 +28,16 @@ def test_paper_runbook_lists_monday_artifacts_and_ordered_commands():
         "snapshot",
         "workflow_smoke",
         "paper_smoke_readiness",
+        "runbook_check",
         "supervised_submit",
         "status_refresh",
         "paper_trading_verification",
         "live_readiness_bundle",
     ]
-    assert "--confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY" in runbook["steps"][3]["command"]
+    assert "--confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY" in runbook["steps"][4]["command"]
     assert "--report-output artifacts\\paper_smoke_readiness.json" in runbook["steps"][2]["command"]
-    assert "--report-output artifacts\\live_readiness_bundle.json" in runbook["steps"][6]["command"]
+    assert "--workflow-smoke artifacts\\paper_workflow_smoke.json" in runbook["steps"][3]["command"]
+    assert "--report-output artifacts\\live_readiness_bundle.json" in runbook["steps"][7]["command"]
     assert "Monday Paper Trading Runbook" in build_paper_runbook_markdown(runbook)
 
 

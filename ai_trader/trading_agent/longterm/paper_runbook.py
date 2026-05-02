@@ -20,6 +20,7 @@ def build_paper_runbook(
         "paper_snapshot": _artifact(output_dir, "paper_snapshot.json"),
         "workflow_smoke": _artifact(output_dir, "paper_workflow_smoke.json"),
         "paper_smoke_readiness": _artifact(output_dir, "paper_smoke_readiness.json"),
+        "runbook_check": _artifact(output_dir, "paper_runbook_check.json"),
         "paper_execution_audit": _artifact(output_dir, "paper_execution_audit.json"),
         "paper_trading_observed": _artifact(output_dir, "paper_trading_observed.json"),
         "live_readiness_bundle": _artifact(output_dir, "live_readiness_bundle.json"),
@@ -55,6 +56,16 @@ def build_paper_runbook(
                 f"--workflow-smoke {artifacts['workflow_smoke']} "
                 f"--report-output {artifacts['paper_smoke_readiness']} --json"
             ),
+        },
+        {
+            "step_id": "runbook_check",
+            "title": "Check saved pre-submit artifacts",
+            "command": (
+                "python scripts/longterm_paper_runbook_check.py "
+                f"--workflow-smoke {artifacts['workflow_smoke']} "
+                f"--paper-smoke-readiness {artifacts['paper_smoke_readiness']} --json"
+            ),
+            "save_stdout_to": artifacts["runbook_check"],
         },
         {
             "step_id": "supervised_submit",

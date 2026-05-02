@@ -302,6 +302,16 @@ The runbook is a deterministic checklist and command generator only. It does
 not read Alpaca, write ledgers, or submit orders. The supervised submit command
 it prints still requires `--confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY`.
 
+Check saved pre-submit runbook artifacts:
+
+```powershell
+python scripts/longterm_paper_runbook_check.py --workflow-smoke path\to\paper_workflow_smoke.json --paper-smoke-readiness path\to\paper_smoke_readiness.json
+python scripts/longterm_paper_runbook_check.py --workflow-smoke path\to\paper_workflow_smoke.json --paper-smoke-readiness path\to\paper_smoke_readiness.json --json
+```
+
+The check reads saved artifacts only. It blocks if the workflow smoke or
+paper-smoke readiness artifact is missing, malformed, or not ready.
+
 Reconcile the current paper snapshot against a dry-run action plan or expected
 cash before considering any paper-execution feature:
 
