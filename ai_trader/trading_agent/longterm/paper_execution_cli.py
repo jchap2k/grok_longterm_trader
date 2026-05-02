@@ -235,6 +235,8 @@ def _validate_runbook_check(
             else:
                 payload = loaded
     if payload:
+        if _schema_version(payload) < 2:
+            blockers.append("runbook_check_schema_too_old")
         if not bool(payload.get("ready_for_supervised_submit")):
             blockers.append("runbook_check_not_ready")
         expected_plan_id = str(action_plan.get("plan_id") or "")
@@ -257,6 +259,13 @@ def _validate_runbook_check(
         "blockers": blockers,
         "payload": payload,
     }
+
+
+def _schema_version(payload: dict) -> int:
+    try:
+        return int(payload.get("schema_version") or 1)
+    except (TypeError, ValueError):
+        return 1
 
 
 def _is_stale(generated_at: str, *, max_age_hours: int) -> bool:

@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
+MIN_PROMOTION_AWARE_SCHEMA_VERSION = 2
+
 
 def build_paper_monday_check(
     *,
@@ -23,6 +25,12 @@ def build_paper_monday_check(
     status_payload = _load_json(status_refresh) if status_refresh else {}
     workflow_preview = workflow_payload.get("preview") or {}
     workflow_execution = workflow_payload.get("execution_audit") or {}
+    workflow_promotion = workflow_payload.get("promotion_summary") or {}
+    readiness_promotion = readiness_payload.get("workflow_promotion_summary") or {}
+    workflow_promotion = workflow_promotion if isinstance(workflow_promotion, Mapping) else {}
+    readiness_promotion = readiness_promotion if isinstance(readiness_promotion, Mapping) else {}
+    workflow_promotion_blocked_count = int(workflow_promotion.get("blocked_count") or 0)
+    readiness_promotion_blocked_count = int(readiness_promotion.get("blocked_count") or 0)
 
     submit_revealed = _submit_command_revealed(runbook_payload)
     account_cleanliness = readiness_payload.get("account_cleanliness") or {}
@@ -42,9 +50,19 @@ def build_paper_monday_check(
         blockers.append("action_plan_hash_missing")
     if int(status_payload.get("error_count") or 0):
         blockers.append("status_refresh_errors")
+    if _schema_version(workflow_payload) < MIN_PROMOTION_AWARE_SCHEMA_VERSION:
+        blockers.append("workflow_smoke_schema_too_old")
+    if _schema_version(readiness_payload) < MIN_PROMOTION_AWARE_SCHEMA_VERSION:
+        blockers.append("paper_smoke_readiness_schema_too_old")
+    if _schema_version(check_payload) < MIN_PROMOTION_AWARE_SCHEMA_VERSION:
+        blockers.append("runbook_check_schema_too_old")
+    if workflow_promotion_blocked_count:
+        blockers.append("workflow_buy_promotion_blockers")
+    if readiness_promotion_blocked_count:
+        blockers.append("paper_smoke_buy_promotion_blockers")
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "mode": "paper_monday_operator_check",
         "order_submission_enabled": False,
         "ready_for_review": not blockers,
@@ -57,6 +75,8 @@ def build_paper_monday_check(
         "workflow_execution_ready_count": int(workflow_execution.get("ready_count") or 0),
         "workflow_execution_blocked_count": int(workflow_execution.get("blocked_count") or 0),
         "workflow_execution_excluded_count": int(workflow_execution.get("excluded_count") or 0),
+        "workflow_promotion_blocked_count": workflow_promotion_blocked_count,
+        "paper_smoke_promotion_blocked_count": readiness_promotion_blocked_count,
         "paper_smoke_ready": bool(readiness_payload.get("ready_for_supervised_smoke")),
         "runbook_check_ready": bool(check_payload.get("ready_for_supervised_submit")),
         "action_plan_hash_present": bool(action_plan_hash),
@@ -86,6 +106,7 @@ def build_paper_monday_check_markdown(payload: Mapping[str, Any]) -> str:
         f"- Workflow preview no-order/excluded: {int(payload.get('workflow_preview_no_order_count') or 0)}",
         f"- Workflow execution ready: {int(payload.get('workflow_execution_ready_count') or 0)}",
         f"- Workflow execution excluded: {int(payload.get('workflow_execution_excluded_count') or 0)}",
+        f"- Workflow promotion blocked: {int(payload.get('workflow_promotion_blocked_count') or 0)}",
         f"- Paper smoke ready: {'yes' if payload.get('paper_smoke_ready') else 'no'}",
         f"- Runbook check ready: {'yes' if payload.get('runbook_check_ready') else 'no'}",
         f"- Action-plan hash present: {'yes' if payload.get('action_plan_hash_present') else 'no'}",
@@ -117,6 +138,13 @@ def _submit_command_revealed(runbook: Mapping[str, Any]) -> bool:
         command = str(step.get("command") or "")
         return bool("--submit-paper-orders" in command or step.get("requires_explicit_reveal") is False)
     return False
+
+
+def _schema_version(payload: Mapping[str, Any]) -> int:
+    try:
+        return int(payload.get("schema_version") or 1)
+    except (TypeError, ValueError):
+        return 1
 
 
 def _yes_no_unknown(value: Any) -> str:

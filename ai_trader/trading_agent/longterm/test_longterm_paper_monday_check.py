@@ -26,8 +26,10 @@ def test_paper_monday_check_summarizes_ready_artifacts_and_redacted_submit(tmp_p
     workflow = _write_json(
         tmp_path / "workflow.json",
         {
+            "schema_version": 2,
             "ready_for_supervised_submit": True,
             "blocker_count": 0,
+            "promotion_summary": {"blocked_count": 0},
             "preview": {"allowed_count": 1, "blocked_count": 0, "no_order_count": 1},
             "execution_audit": {"ready_count": 1, "blocked_count": 0, "excluded_count": 1},
         },
@@ -35,14 +37,16 @@ def test_paper_monday_check_summarizes_ready_artifacts_and_redacted_submit(tmp_p
     readiness = _write_json(
         tmp_path / "readiness.json",
         {
+            "schema_version": 2,
             "ready_for_supervised_smoke": True,
             "blocker_count": 0,
+            "workflow_promotion_summary": {"blocked_count": 0},
             "account_cleanliness": {"clean": True, "position_count": 0, "unexpected_symbols": []},
         },
     )
     runbook_check = _write_json(
         tmp_path / "runbook_check.json",
-        {"ready_for_supervised_submit": True, "blocker_count": 0, "action_plan_hash": "abc123"},
+        {"schema_version": 2, "ready_for_supervised_submit": True, "blocker_count": 0, "action_plan_hash": "abc123"},
     )
     status_refresh = _write_json(
         tmp_path / "status_refresh.json",
@@ -67,9 +71,50 @@ def test_paper_monday_check_summarizes_ready_artifacts_and_redacted_submit(tmp_p
     assert result["workflow_preview_no_order_count"] == 1
     assert result["workflow_execution_ready_count"] == 1
     assert result["workflow_execution_excluded_count"] == 1
+    assert result["workflow_promotion_blocked_count"] == 0
     markdown = build_paper_monday_check_markdown(result)
     assert "Monday Paper Operator Check" in markdown
     assert "Workflow execution excluded: 1" in markdown
+
+
+def test_paper_monday_check_blocks_old_or_promotion_blocked_artifacts(tmp_path):
+    runbook = _write_json(tmp_path / "runbook.json", {"steps": []})
+    workflow = _write_json(
+        tmp_path / "workflow.json",
+        {
+            "schema_version": 2,
+            "ready_for_supervised_submit": False,
+            "promotion_summary": {"blocked_count": 1, "non_actionable_count": 1},
+        },
+    )
+    readiness = _write_json(
+        tmp_path / "readiness.json",
+        {
+            "schema_version": 2,
+            "ready_for_supervised_smoke": False,
+            "workflow_promotion_summary": {"blocked_count": 1, "non_actionable_count": 1},
+        },
+    )
+    runbook_check = _write_json(
+        tmp_path / "runbook_check.json",
+        {
+            "schema_version": 1,
+            "ready_for_supervised_submit": False,
+            "action_plan_hash": "abc123",
+        },
+    )
+
+    result = build_paper_monday_check(
+        runbook=runbook,
+        workflow_smoke=workflow,
+        paper_smoke_readiness=readiness,
+        runbook_check=runbook_check,
+    )
+
+    assert "workflow_buy_promotion_blockers" in result["blockers"]
+    assert "paper_smoke_buy_promotion_blockers" in result["blockers"]
+    assert "runbook_check_schema_too_old" in result["blockers"]
+    assert result["workflow_promotion_blocked_count"] == 1
 
 
 def test_paper_monday_check_blocks_on_revealed_submit_and_leftover_position(tmp_path):
@@ -85,15 +130,19 @@ def test_paper_monday_check_blocks_on_revealed_submit_and_leftover_position(tmp_
             ]
         },
     )
-    workflow = _write_json(tmp_path / "workflow.json", {"ready_for_supervised_submit": True})
+    workflow = _write_json(tmp_path / "workflow.json", {"schema_version": 2, "ready_for_supervised_submit": True})
     readiness = _write_json(
         tmp_path / "readiness.json",
         {
+            "schema_version": 2,
             "ready_for_supervised_smoke": True,
             "account_cleanliness": {"clean": False, "position_count": 1, "unexpected_symbols": ["NVDA"]},
         },
     )
-    runbook_check = _write_json(tmp_path / "runbook_check.json", {"ready_for_supervised_submit": True})
+    runbook_check = _write_json(
+        tmp_path / "runbook_check.json",
+        {"schema_version": 2, "ready_for_supervised_submit": True},
+    )
 
     result = build_paper_monday_check(
         runbook=runbook,
@@ -109,9 +158,9 @@ def test_paper_monday_check_blocks_on_revealed_submit_and_leftover_position(tmp_
 
 def test_paper_monday_check_cli_outputs_json(tmp_path, capsys):
     runbook = _write_json(tmp_path / "runbook.json", {"steps": []})
-    workflow = _write_json(tmp_path / "workflow.json", {"ready_for_supervised_submit": False})
-    readiness = _write_json(tmp_path / "readiness.json", {"ready_for_supervised_smoke": False})
-    runbook_check = _write_json(tmp_path / "runbook_check.json", {"ready_for_supervised_submit": False})
+    workflow = _write_json(tmp_path / "workflow.json", {"schema_version": 2, "ready_for_supervised_submit": False})
+    readiness = _write_json(tmp_path / "readiness.json", {"schema_version": 2, "ready_for_supervised_smoke": False})
+    runbook_check = _write_json(tmp_path / "runbook_check.json", {"schema_version": 2, "ready_for_supervised_submit": False})
 
     args = build_parser().parse_args(
         [

@@ -453,9 +453,10 @@ python scripts/longterm_paper_runbook_check.py --workflow-smoke path\to\paper_wo
 ```
 
 The check reads saved artifacts only. It blocks if the workflow smoke or
-paper-smoke readiness artifact is missing, malformed, or not ready. The saved
-check includes the workflow plan ID, canonical action-plan hash, and generation
-timestamp.
+paper-smoke readiness artifact is missing, malformed, not ready, promotion
+blocked, or older than the promotion-aware schema v2 contract. The saved check
+includes the workflow plan ID, canonical action-plan hash, buy-promotion
+summary, and generation timestamp.
 
 After any supervised paper submit, save the read-only order-status refresh
 artifact:
@@ -479,7 +480,10 @@ python scripts/longterm_paper_monday_check.py --runbook path\to\paper_runbook.js
 
 The Monday operator check is artifact-only. It reports whether workflow smoke,
 paper-smoke readiness, runbook-check evidence, action-plan hash, submit-command
-redaction, status-refresh errors, and paper-account cleanliness look reviewable.
+redaction, promotion blockers, status-refresh errors, and paper-account
+cleanliness look reviewable. It treats schema-v1 workflow/readiness/runbook-check
+artifacts as stale safety evidence after the buy-promotion paper-boundary
+upgrade.
 
 Market-hours supervised paper-smoke sequence:
 
@@ -555,6 +559,9 @@ preview, buy-promotion state, and execution audit are all clean. The JSON
 includes `promotion_summary`; any missing or non-actionable buy promotion blocks
 the workflow with `buy_promotion_blocked_rows`. `--report-output` can persist
 the JSON artifact for operator review before a supervised submit.
+Because promotion-aware workflow artifacts use schema v2, older saved schema-v1
+workflow or paper-smoke-readiness files should be regenerated before any
+supervised submit attempt.
 
 Inspect recorded preview rows:
 
@@ -614,6 +621,8 @@ Stage 6B is deliberately narrow:
 - It submits only simple `BUY` previews.
 - `--submit-paper-orders` also requires the exact `--confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY` latch; without it, the command exits before refreshing broker state or constructing the submit adapter.
 - `--submit-paper-orders` also requires a ready, fresh `--runbook-check` artifact whose plan ID and canonical action-plan hash match the action plan being submitted.
+- The runbook-check artifact must be schema v2 or newer, proving the saved
+  evidence came from the promotion-aware workflow/readiness path.
 - `--submit-paper-orders` blocks when the Alpaca paper market clock is closed, so market BUY smoke orders are not left pending after hours.
 - Rebalance, sell, and sell-to-fund-buy previews are hard-blocked with `rebalance_blocked_v1`.
 - It revalidates protected symbols, actionable buy-promotion state, benchmark guard, thesis/review status, decision confidence/recommendation, preview freshness, cash, active-rules hash, and duplicate submission state immediately before paper submission.

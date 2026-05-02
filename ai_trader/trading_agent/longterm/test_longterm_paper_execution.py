@@ -629,6 +629,7 @@ def test_paper_execution_cli_real_submit_path_refreshes_paper_account_state(tmp_
     runbook_check_path.write_text(
         json.dumps(
             {
+                "schema_version": 2,
                 "ready_for_supervised_submit": True,
                 "plan_id": "plan-1",
                 "action_plan_hash": hash_action_plan(_action_plan(decision_id, trade_value=4000)),
@@ -688,6 +689,7 @@ def test_paper_execution_cli_blocks_submit_when_market_is_closed_before_refresh(
     runbook_check_path.write_text(
         json.dumps(
             {
+                "schema_version": 2,
                 "ready_for_supervised_submit": True,
                 "plan_id": "plan-1",
                 "action_plan_hash": hash_action_plan(action_plan),
@@ -844,6 +846,65 @@ def test_paper_execution_cli_submit_requires_ready_matching_runbook_check(tmp_pa
     assert ledger.list_execution_events(limit=10) == []
 
 
+def test_paper_execution_cli_rejects_old_runbook_check_before_refresh(tmp_path, capsys, monkeypatch):
+    import longterm.paper_execution_cli as cli
+
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = _record_decision(journal)
+    _record_preview(ledger, decision_id)
+    portfolio_path = tmp_path / "portfolio.json"
+    plan_path = tmp_path / "plan.json"
+    runbook_check_path = tmp_path / "paper_runbook_check.json"
+    action_plan = _action_plan(decision_id)
+    portfolio_path.write_text(json.dumps({"cash": 5000, "protected_symbols": ["FXAIX"]}), encoding="utf-8")
+    plan_path.write_text(json.dumps(action_plan), encoding="utf-8")
+    runbook_check_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "ready_for_supervised_submit": True,
+                "plan_id": "plan-1",
+                "action_plan_hash": hash_action_plan(action_plan),
+                "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            }
+        ),
+        encoding="utf-8",
+    )
+    calls = {"refreshed": 0}
+    monkeypatch.setattr(
+        cli,
+        "_fresh_alpaca_paper_state",
+        lambda profile: calls.__setitem__("refreshed", calls["refreshed"] + 1)
+        or PortfolioState(cash=8000, protected_symbols=profile.protected_symbols),
+        raising=False,
+    )
+
+    args = build_parser().parse_args(
+        [
+            "--journal-db",
+            str(journal.db_path),
+            "--ledger-db",
+            str(ledger.db_path),
+            "--portfolio-state",
+            str(portfolio_path),
+            "--action-plan",
+            str(plan_path),
+            "--submit-paper-orders",
+            "--confirm-paper-submit",
+            "SUPERVISED_PAPER_BUY_ONLY",
+            "--runbook-check",
+            str(runbook_check_path),
+            "--json",
+        ]
+    )
+
+    assert run_cli(args) == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert "runbook_check_schema_too_old" in payload["blockers"]
+    assert calls == {"refreshed": 0}
+
+
 def test_paper_execution_cli_blocks_missing_and_mismatched_runbook_check_before_refresh(tmp_path, capsys, monkeypatch):
     import longterm.paper_execution_cli as cli
 
@@ -859,6 +920,7 @@ def test_paper_execution_cli_blocks_missing_and_mismatched_runbook_check_before_
     runbook_check_path.write_text(
         json.dumps(
             {
+                "schema_version": 2,
                 "ready_for_supervised_submit": True,
                 "plan_id": "other-plan",
                 "action_plan_hash": hash_action_plan(_action_plan(decision_id)),
@@ -917,6 +979,7 @@ def test_paper_execution_cli_blocks_action_plan_hash_mismatch_before_refresh(tmp
     runbook_check_path.write_text(
         json.dumps(
             {
+                "schema_version": 2,
                 "ready_for_supervised_submit": True,
                 "plan_id": "plan-1",
                 "action_plan_hash": hash_action_plan({**action_plan, "intents": []}),
@@ -973,6 +1036,7 @@ def test_paper_execution_cli_blocks_missing_and_stale_runbook_check_before_refre
     stale_check_path.write_text(
         json.dumps(
             {
+                "schema_version": 2,
                 "ready_for_supervised_submit": True,
                 "plan_id": "plan-1",
                 "action_plan_hash": hash_action_plan(_action_plan(decision_id)),
