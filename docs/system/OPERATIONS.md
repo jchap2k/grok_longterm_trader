@@ -683,6 +683,22 @@ company URLs such as `https://www.fool.com/premium/company/202816`; later
 enrichment can navigate those URLs and let Fool resolve the detailed financials
 page before summarizing the ticker context.
 
+Enrich captured company URLs before sending thin source rows into the research
+committee:
+
+```powershell
+python scripts/longterm_motley_fool_company_enrich.py `
+  --idea-batch path\to\research-batch-001.json `
+  --output path\to\research-batch-001.enriched.json `
+  --snapshot-output-dir path\to\snapshots
+```
+
+The default backend is `scrapling_stealthy`, uses the logged-in Chrome profile,
+and runs headless unless `--no-headless` is supplied. Use one browser process at
+a time for `~/.grok3api_chrome_profile`. The output preserves structured
+metrics, section summaries, and URLs; it should not be treated as trade
+authority.
+
 Scheduler-facing Motley Fool settings live at:
 
 ```text

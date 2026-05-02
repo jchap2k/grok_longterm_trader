@@ -109,6 +109,12 @@ Uses the logged-in Playwright/Chrome profile to capture Motley Fool premium tabl
 `longterm/motley_fool_capture_cli.py`
 Provides a command surface for exporting captured Motley Fool ideas as JSON. The default source set captures the full new recommendations, analyst rankings, and AI rankings pages; dashboard capture is available as a smoke test.
 
+`longterm/motley_fool_company_enrichment.py`
+Fetches and parses per-company Fool IQ pages into structured research-packet context. The default runtime backend is designed for Scrapling Stealthy with the logged-in Chrome profile, while the parser remains provider-neutral and testable from saved snapshots. It captures optional sections such as market snapshot, recommendation context, company overview, premium coverage, Moneyball scores, financial metric tables, recent earnings, and bull/bear cases; it stores structured summaries, metrics, and source URLs rather than full paid article dumps.
+
+`longterm/motley_fool_company_enrichment_cli.py`
+Provides a command surface for enriching one idea or an idea batch from captured Motley Fool company URLs. It can fetch live pages through Scrapling or read saved `CompanyPageSnapshot` JSON files for repeatable parser testing.
+
 `config/motley_fool_capture.json`
 Local scheduler-facing toggle for optional Motley Fool intake. It records
 whether Fool is enabled on this machine, whether the logged-in Chrome profile is
