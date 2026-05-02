@@ -21,6 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--price-map", default=None)
     parser.add_argument("--feedback-summary", default=None)
     parser.add_argument("--monday-operator-check", default=None)
+    parser.add_argument("--live-readiness-bundle", default=None)
     parser.add_argument("--report-output", default=None)
     parser.add_argument("--json", action="store_true")
     return parser
@@ -35,6 +36,7 @@ def run_cli(args: argparse.Namespace) -> int:
         price_map=_load_json(args.price_map) if args.price_map else None,
         feedback_summary=_load_json(args.feedback_summary) if args.feedback_summary else None,
         monday_operator_check=_load_json(args.monday_operator_check) if args.monday_operator_check else None,
+        live_readiness_bundle=_load_json(args.live_readiness_bundle) if args.live_readiness_bundle else None,
     )
     if args.report_output:
         Path(args.report_output).write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")

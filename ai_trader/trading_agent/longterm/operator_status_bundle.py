@@ -24,6 +24,7 @@ def build_operator_status_bundle(
     price_map: Mapping[str, Any] | None = None,
     feedback_summary: Mapping[str, Any] | None = None,
     monday_operator_check: Mapping[str, Any] | None = None,
+    live_readiness_bundle: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble the read-only operator artifacts needed before automation."""
     lifecycle = (
@@ -56,6 +57,7 @@ def build_operator_status_bundle(
         "paper_lifecycle": lifecycle,
         "buy_promotion_summary": _buy_promotion_summary(action_plan),
         "monday_operator_check_summary": _monday_operator_check_summary(monday_operator_check),
+        "live_readiness_summary": _live_readiness_summary(live_readiness_bundle),
         "scheduler_readiness": readiness,
         "position_report_markdown": position_report,
         "notes": [
@@ -82,6 +84,7 @@ def build_operator_status_markdown(payload: Mapping[str, Any]) -> str:
         lines.append(f"| {state} | {count} |")
     lines.extend(_buy_promotion_markdown_lines(payload.get("buy_promotion_summary") or {}))
     lines.extend(_monday_operator_check_markdown_lines(payload.get("monday_operator_check_summary") or {}))
+    lines.extend(_live_readiness_markdown_lines(payload.get("live_readiness_summary") or {}))
     lines.extend(["", "## Scheduler Readiness", ""])
     lines.extend(readiness_markdown.splitlines()[2:])
     position_report = str(payload.get("position_report_markdown") or "").strip()
@@ -147,6 +150,53 @@ def _buy_promotion_markdown_lines(summary: Mapping[str, Any]) -> list[str]:
             f"{_cell(', '.join(str(value) for value in (item.get('followups') or [])))} | "
             f"{_cell(', '.join(str(value) for value in (item.get('blockers') or [])))} |"
         )
+    return lines
+
+
+def _live_readiness_summary(payload: Mapping[str, Any] | None) -> dict[str, Any]:
+    if not payload:
+        return {}
+    observed = payload.get("observed") if isinstance(payload, Mapping) else {}
+    observed = observed if isinstance(observed, Mapping) else {}
+    paper_smoke_safety = payload.get("paper_smoke_safety") if isinstance(payload, Mapping) else {}
+    paper_smoke_safety = paper_smoke_safety if isinstance(paper_smoke_safety, Mapping) else {}
+    unmet = [str(value) for value in (payload.get("unmet_gate_keys") or [])]
+    return {
+        "mode": str(payload.get("mode") or ""),
+        "ready": bool(payload.get("ready")),
+        "unmet_gate_count": len(unmet),
+        "unmet_gate_keys": unmet,
+        "paper_trading_verified": bool(observed.get("paper_trading_verified")),
+        "broker_capability_match": bool(observed.get("broker_capability_match")),
+        "paper_smoke_ready": bool(observed.get("paper_smoke_ready")),
+        "paper_smoke_schema_ok": bool(paper_smoke_safety.get("schema_ok")),
+        "paper_smoke_promotion_blocked_count": int(paper_smoke_safety.get("promotion_blocked_count") or 0),
+    }
+
+
+def _live_readiness_markdown_lines(summary: Mapping[str, Any]) -> list[str]:
+    if not summary:
+        return []
+    lines = [
+        "",
+        "## Live Readiness Evidence",
+        "",
+        f"- Ready: {_yes_no(summary.get('ready'))}",
+        f"- Unmet gates: {int(summary.get('unmet_gate_count') or 0)}",
+        f"- Paper trading verified: {_yes_no(summary.get('paper_trading_verified'))}",
+        f"- Broker capability match: {_yes_no(summary.get('broker_capability_match'))}",
+        f"- Paper smoke ready: {_yes_no(summary.get('paper_smoke_ready'))}",
+        f"- Paper smoke schema ok: {_yes_no(summary.get('paper_smoke_schema_ok'))}",
+        f"- Paper smoke promotion blocked: {int(summary.get('paper_smoke_promotion_blocked_count') or 0)}",
+        "",
+        "### Unmet Live-Readiness Gates",
+        "",
+    ]
+    unmet = summary.get("unmet_gate_keys") or []
+    if unmet:
+        lines.extend(f"- {gate}" for gate in unmet)
+    else:
+        lines.append("- none")
     return lines
 
 

@@ -164,6 +164,7 @@ def build_paper_runbook(
                 f"--paper-ledger-db {ledger_db} "
                 f"--action-plan {action_plan} "
                 f"--monday-operator-check {artifacts['paper_monday_operator_check']} "
+                f"--live-readiness-bundle {artifacts['live_readiness_bundle']} "
                 f"--report-output {artifacts['operator_status_bundle']} --json"
             ),
         },

@@ -150,6 +150,39 @@ def test_operator_status_bundle_surfaces_monday_artifact_status(tmp_path):
     assert "- submit_command_revealed" in markdown
 
 
+def test_operator_status_bundle_surfaces_live_readiness_summary(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    live_readiness = {
+        "mode": "live_readiness_bundle",
+        "ready": False,
+        "unmet_gate_keys": ["paper_trading_verified", "manual_approval_recorded"],
+        "observed": {
+            "paper_trading_verified": False,
+            "broker_capability_match": True,
+            "paper_smoke_ready": True,
+        },
+        "paper_smoke_safety": {
+            "schema_ok": True,
+            "promotion_blocked_count": 0,
+        },
+    }
+
+    bundle = build_operator_status_bundle(journal, live_readiness_bundle=live_readiness)
+
+    assert bundle["live_readiness_summary"]["ready"] is False
+    assert bundle["live_readiness_summary"]["unmet_gate_count"] == 2
+    assert bundle["live_readiness_summary"]["unmet_gate_keys"] == [
+        "paper_trading_verified",
+        "manual_approval_recorded",
+    ]
+    assert bundle["live_readiness_summary"]["paper_smoke_schema_ok"] is True
+    markdown = build_operator_status_markdown(bundle)
+    assert "## Live Readiness Evidence" in markdown
+    assert "- Ready: no" in markdown
+    assert "- paper_trading_verified" in markdown
+    assert "- manual_approval_recorded" in markdown
+
+
 def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     decision_id = _record_decision(journal)
@@ -160,6 +193,7 @@ def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
     price_map_path = tmp_path / "prices.json"
     feedback_path = tmp_path / "feedback.json"
     monday_check_path = tmp_path / "monday_check.json"
+    live_readiness_path = tmp_path / "live_readiness_bundle.json"
     report_path = tmp_path / "operator_status_bundle.json"
     PaperTradeLedger(ledger_path).record_execution_event(
         {
@@ -206,6 +240,17 @@ def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
         ),
         encoding="utf-8",
     )
+    live_readiness_path.write_text(
+        json.dumps(
+            {
+                "mode": "live_readiness_bundle",
+                "ready": False,
+                "unmet_gate_keys": ["paper_trading_verified"],
+                "observed": {"paper_smoke_ready": True},
+            }
+        ),
+        encoding="utf-8",
+    )
     parser = build_parser()
     args = parser.parse_args(
         [
@@ -223,6 +268,8 @@ def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
             str(feedback_path),
             "--monday-operator-check",
             str(monday_check_path),
+            "--live-readiness-bundle",
+            str(live_readiness_path),
             "--report-output",
             str(report_path),
             "--json",
@@ -235,4 +282,5 @@ def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
     assert payload["buy_promotion_summary"]["counts"]["ACTIONABLE_BUY"] == 1
     assert payload["paper_lifecycle"]["state_counts"]["outcome_evaluated"] == 1
     assert payload["monday_operator_check_summary"]["ready_for_review"] is True
+    assert payload["live_readiness_summary"]["unmet_gate_keys"] == ["paper_trading_verified"]
     assert json.loads(report_path.read_text(encoding="utf-8"))["mode"] == "operator_status_bundle"

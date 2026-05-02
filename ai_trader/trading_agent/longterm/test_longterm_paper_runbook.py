@@ -60,6 +60,7 @@ def test_paper_runbook_lists_monday_artifacts_and_ordered_commands():
     assert "--report-output artifacts\\paper_lifecycle.json" in runbook["steps"][8]["command"]
     assert "--report-output artifacts\\live_readiness_bundle.json" in runbook["steps"][10]["command"]
     assert "--monday-operator-check artifacts\\paper_monday_operator_check.json" in runbook["steps"][11]["command"]
+    assert "--live-readiness-bundle artifacts\\live_readiness_bundle.json" in runbook["steps"][11]["command"]
     assert "--report-output artifacts\\operator_status_bundle.json" in runbook["steps"][11]["command"]
     assert "Monday Paper Trading Runbook" in build_paper_runbook_markdown(runbook)
 
