@@ -94,6 +94,12 @@ Creates a markdown decision report with benchmark outcomes and a Motley-Fool-sty
 
 Symbol feedback profiles are research memory, not trade authority. The journal can rebuild them deterministically from prior `BUY` / `ADD` / `HOLD` rows, auto-refresh them after new decisions, preserve paper-preview feedback, and enrich future same-symbol research ideas with repeat-count, latest-thesis, new-information notes, and paper-preview blocker context before LLM review.
 
+`longterm/buy_promotion.py`
+Reviews first-pass `BUY` / `ADD` recommendation rows before they are treated as actionable account-planning candidates. It checks protected symbols, existing holdings, confidence, positive suggested size, valuation context, and whether the packet contains a versioned evidence brief with article-level support. The output is an operator-facing promotion decision such as `ACTIONABLE_BUY`, `WATCHLIST_PENDING_EVIDENCE`, `WATCHLIST_PENDING_CONFIRMATION`, `REVIEW_EXISTING_POSITION`, `NOT_PROMOTED`, or `BLOCKED`. This is a dry-run review gate only; it does not place orders, mutate journal decisions, or override Stage 6B paper execution eligibility.
+
+`longterm/buy_promotion_cli.py`
+Renders buy-promotion reviews from the latest journal recommendation rows and a read-only portfolio snapshot as markdown or JSON. It is an operator report surface for inspecting which first-pass buys are ready for the next dry-run planning stage.
+
 `longterm/recommendation_enrichment.py`
 Provides `CachedRecommendationEnricher`, a daily cache wrapper for recommendation-table enrichment such as current price, daily change, market cap, revenue growth, estimated return range, and max drawdown. This keeps external data calls out of core journal storage and avoids repeated fetches during report generation.
 
@@ -244,7 +250,7 @@ Checks review due dates and whether current evidence matches invalidation condit
 
 ## Decision Flow
 
-Universe sources -> discovery queue -> research packet enrichment -> research batches -> research campaign manifest -> `ResearchPacket` completeness gate -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> rebalance outcome analysis -> Alpaca paper/read-only portfolio snapshot -> paper reconciliation -> benchmark guard -> dry-run account action plan -> paper order preview -> paper preview ledger -> paper execution eligibility -> supervised Stage 6B paper execution boundary -> paper order status refresh -> paper outcomes/lifecycle summaries -> feedback refresh -> scheduler-readiness checklist -> operator status bundle -> next-actions/report artifacts and on-demand position intelligence reports.
+Universe sources -> discovery queue -> research packet enrichment -> research batches -> research campaign manifest -> `ResearchPacket` completeness gate -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> buy-promotion review gate -> rebalance outcome analysis -> Alpaca paper/read-only portfolio snapshot -> paper reconciliation -> benchmark guard -> dry-run account action plan -> paper order preview -> paper preview ledger -> paper execution eligibility -> supervised Stage 6B paper execution boundary -> paper order status refresh -> paper outcomes/lifecycle summaries -> feedback refresh -> scheduler-readiness checklist -> operator status bundle -> next-actions/report artifacts and on-demand position intelligence reports.
 
 ## Data Flow Safety
 

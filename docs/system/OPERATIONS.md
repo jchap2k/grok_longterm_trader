@@ -204,6 +204,22 @@ summary/snippet, source, date, URL, relevance, and impact category already in
 the enrichment payload. They are useful for the research committee, but they are
 not proof that the full article page was opened or read.
 
+After the committee produces first-pass `BUY` / `ADD` rows, run them through the
+buy-promotion review gate before treating them as account-planning candidates.
+The gate checks protected symbols, whether the symbol is already held,
+confidence, positive suggested size, valuation context, and whether the packet
+has a versioned evidence brief with article-level support. Promotion output is
+operator-facing only: `ACTIONABLE_BUY` means "ready for the next dry-run planning
+stage," not "submit an order." Weak or thin-evidence names remain in watchlist or
+existing-position review states until more evidence is collected.
+
+Render the current promotion report from a journal and portfolio snapshot:
+
+```powershell
+python scripts/longterm_buy_promotion.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --output path\to\buy_promotion.md
+python scripts/longterm_buy_promotion.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --json --output path\to\buy_promotion.json
+```
+
 Write research-ready candidates as an idea batch for the existing research
 cycle:
 
