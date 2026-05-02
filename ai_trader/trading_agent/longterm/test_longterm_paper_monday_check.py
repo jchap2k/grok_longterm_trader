@@ -23,7 +23,15 @@ def test_paper_monday_check_summarizes_ready_artifacts_and_redacted_submit(tmp_p
             ],
         },
     )
-    workflow = _write_json(tmp_path / "workflow.json", {"ready_for_supervised_submit": True, "blocker_count": 0})
+    workflow = _write_json(
+        tmp_path / "workflow.json",
+        {
+            "ready_for_supervised_submit": True,
+            "blocker_count": 0,
+            "preview": {"allowed_count": 1, "blocked_count": 0, "no_order_count": 1},
+            "execution_audit": {"ready_count": 1, "blocked_count": 0, "excluded_count": 1},
+        },
+    )
     readiness = _write_json(
         tmp_path / "readiness.json",
         {
@@ -55,7 +63,13 @@ def test_paper_monday_check_summarizes_ready_artifacts_and_redacted_submit(tmp_p
     assert result["action_plan_hash_present"] is True
     assert result["account_clean"] is True
     assert result["leftover_position_count"] == 0
-    assert "Monday Paper Operator Check" in build_paper_monday_check_markdown(result)
+    assert result["workflow_preview_allowed_count"] == 1
+    assert result["workflow_preview_no_order_count"] == 1
+    assert result["workflow_execution_ready_count"] == 1
+    assert result["workflow_execution_excluded_count"] == 1
+    markdown = build_paper_monday_check_markdown(result)
+    assert "Monday Paper Operator Check" in markdown
+    assert "Workflow execution excluded: 1" in markdown
 
 
 def test_paper_monday_check_blocks_on_revealed_submit_and_leftover_position(tmp_path):

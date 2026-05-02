@@ -21,6 +21,8 @@ def build_paper_monday_check(
     readiness_payload = _load_json(paper_smoke_readiness)
     check_payload = _load_json(runbook_check)
     status_payload = _load_json(status_refresh) if status_refresh else {}
+    workflow_preview = workflow_payload.get("preview") or {}
+    workflow_execution = workflow_payload.get("execution_audit") or {}
 
     submit_revealed = _submit_command_revealed(runbook_payload)
     account_cleanliness = readiness_payload.get("account_cleanliness") or {}
@@ -49,6 +51,12 @@ def build_paper_monday_check(
         "blocker_count": len(blockers),
         "blockers": blockers,
         "workflow_smoke_ready": bool(workflow_payload.get("ready_for_supervised_submit")),
+        "workflow_preview_allowed_count": int(workflow_preview.get("allowed_count") or 0),
+        "workflow_preview_blocked_count": int(workflow_preview.get("blocked_count") or 0),
+        "workflow_preview_no_order_count": int(workflow_preview.get("no_order_count") or 0),
+        "workflow_execution_ready_count": int(workflow_execution.get("ready_count") or 0),
+        "workflow_execution_blocked_count": int(workflow_execution.get("blocked_count") or 0),
+        "workflow_execution_excluded_count": int(workflow_execution.get("excluded_count") or 0),
         "paper_smoke_ready": bool(readiness_payload.get("ready_for_supervised_smoke")),
         "runbook_check_ready": bool(check_payload.get("ready_for_supervised_submit")),
         "action_plan_hash_present": bool(action_plan_hash),
@@ -74,6 +82,10 @@ def build_paper_monday_check_markdown(payload: Mapping[str, Any]) -> str:
         f"- Ready for review: {'yes' if payload.get('ready_for_review') else 'no'}",
         f"- Blockers: {int(payload.get('blocker_count') or 0)}",
         f"- Workflow smoke ready: {'yes' if payload.get('workflow_smoke_ready') else 'no'}",
+        f"- Workflow preview allowed: {int(payload.get('workflow_preview_allowed_count') or 0)}",
+        f"- Workflow preview no-order/excluded: {int(payload.get('workflow_preview_no_order_count') or 0)}",
+        f"- Workflow execution ready: {int(payload.get('workflow_execution_ready_count') or 0)}",
+        f"- Workflow execution excluded: {int(payload.get('workflow_execution_excluded_count') or 0)}",
         f"- Paper smoke ready: {'yes' if payload.get('paper_smoke_ready') else 'no'}",
         f"- Runbook check ready: {'yes' if payload.get('runbook_check_ready') else 'no'}",
         f"- Action-plan hash present: {'yes' if payload.get('action_plan_hash_present') else 'no'}",
