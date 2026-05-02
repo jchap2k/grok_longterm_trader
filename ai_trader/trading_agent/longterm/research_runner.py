@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from agent.utils.cheap_grok_heavy import CheapGrokHeavy
+from longterm.active_rules_provider import ActiveRulesProvider
 from longterm.book_principles import BookPrinciplesProvider
 from longterm.decision_journal import LongTermDecisionJournal
 from longterm.decision_parser import parse_decision_response
@@ -33,6 +34,8 @@ class LongTermResearchRunner:
         max_concurrent: int | None = None,
         verbose: bool = True,
         book_principles_provider: BookPrinciplesProvider | None = None,
+        active_rules_provider: ActiveRulesProvider | None = None,
+        rules_path: str | Path | None = None,
     ):
         self._client = CheapGrokHeavy(
             api_key=api_key,
@@ -43,6 +46,7 @@ class LongTermResearchRunner:
             verbose=verbose,
         )
         self.book_principles_provider = book_principles_provider or BookPrinciplesProvider()
+        self.active_rules_provider = active_rules_provider or ActiveRulesProvider(rules_path)
         self.review_cadence_policy = ReviewCadencePolicy()
         self.decision_journal: LongTermDecisionJournal | None = None
 
@@ -122,6 +126,7 @@ class LongTermResearchRunner:
                 "Recommend BUY/ADD/HOLD/PASS/REDUCE/SELL only within non-protected active capital."
             ),
             "research_principles": self.book_principles_provider.recall(principles_query),
+            "active_rules_context": self.active_rules_provider.load(),
             "decision_constraints": (
                 "Do not recommend actions that violate protected-symbol constraints. "
                 "Respect benchmark-awareness and active-sleeve discipline."

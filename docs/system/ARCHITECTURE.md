@@ -33,7 +33,7 @@ Tracks multi-batch research campaigns after universe batching. It creates a mani
 Merges local/cacheable enrichment rows into research ideas before `ResearchPacket` intake. It scores packet readiness with `completeness_score`, `completeness_bucket`, and `missing_fields`, while keeping provider-specific metrics transient unless a later decision explicitly journals them.
 
 `longterm/research_runner.py`
-Builds context sections and runs the CGH decision committee through `CheapGrokHeavy`. It now includes a deterministic thesis challenge section so the final decision sees an explicit bull case, bear case, key risks, and kill criteria before producing a recommendation.
+Builds context sections and runs the CGH decision committee through `CheapGrokHeavy`. It includes the current `ai_trader/rules/active_rules.txt` content as `active_rules_context` for the configured long-term agents, plus deterministic reviews and a thesis challenge section so the final decision sees the operating rules, bull case, bear case, key risks, and kill criteria before producing a recommendation.
 
 `research/research_packet.py`
 Defines the normalized research packet and the minimum completeness rule for deep research. Packets must have a company name, idea source, and at least one research-context field (`business_summary`, `thesis_summary`, or `source_notes`) before the cycle calls the research runner. Incomplete ideas are skipped and reported rather than sent to the LLM committee.

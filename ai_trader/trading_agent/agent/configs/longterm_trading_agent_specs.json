@@ -9,6 +9,7 @@
         "financial_metrics",
         "business_summary",
         "deterministic_reviews",
+        "active_rules_context",
         "research_principles"
       ],
       "output_schema": {
@@ -30,6 +31,7 @@
         "macro_regime",
         "portfolio_context",
         "market_risk_context",
+        "active_rules_context",
         "review_cadence"
       ],
       "output_schema": {
@@ -53,6 +55,7 @@
         "business_summary",
         "deterministic_reviews",
         "benchmark_context",
+        "active_rules_context",
         "research_principles"
       ],
       "output_schema": {
@@ -75,6 +78,7 @@
         "decision_constraints",
         "benchmark_context",
         "sizing_policy_context",
+        "active_rules_context",
         "market_risk_context"
       ],
       "output_schema": {
@@ -95,6 +99,7 @@
         "supporting_evidence",
         "risk_flags",
         "deterministic_reviews",
+        "active_rules_context",
         "research_principles"
       ],
       "output_schema": {
@@ -122,6 +127,7 @@
         "deterministic_reviews",
         "review_cadence",
         "sizing_policy_context",
+        "active_rules_context",
         "research_principles"
       ],
       "output_schema": {

@@ -1,4 +1,5 @@
 import sys
+import json
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -7,6 +8,10 @@ from portfolio.portfolio_profile import PortfolioProfile
 from research.intake import create_research_packet_from_idea
 from longterm.research_runner import LongTermResearchRunner
 from research.research_packet import CompanyCategory
+
+
+AGENT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "agent" / "configs" / "longterm_trading_agent_specs.json"
+LEGACY_AGENT_CONFIG_PATH = Path(__file__).resolve().parent / "configs" / "longterm_agent_specs_v1.json"
 
 
 def test_create_research_packet_from_idea_inherits_portfolio_controls():
@@ -149,6 +154,63 @@ def test_longterm_research_runner_builds_context_and_calls_grok_helper(monkeypat
     assert "review_cadence" in captured["context_sections"]
     assert "Start new positions small" in captured["context_sections"]["sizing_policy_context"]
     assert "AAPL" in captured["task_prompt"]
+
+
+def test_longterm_research_runner_includes_active_rules_context(monkeypatch, tmp_path):
+    captured = {}
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text(
+        "<trading_rules><identity>Long-term quality-growth active sleeve.</identity>"
+        "<protected_holdings>FXAIX is protected.</protected_holdings></trading_rules>",
+        encoding="utf-8",
+    )
+
+    class FakeCheapGrokHeavy:
+        def __init__(self, **kwargs):
+            pass
+
+        def call_with_context(self, task_prompt, context_sections=None):
+            captured["context_sections"] = context_sections or {}
+            return '{"recommendation":"PASS","confidence":75}'
+
+    monkeypatch.setattr(
+        "longterm.research_runner.CheapGrokHeavy",
+        FakeCheapGrokHeavy,
+    )
+
+    packet = create_research_packet_from_idea(
+        {
+            "symbol": "MSFT",
+            "company_name": "Microsoft",
+            "business_summary": "Large software platform.",
+            "thesis_summary": "Cloud durability.",
+        }
+    )
+    runner = LongTermResearchRunner(
+        api_key="test-key",
+        config_path="dummy-config.json",
+        rules_path=rules_path,
+        verbose=False,
+    )
+
+    runner.run(packet)
+
+    assert "active_rules_context" in captured["context_sections"]
+    assert "Long-term quality-growth active sleeve" in captured["context_sections"]["active_rules_context"]
+    assert "FXAIX is protected" in captured["context_sections"]["active_rules_context"]
+
+
+def test_longterm_agent_specs_include_active_rules_for_every_committee_role():
+    missing = []
+    for path in (AGENT_CONFIG_PATH, LEGACY_AGENT_CONFIG_PATH):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        missing.extend(
+            f"{path.name}:{spec['name']}"
+            for spec in payload["agent_specs"]
+            if "active_rules_context" not in spec.get("input_sections", [])
+        )
+
+    assert missing == []
 
 
 def test_longterm_research_runner_records_structured_decision(monkeypatch, tmp_path):
