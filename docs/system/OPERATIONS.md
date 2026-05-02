@@ -333,6 +333,17 @@ workflow. It reads the action plan, skips protected symbols, fetches quotes for
 orderable BUY/REBALANCE symbols through the configured Alpaca paper data path,
 and writes the plain `{symbol: price}` JSON consumed by `--price-map`.
 
+Run an audit-only whole-share workflow smoke before any supervised paper submit:
+
+```powershell
+python scripts/longterm_paper_workflow_smoke.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --json
+```
+
+The workflow smoke fetches a read-only price map, records a whole-share preview
+to the paper ledger, and runs the paper execution boundary with submission
+disabled. It returns `ready_for_supervised_submit=true` only when the price map,
+preview, and execution audit are all clean.
+
 Inspect recorded preview rows:
 
 ```powershell

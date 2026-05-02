@@ -149,6 +149,9 @@ Checks whether a read-only paper account snapshot is reset enough for the next s
 `longterm/paper_smoke_readiness.py`
 Combines paper account cleanliness, broker capability compatibility, and optional scheduler-readiness output into a single read-only pre-flight report for supervised paper smokes. It can block on a dirty paper account, broker capability mismatch, or scheduler-readiness blockers. It does not submit, cancel, or modify orders.
 
+`longterm/paper_workflow_smoke.py`
+Runs an audit-only whole-share paper workflow from action plan to read-only price map, recorded preview, and paper execution audit. It does not submit orders and is meant to prove the operator artifacts are clean before a supervised paper submit.
+
 `longterm/paper_order_preview.py`
 Converts dry-run account action plan intents into broker-shaped paper order previews without importing Alpaca or submitting orders. Preview rows carry plan/decision traceability, risk/review metadata, cash shortfall, blocked reasons, and paired rebalance transaction IDs. `order_submission_enabled` is always `false`.
 
