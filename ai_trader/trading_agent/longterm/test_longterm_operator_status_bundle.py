@@ -114,6 +114,42 @@ def test_operator_status_bundle_combines_lifecycle_readiness_and_position_report
     assert "## Scheduler Readiness" in markdown
 
 
+def test_operator_status_bundle_surfaces_monday_artifact_status(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    monday_check = {
+        "mode": "paper_monday_operator_check",
+        "ready_for_review": False,
+        "blocker_count": 2,
+        "blockers": ["runbook_check_not_ready", "submit_command_revealed"],
+        "workflow_smoke_ready": True,
+        "paper_smoke_ready": True,
+        "runbook_check_ready": False,
+        "workflow_preview_allowed_count": 1,
+        "workflow_execution_ready_count": 1,
+        "workflow_execution_excluded_count": 1,
+        "workflow_promotion_blocked_count": 0,
+        "paper_smoke_promotion_blocked_count": 0,
+        "submit_command_revealed": True,
+        "account_clean": True,
+        "status_refresh_error_count": 0,
+    }
+
+    bundle = build_operator_status_bundle(journal, monday_operator_check=monday_check)
+
+    assert bundle["monday_operator_check_summary"]["ready_for_review"] is False
+    assert bundle["monday_operator_check_summary"]["blocker_count"] == 2
+    assert bundle["monday_operator_check_summary"]["blockers"] == [
+        "runbook_check_not_ready",
+        "submit_command_revealed",
+    ]
+    markdown = build_operator_status_markdown(bundle)
+    assert "## Monday Paper Artifacts" in markdown
+    assert "- Ready for review: no" in markdown
+    assert "- Blockers: 2" in markdown
+    assert "- runbook_check_not_ready" in markdown
+    assert "- submit_command_revealed" in markdown
+
+
 def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     decision_id = _record_decision(journal)
@@ -123,6 +159,7 @@ def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
     action_plan_path = tmp_path / "action_plan.json"
     price_map_path = tmp_path / "prices.json"
     feedback_path = tmp_path / "feedback.json"
+    monday_check_path = tmp_path / "monday_check.json"
     PaperTradeLedger(ledger_path).record_execution_event(
         {
             "decision_id": decision_id,
@@ -157,6 +194,17 @@ def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
     )
     price_map_path.write_text(json.dumps({"NVDA": 120, "FXAIX": 110}), encoding="utf-8")
     feedback_path.write_text(json.dumps({"order_submission_enabled": False}), encoding="utf-8")
+    monday_check_path.write_text(
+        json.dumps(
+            {
+                "mode": "paper_monday_operator_check",
+                "ready_for_review": True,
+                "blocker_count": 0,
+                "blockers": [],
+            }
+        ),
+        encoding="utf-8",
+    )
     parser = build_parser()
     args = parser.parse_args(
         [
@@ -172,6 +220,8 @@ def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
             str(price_map_path),
             "--feedback-summary",
             str(feedback_path),
+            "--monday-operator-check",
+            str(monday_check_path),
             "--json",
         ]
     )
@@ -181,3 +231,4 @@ def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
     assert payload["mode"] == "operator_status_bundle"
     assert payload["buy_promotion_summary"]["counts"]["ACTIONABLE_BUY"] == 1
     assert payload["paper_lifecycle"]["state_counts"]["outcome_evaluated"] == 1
+    assert payload["monday_operator_check_summary"]["ready_for_review"] is True

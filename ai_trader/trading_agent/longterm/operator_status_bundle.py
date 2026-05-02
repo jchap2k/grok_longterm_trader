@@ -23,6 +23,7 @@ def build_operator_status_bundle(
     action_plan: Mapping[str, Any] | None = None,
     price_map: Mapping[str, Any] | None = None,
     feedback_summary: Mapping[str, Any] | None = None,
+    monday_operator_check: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble the read-only operator artifacts needed before automation."""
     lifecycle = (
@@ -54,6 +55,7 @@ def build_operator_status_bundle(
         "order_submission_enabled": False,
         "paper_lifecycle": lifecycle,
         "buy_promotion_summary": _buy_promotion_summary(action_plan),
+        "monday_operator_check_summary": _monday_operator_check_summary(monday_operator_check),
         "scheduler_readiness": readiness,
         "position_report_markdown": position_report,
         "notes": [
@@ -79,6 +81,7 @@ def build_operator_status_markdown(payload: Mapping[str, Any]) -> str:
     for state, count in sorted((payload.get("paper_lifecycle", {}).get("state_counts") or {}).items()):
         lines.append(f"| {state} | {count} |")
     lines.extend(_buy_promotion_markdown_lines(payload.get("buy_promotion_summary") or {}))
+    lines.extend(_monday_operator_check_markdown_lines(payload.get("monday_operator_check_summary") or {}))
     lines.extend(["", "## Scheduler Readiness", ""])
     lines.extend(readiness_markdown.splitlines()[2:])
     position_report = str(payload.get("position_report_markdown") or "").strip()
@@ -145,6 +148,70 @@ def _buy_promotion_markdown_lines(summary: Mapping[str, Any]) -> list[str]:
             f"{_cell(', '.join(str(value) for value in (item.get('blockers') or [])))} |"
         )
     return lines
+
+
+def _monday_operator_check_summary(payload: Mapping[str, Any] | None) -> dict[str, Any]:
+    if not payload:
+        return {}
+    return {
+        "mode": str(payload.get("mode") or ""),
+        "ready_for_review": bool(payload.get("ready_for_review")),
+        "blocker_count": int(payload.get("blocker_count") or 0),
+        "blockers": list(payload.get("blockers") or []),
+        "workflow_smoke_ready": bool(payload.get("workflow_smoke_ready")),
+        "paper_smoke_ready": bool(payload.get("paper_smoke_ready")),
+        "runbook_check_ready": bool(payload.get("runbook_check_ready")),
+        "workflow_preview_allowed_count": int(payload.get("workflow_preview_allowed_count") or 0),
+        "workflow_execution_ready_count": int(payload.get("workflow_execution_ready_count") or 0),
+        "workflow_execution_excluded_count": int(payload.get("workflow_execution_excluded_count") or 0),
+        "workflow_promotion_blocked_count": int(payload.get("workflow_promotion_blocked_count") or 0),
+        "paper_smoke_promotion_blocked_count": int(payload.get("paper_smoke_promotion_blocked_count") or 0),
+        "submit_command_revealed": bool(payload.get("submit_command_revealed")),
+        "account_clean": payload.get("account_clean"),
+        "status_refresh_error_count": int(payload.get("status_refresh_error_count") or 0),
+    }
+
+
+def _monday_operator_check_markdown_lines(summary: Mapping[str, Any]) -> list[str]:
+    if not summary:
+        return []
+    lines = [
+        "",
+        "## Monday Paper Artifacts",
+        "",
+        f"- Ready for review: {_yes_no(summary.get('ready_for_review'))}",
+        f"- Blockers: {int(summary.get('blocker_count') or 0)}",
+        f"- Workflow smoke ready: {_yes_no(summary.get('workflow_smoke_ready'))}",
+        f"- Paper smoke ready: {_yes_no(summary.get('paper_smoke_ready'))}",
+        f"- Runbook check ready: {_yes_no(summary.get('runbook_check_ready'))}",
+        f"- Workflow preview allowed: {int(summary.get('workflow_preview_allowed_count') or 0)}",
+        f"- Workflow execution ready: {int(summary.get('workflow_execution_ready_count') or 0)}",
+        f"- Workflow execution excluded: {int(summary.get('workflow_execution_excluded_count') or 0)}",
+        f"- Workflow promotion blocked: {int(summary.get('workflow_promotion_blocked_count') or 0)}",
+        f"- Paper smoke promotion blocked: {int(summary.get('paper_smoke_promotion_blocked_count') or 0)}",
+        f"- Submit command revealed: {_yes_no(summary.get('submit_command_revealed'))}",
+        f"- Account clean: {_yes_no_unknown(summary.get('account_clean'))}",
+        f"- Status refresh errors: {int(summary.get('status_refresh_error_count') or 0)}",
+        "",
+        "### Monday Artifact Blockers",
+        "",
+    ]
+    blockers = summary.get("blockers") or []
+    if blockers:
+        lines.extend(f"- {blocker}" for blocker in blockers)
+    else:
+        lines.append("- none")
+    return lines
+
+
+def _yes_no(value: Any) -> str:
+    return "yes" if value else "no"
+
+
+def _yes_no_unknown(value: Any) -> str:
+    if value is None:
+        return "unknown"
+    return _yes_no(value)
 
 
 def _cell(value: str) -> str:

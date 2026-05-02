@@ -737,13 +737,14 @@ remains visible as a warning.
 Build the full read-only operator status bundle:
 
 ```powershell
-python scripts/longterm_operator_status_bundle.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --paper-ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --price-map path\to\prices.json --feedback-summary path\to\feedback_summary.json
+python scripts/longterm_operator_status_bundle.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --paper-ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --price-map path\to\prices.json --feedback-summary path\to\feedback_summary.json --monday-operator-check path\to\paper_monday_operator_check.json
 python scripts/longterm_operator_status_bundle.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --paper-ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --json
 ```
 
-The bundle combines paper lifecycle, advisory scheduler readiness, and position
-intelligence into one operator surface. It is intended for manual review before
-any later scheduler automation design and keeps order submission disabled.
+The bundle combines paper lifecycle, buy-promotion state, optional Monday
+artifact status, advisory scheduler readiness, and position intelligence into
+one operator surface. It is intended for manual review before any later
+scheduler automation design and keeps order submission disabled.
 
 ## Position Intelligence Report
 
