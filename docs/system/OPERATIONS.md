@@ -425,14 +425,16 @@ been adapted to whole-share sizing.
 Generate an ordered Monday paper-trading runbook:
 
 ```powershell
-python scripts/longterm_paper_runbook.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --output-dir path\to\paper_artifacts --profile-config path\to\profile.json --expected-cash 74000
-python scripts/longterm_paper_runbook.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --output-dir path\to\paper_artifacts --profile-config path\to\profile.json --expected-cash 74000 --json
+python scripts/longterm_paper_runbook.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --output-dir path\to\paper_artifacts --profile-config path\to\profile.json --expected-cash 74000 --report-output path\to\paper_artifacts\paper_runbook.json
+python scripts/longterm_paper_runbook.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --output-dir path\to\paper_artifacts --profile-config path\to\profile.json --expected-cash 74000 --report-output path\to\paper_artifacts\paper_runbook.json --json
 ```
 
 The runbook is a deterministic checklist and command generator only. It does
-not read Alpaca, write ledgers, or submit orders. By default, the supervised
-submit command is redacted so the operator cannot accidentally copy it before
-reviewing the saved preflight artifacts. Reveal it only after review:
+not read Alpaca, write ledgers, or submit orders. Save it with `--report-output`
+so later artifact checks can inspect whether the supervised submit command is
+still redacted. By default, the supervised submit command is redacted so the
+operator cannot accidentally copy it before reviewing the saved preflight
+artifacts. Reveal it only after review:
 
 ```powershell
 python scripts/longterm_paper_runbook.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --output-dir path\to\paper_artifacts --profile-config path\to\profile.json --expected-cash 74000 --include-submit-command
@@ -737,8 +739,8 @@ remains visible as a warning.
 Build the full read-only operator status bundle:
 
 ```powershell
-python scripts/longterm_operator_status_bundle.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --paper-ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --price-map path\to\prices.json --feedback-summary path\to\feedback_summary.json --monday-operator-check path\to\paper_monday_operator_check.json
-python scripts/longterm_operator_status_bundle.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --paper-ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --json
+python scripts/longterm_operator_status_bundle.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --paper-ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --price-map path\to\prices.json --feedback-summary path\to\feedback_summary.json --monday-operator-check path\to\paper_monday_operator_check.json --report-output path\to\operator_status_bundle.json
+python scripts/longterm_operator_status_bundle.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --paper-ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --monday-operator-check path\to\paper_monday_operator_check.json --report-output path\to\operator_status_bundle.json --json
 ```
 
 The bundle combines paper lifecycle, buy-promotion state, optional Monday

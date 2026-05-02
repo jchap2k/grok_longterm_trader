@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
 from longterm.paper_runbook import build_paper_runbook, build_paper_runbook_markdown
 
@@ -22,6 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Reveal the supervised paper submit command in the generated runbook.",
     )
+    parser.add_argument("--report-output", default=None)
     parser.add_argument("--json", action="store_true")
     return parser
 
@@ -37,6 +39,8 @@ def run_cli(args: argparse.Namespace) -> int:
         profile_config=args.profile_config,
         include_submit_command=args.include_submit_command,
     )
+    if args.report_output:
+        Path(args.report_output).write_text(json.dumps(runbook, indent=2, sort_keys=True), encoding="utf-8")
     if args.json:
         print(json.dumps(runbook, indent=2, sort_keys=True))
     else:

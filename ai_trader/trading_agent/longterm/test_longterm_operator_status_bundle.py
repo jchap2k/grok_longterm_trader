@@ -160,6 +160,7 @@ def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
     price_map_path = tmp_path / "prices.json"
     feedback_path = tmp_path / "feedback.json"
     monday_check_path = tmp_path / "monday_check.json"
+    report_path = tmp_path / "operator_status_bundle.json"
     PaperTradeLedger(ledger_path).record_execution_event(
         {
             "decision_id": decision_id,
@@ -222,6 +223,8 @@ def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
             str(feedback_path),
             "--monday-operator-check",
             str(monday_check_path),
+            "--report-output",
+            str(report_path),
             "--json",
         ]
     )
@@ -232,3 +235,4 @@ def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
     assert payload["buy_promotion_summary"]["counts"]["ACTIONABLE_BUY"] == 1
     assert payload["paper_lifecycle"]["state_counts"]["outcome_evaluated"] == 1
     assert payload["monday_operator_check_summary"]["ready_for_review"] is True
+    assert json.loads(report_path.read_text(encoding="utf-8"))["mode"] == "operator_status_bundle"
