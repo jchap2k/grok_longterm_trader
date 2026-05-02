@@ -28,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--headless", dest="headless", action="store_true", default=True)
     parser.add_argument("--no-headless", dest="headless", action="store_false")
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--request-delay-seconds", type=float, default=0.0)
     parser.add_argument("--snapshot-dir", default="")
     parser.add_argument("--snapshot-output-dir", default="")
     return parser
@@ -64,6 +65,7 @@ def run_cli(args: argparse.Namespace) -> int:
         ideas,
         fetch_snapshot=fetch_snapshot,
         limit=args.limit,
+        request_delay_seconds=0.0 if snapshot_dir else max(0.0, float(args.request_delay_seconds or 0.0)),
     )
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -72,6 +74,7 @@ def run_cli(args: argparse.Namespace) -> int:
         **summary,
         "output": str(output_path),
         "backend": args.backend if not snapshot_dir else "snapshot_dir",
+        "request_delay_seconds": 0.0 if snapshot_dir else max(0.0, float(args.request_delay_seconds or 0.0)),
     }
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0 if summary["error_count"] == 0 else 1

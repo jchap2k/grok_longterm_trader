@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 import re
 from pathlib import Path
+import time
 from typing import Any, Callable, Mapping
 
 
@@ -186,12 +187,14 @@ def enrich_ideas_with_company_pages(
     *,
     fetch_snapshot: Callable[[Mapping[str, Any]], CompanyPageSnapshot],
     limit: int | None = None,
+    request_delay_seconds: float = 0.0,
+    sleep_func: Callable[[float], Any] = time.sleep,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Fetch and enrich a batch of Motley Fool ideas."""
     enriched: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
     processed = 0
-    for idea in ideas:
+    for index, idea in enumerate(ideas):
         if limit is not None and processed >= limit:
             enriched.append(dict(idea))
             continue
@@ -205,6 +208,9 @@ def enrich_ideas_with_company_pages(
         try:
             enriched.append(enrich_idea_from_company_snapshot(idea, fetch_snapshot(idea)))
             processed += 1
+            should_continue = limit is None or processed < limit
+            if request_delay_seconds > 0 and should_continue and _has_more_fetchable_ideas(ideas[index + 1 :]):
+                sleep_func(request_delay_seconds)
         except Exception as exc:  # pragma: no cover - CLI safety path
             item = dict(idea)
             item["motley_fool_company_enrichment_error"] = f"{type(exc).__name__}: {exc}"
@@ -217,6 +223,10 @@ def enrich_ideas_with_company_pages(
         "error_count": len(errors),
         "errors": errors,
     }
+
+
+def _has_more_fetchable_ideas(ideas: list[Mapping[str, Any]]) -> bool:
+    return any(str(idea.get("motley_fool_company_url") or idea.get("source_url") or "").strip() for idea in ideas)
 
 
 def fetch_company_snapshot_with_scrapling(

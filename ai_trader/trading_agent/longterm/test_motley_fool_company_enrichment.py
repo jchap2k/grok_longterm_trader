@@ -4,6 +4,7 @@ from longterm.motley_fool_company_enrichment import (
     CompanyPageSnapshot,
     _wait_for_company_content,
     enrich_idea_from_company_snapshot,
+    enrich_ideas_with_company_pages,
 )
 from longterm.motley_fool_company_enrichment_cli import build_parser, run_cli
 
@@ -296,6 +297,23 @@ def test_company_enrichment_cli_can_enrich_batch_from_snapshot_dir(tmp_path, cap
     assert summary["skipped_count"] == 0
 
 
+def test_company_enrichment_cli_accepts_request_delay_seconds():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "--idea-batch",
+            "batch.json",
+            "--output",
+            "out.json",
+            "--request-delay-seconds",
+            "2.5",
+        ]
+    )
+
+    assert args.request_delay_seconds == 2.5
+
+
 def test_wait_for_company_content_scrolls_to_lazy_sections():
     class FakeMouse:
         def __init__(self) -> None:
@@ -325,3 +343,32 @@ def test_wait_for_company_content_scrolls_to_lazy_sections():
     assert page.waited_for_function is True
     assert page.mouse.wheels == [(0, 1800)] * 6
     assert page.timeouts == [500] * 6
+
+
+def test_batch_enrichment_can_space_live_fetches_between_tickers():
+    ideas = [
+        {"symbol": "AAA", "motley_fool_company_url": "https://example.com/aaa"},
+        {"symbol": "BBB", "motley_fool_company_url": "https://example.com/bbb"},
+        {"symbol": "CCC", "motley_fool_company_url": "https://example.com/ccc"},
+    ]
+    sleeps = []
+
+    def fetch_snapshot(idea):
+        symbol = idea["symbol"]
+        return CompanyPageSnapshot(
+            requested_url=idea["motley_fool_company_url"],
+            title=f"{symbol} - Summary - Fool IQ",
+            text=f"{symbol} Company Overview\nSynthetic summary for {symbol}.",
+            headings=[symbol],
+        )
+
+    enriched, summary = enrich_ideas_with_company_pages(
+        ideas,
+        fetch_snapshot=fetch_snapshot,
+        request_delay_seconds=1.25,
+        sleep_func=sleeps.append,
+    )
+
+    assert [item["symbol"] for item in enriched] == ["AAA", "BBB", "CCC"]
+    assert summary["enriched_count"] == 3
+    assert sleeps == [1.25, 1.25]
