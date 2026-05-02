@@ -10,6 +10,19 @@ from longterm.portfolio_state import PortfolioState
 from portfolio.portfolio_profile import PortfolioProfile
 
 
+def _actionable_promotion(symbol="NVDA"):
+    return {
+        "symbol": symbol,
+        "promotion_decision": "ACTIONABLE_BUY",
+        "is_orderable": True,
+        "evidence_brief": "Versioned evidence packet includes thesis and article support.",
+        "evidence_version": "2026-05-02T12:00:00Z",
+        "blockers": [],
+        "followups": [],
+        "warnings": [],
+    }
+
+
 def test_paper_order_preview_builds_traceable_buy_preview():
     profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
     state = PortfolioState(cash=5000, protected_symbols=["FXAIX"])
@@ -26,6 +39,7 @@ def test_paper_order_preview_builds_traceable_buy_preview():
                 "allowed": True,
                 "reason": "High conviction.",
                 "decision_id": "decision-nvda",
+                "promotion_review": _actionable_promotion("NVDA"),
                 "risk_review": {
                     "allowed": True,
                     "risk_level": "medium",
@@ -50,6 +64,49 @@ def test_paper_order_preview_builds_traceable_buy_preview():
     assert row["trade_id"] is None
     assert row["cash_shortfall"] == 0.0
     assert row["benchmark_gate_reason"] == "Active sleeve is clearing FXAIX."
+    assert row["buy_promotion_decision"] == "ACTIONABLE_BUY"
+    assert row["promotion_review"]["promotion_decision"] == "ACTIONABLE_BUY"
+
+
+def test_paper_order_preview_blocks_stock_buy_without_actionable_promotion():
+    profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
+    state = PortfolioState(cash=5000, protected_symbols=["FXAIX"])
+    plan = {
+        "plan_id": "plan-promo",
+        "intents": [
+            {
+                "symbol": "VEEV",
+                "intent_type": "BUY",
+                "order_intent": "BUY",
+                "trade_value": 1000,
+                "allowed": True,
+                "decision_id": "decision-veev",
+                "promotion_review": {
+                    "promotion_decision": "WATCHLIST_PENDING_EVIDENCE",
+                    "is_orderable": False,
+                    "blockers": ["missing_article_evidence"],
+                    "followups": ["Capture earnings article."],
+                },
+            },
+            {
+                "symbol": "MSFT",
+                "intent_type": "BUY",
+                "order_intent": "BUY",
+                "trade_value": 1000,
+                "allowed": True,
+                "decision_id": "decision-msft",
+            },
+        ],
+    }
+
+    preview = build_paper_order_preview(plan, portfolio_state=state, profile=profile)
+    by_symbol = {row["symbol"]: row for row in preview["previews"]}
+
+    assert preview["allowed_count"] == 0
+    assert preview["blocked_count"] == 2
+    assert by_symbol["VEEV"]["buy_promotion_decision"] == "WATCHLIST_PENDING_EVIDENCE"
+    assert "buy_promotion_not_actionable" in by_symbol["VEEV"]["blocked_reasons"]
+    assert "missing_buy_promotion_review" in by_symbol["MSFT"]["blocked_reasons"]
 
 
 def test_paper_order_preview_blocks_protected_and_cash_shortfall():
@@ -101,6 +158,7 @@ def test_paper_order_preview_whole_share_buy_uses_explicit_price_map():
                 "trade_value": 2720,
                 "allowed": True,
                 "decision_id": "decision-nvda",
+                "promotion_review": _actionable_promotion("NVDA"),
             }
         ],
     }
@@ -131,7 +189,13 @@ def test_paper_order_preview_whole_share_blocks_missing_price_and_sub_one_share(
         "plan_id": "plan-whole-blocked",
         "intents": [
             {"symbol": "MSFT", "intent_type": "BUY", "trade_value": 1000, "allowed": True},
-            {"symbol": "NVDA", "intent_type": "BUY", "trade_value": 100, "allowed": True},
+            {
+                "symbol": "NVDA",
+                "intent_type": "BUY",
+                "trade_value": 100,
+                "allowed": True,
+                "promotion_review": _actionable_promotion("NVDA"),
+            },
         ],
     }
 
@@ -245,7 +309,13 @@ def test_paper_order_preview_excludes_parking_intents_without_blocking_simple_bu
     plan = {
         "plan_id": "plan-parking",
         "intents": [
-            {"symbol": "AMZN", "intent_type": "BUY", "trade_value": 850, "allowed": True},
+            {
+                "symbol": "AMZN",
+                "intent_type": "BUY",
+                "trade_value": 850,
+                "allowed": True,
+                "promotion_review": _actionable_promotion("AMZN"),
+            },
             {
                 "symbol": "SPY",
                 "intent_type": "PARK_IDLE_CASH",
@@ -286,6 +356,7 @@ def test_paper_order_preview_cli_outputs_markdown_and_json(tmp_path, capsys):
                         "order_intent": "BUY",
                         "trade_value": 1000,
                         "allowed": True,
+                        "promotion_review": _actionable_promotion("NVDA"),
                     }
                 ],
             }

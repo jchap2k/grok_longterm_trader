@@ -46,15 +46,22 @@ def build_paper_workflow_smoke_report(
         portfolio_state=portfolio_state,
         submit=False,
     )
-    blockers = _blockers(price_map_report=price_map_report, preview=preview, audit=audit)
+    promotion_summary = _promotion_summary(preview=preview, audit=audit)
+    blockers = _blockers(
+        price_map_report=price_map_report,
+        preview=preview,
+        audit=audit,
+        promotion_summary=promotion_summary,
+    )
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "mode": "paper_workflow_smoke",
         "order_submission_enabled": False,
         "ready_for_supervised_submit": not blockers,
         "blocker_count": len(blockers),
         "blockers": blockers,
         "price_map": price_map_report,
+        "promotion_summary": promotion_summary,
         "preview": preview,
         "execution_audit": audit,
         "notes": [
@@ -91,6 +98,7 @@ def _blockers(
     price_map_report: Mapping[str, Any],
     preview: Mapping[str, Any],
     audit: Mapping[str, Any],
+    promotion_summary: Mapping[str, Any],
 ) -> list[str]:
     blockers: list[str] = []
     if price_map_report.get("missing_symbols"):
@@ -103,9 +111,37 @@ def _blockers(
         blockers.append("execution_audit_blocked_items")
     if int(audit.get("ready_count") or 0) <= 0:
         blockers.append("no_execution_ready_items")
+    if int(promotion_summary.get("blocked_count") or 0) > 0:
+        blockers.append("buy_promotion_blocked_rows")
     if int(audit.get("submitted_count") or 0) > 0 or int(audit.get("rejected_count") or 0) > 0:
         blockers.append("execution_audit_not_submit_free")
     return blockers
+
+
+def _promotion_summary(*, preview: Mapping[str, Any], audit: Mapping[str, Any]) -> dict[str, Any]:
+    missing_items: set[str] = set()
+    non_actionable_items: set[str] = set()
+    for row in preview.get("previews") or []:
+        reasons = {str(reason) for reason in (row.get("blocked_reasons") or [])}
+        key = str(row.get("decision_id") or row.get("symbol") or "")
+        if "missing_buy_promotion_review" in reasons:
+            missing_items.add(key)
+        if "buy_promotion_not_actionable" in reasons:
+            non_actionable_items.add(key)
+    for item in audit.get("items") or []:
+        reasons = {str(reason) for reason in (item.get("blocked_reasons") or [])}
+        key = str(item.get("decision_id") or item.get("symbol") or "")
+        if "missing_buy_promotion_review" in reasons:
+            missing_items.add(key)
+        if "buy_promotion_not_actionable" in reasons:
+            non_actionable_items.add(key)
+    missing_count = len(missing_items)
+    non_actionable_count = len(non_actionable_items)
+    return {
+        "blocked_count": missing_count + non_actionable_count,
+        "missing_count": missing_count,
+        "non_actionable_count": non_actionable_count,
+    }
 
 
 __all__ = ["build_paper_workflow_smoke_markdown", "build_paper_workflow_smoke_report"]

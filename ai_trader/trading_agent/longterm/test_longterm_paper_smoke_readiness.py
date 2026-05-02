@@ -60,6 +60,33 @@ def test_paper_smoke_readiness_uses_workflow_smoke_when_provided():
     assert report["workflow_smoke"]["blockers"] == ["preview_blocked_rows"]
 
 
+def test_paper_smoke_readiness_surfaces_promotion_blockers_from_workflow():
+    cleanliness = evaluate_paper_account_cleanliness(
+        PortfolioState(cash=74000, holdings=[], protected_symbols=["FXAIX"]),
+        expected_cash=74000,
+    )
+    broker_capabilities = evaluate_broker_capability_match(
+        paper_broker="alpaca_paper",
+        live_broker="schwab_api",
+        required_order_model="whole_share",
+    )
+
+    report = build_paper_smoke_readiness_report(
+        account_cleanliness=cleanliness,
+        broker_capabilities=broker_capabilities,
+        scheduler_readiness={"blocker_count": 0, "warning_count": 0},
+        workflow_smoke={
+            "ready_for_supervised_submit": False,
+            "blockers": ["buy_promotion_blocked_rows"],
+            "promotion_summary": {"blocked_count": 1, "missing_count": 0, "non_actionable_count": 1},
+        },
+    )
+
+    assert report["ready_for_supervised_smoke"] is False
+    assert "workflow_buy_promotion_blockers" in report["blockers"]
+    assert report["workflow_promotion_summary"]["non_actionable_count"] == 1
+
+
 def test_paper_smoke_readiness_blocks_dirty_account_and_incompatible_broker_model():
     cleanliness = evaluate_paper_account_cleanliness(
         PortfolioState(

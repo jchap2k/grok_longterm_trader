@@ -18,6 +18,19 @@ from portfolio.portfolio_profile import PortfolioProfile
 from research.intake import create_research_packet_from_idea
 
 
+def _actionable_promotion(symbol="NVDA"):
+    return {
+        "symbol": symbol,
+        "promotion_decision": "ACTIONABLE_BUY",
+        "is_orderable": True,
+        "evidence_brief": "Versioned evidence packet includes thesis and article support.",
+        "evidence_version": "2026-05-02T12:00:00Z",
+        "blockers": [],
+        "followups": [],
+        "warnings": [],
+    }
+
+
 def _record_decision(journal, symbol="NVDA", recommendation="BUY"):
     return journal.record_decision(
         create_research_packet_from_idea(
@@ -57,6 +70,7 @@ def _action_plan(decision_id, *, symbol="NVDA", intent_type="BUY", allowed=True)
                 "allowed": allowed,
                 "reason": "Candidate is ready.",
                 "decision_id": decision_id,
+                "promotion_review": _actionable_promotion(symbol),
             }
         ],
     }
@@ -146,6 +160,39 @@ def test_paper_execution_eligibility_requires_fresh_ready_preview_and_explicit_g
     assert enabled["items"][0]["preview_is_fresh"] is True
 
 
+def test_paper_execution_eligibility_blocks_stock_buy_without_actionable_promotion(tmp_path):
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = "decision-1"
+    _record_preview(ledger, decision_id, symbol="VEEV")
+    profile = PortfolioProfile(protected_symbols=["FXAIX"])
+    state = PortfolioState(cash=5000, protected_symbols=["FXAIX"])
+    pending_plan = _action_plan(decision_id, symbol="VEEV")
+    pending_plan["intents"][0]["promotion_review"] = {
+        "promotion_decision": "WATCHLIST_PENDING_EVIDENCE",
+        "is_orderable": False,
+        "blockers": ["missing_article_evidence"],
+    }
+
+    pending = PaperExecutionEligibilityBuilder(
+        now_func=lambda: datetime(2026, 5, 1, tzinfo=UTC),
+        max_preview_age_hours=48,
+        paper_execution_enabled=True,
+    ).build(pending_plan, ledger=ledger, profile=profile, portfolio_state=state)
+    missing_plan = _action_plan(decision_id, symbol="VEEV")
+    missing_plan["intents"][0].pop("promotion_review")
+    missing = PaperExecutionEligibilityBuilder(
+        now_func=lambda: datetime(2026, 5, 1, tzinfo=UTC),
+        max_preview_age_hours=48,
+        paper_execution_enabled=True,
+    ).build(missing_plan, ledger=ledger, profile=profile, portfolio_state=state)
+
+    assert pending["items"][0]["status"] == "buy_promotion_not_actionable"
+    assert "buy_promotion_not_actionable" in pending["items"][0]["blocked_reasons"]
+    assert pending["items"][0]["buy_promotion_decision"] == "WATCHLIST_PENDING_EVIDENCE"
+    assert missing["items"][0]["status"] == "buy_promotion_missing"
+    assert "missing_buy_promotion_review" in missing["items"][0]["blocked_reasons"]
+
+
 def test_paper_execution_eligibility_blocks_stale_blocked_no_order_and_protected(tmp_path):
     ledger = PaperTradeLedger(tmp_path / "paper.db")
     stale_time = datetime(2026, 4, 25, tzinfo=UTC).isoformat()
@@ -158,10 +205,34 @@ def test_paper_execution_eligibility_blocks_stale_blocked_no_order_and_protected
     plan = {
         "plan_id": "plan-1",
         "intents": [
-            {"symbol": "NVDA", "intent_type": "BUY", "allowed": True, "decision_id": "stale-decision"},
-            {"symbol": "MSFT", "intent_type": "BUY", "allowed": True, "decision_id": "blocked-decision"},
-            {"symbol": "AAPL", "intent_type": "BUY", "allowed": True, "decision_id": "no-order-decision"},
-            {"symbol": "FXAIX", "intent_type": "BUY", "allowed": True, "decision_id": "protected-decision"},
+            {
+                "symbol": "NVDA",
+                "intent_type": "BUY",
+                "allowed": True,
+                "decision_id": "stale-decision",
+                "promotion_review": _actionable_promotion("NVDA"),
+            },
+            {
+                "symbol": "MSFT",
+                "intent_type": "BUY",
+                "allowed": True,
+                "decision_id": "blocked-decision",
+                "promotion_review": _actionable_promotion("MSFT"),
+            },
+            {
+                "symbol": "AAPL",
+                "intent_type": "BUY",
+                "allowed": True,
+                "decision_id": "no-order-decision",
+                "promotion_review": _actionable_promotion("AAPL"),
+            },
+            {
+                "symbol": "FXAIX",
+                "intent_type": "BUY",
+                "allowed": True,
+                "decision_id": "protected-decision",
+                "promotion_review": _actionable_promotion("FXAIX"),
+            },
         ],
     }
 

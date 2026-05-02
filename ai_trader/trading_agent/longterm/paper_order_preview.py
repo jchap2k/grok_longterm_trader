@@ -35,12 +35,15 @@ class PaperOrderPreview:
     risk_level: str = ""
     review_due: bool | None = None
     thesis_state: str = ""
+    buy_promotion_decision: str = ""
+    promotion_review: dict[str, Any] | None = None
     order_submission_enabled: bool = False
     blocked_reasons: list[str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["blocked_reasons"] = list(self.blocked_reasons or [])
+        payload["promotion_review"] = dict(self.promotion_review or {})
         return payload
 
 
@@ -74,7 +77,7 @@ def build_paper_order_preview(
         )
     rows = [preview.to_dict() for preview in previews]
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "mode": "paper_order_preview",
         "order_submission_enabled": False,
         "order_model": normalized_order_model,
@@ -188,6 +191,10 @@ def _buy_preview(
     symbol = _symbol(intent)
     requested_notional = _intent_notional(intent)
     blocked = _common_blocks(intent, symbol, protected_symbols)
+    promotion_review = _promotion_review_from_intent(intent)
+    promotion_blocker = _buy_promotion_blocker(promotion_review)
+    if promotion_blocker:
+        blocked.append(promotion_blocker)
     order_type = "market_notional_preview"
     notional = requested_notional
     quantity: int | None = None
@@ -223,6 +230,7 @@ def _buy_preview(
         cash_shortfall=cash_shortfall,
         benchmark_reason=benchmark_reason,
         blocked=blocked,
+        promotion_review=promotion_review,
     )
 
 
@@ -376,8 +384,10 @@ def _preview(
     source_symbol: str = "",
     transaction_id: str = "",
     cash_shortfall: float = 0.0,
+    promotion_review: Mapping[str, Any] | None = None,
 ) -> PaperOrderPreview:
     risk = dict(intent.get("risk_review") or {})
+    promotion = dict(promotion_review or _promotion_review_from_intent(intent))
     return PaperOrderPreview(
         preview_id=preview_id,
         plan_id=plan_id,
@@ -402,6 +412,8 @@ def _preview(
         risk_level=str(risk.get("risk_level") or ""),
         review_due=risk.get("review_due"),
         thesis_state=str(risk.get("thesis_state") or ""),
+        buy_promotion_decision=str(promotion.get("promotion_decision") or ""),
+        promotion_review=promotion,
         blocked_reasons=blocked,
     )
 
@@ -460,6 +472,26 @@ def _reason(intent: Mapping[str, Any], blocked: list[str]) -> str:
 
 def _is_v1_excluded_parking_intent(intent_type: str) -> bool:
     return intent_type in {"PARK_IDLE_CASH", "PARK_DEFENSIVE_CASH"}
+
+
+def _promotion_review_from_intent(intent: Mapping[str, Any]) -> dict[str, Any]:
+    review = intent.get("promotion_review")
+    if isinstance(review, Mapping):
+        return dict(review)
+    risk = intent.get("risk_review")
+    if isinstance(risk, Mapping):
+        nested = risk.get("buy_promotion")
+        if isinstance(nested, Mapping):
+            return dict(nested)
+    return {}
+
+
+def _buy_promotion_blocker(review: Mapping[str, Any]) -> str:
+    if not review:
+        return "missing_buy_promotion_review"
+    if str(review.get("promotion_decision") or "") != "ACTIONABLE_BUY":
+        return "buy_promotion_not_actionable"
+    return ""
 
 
 __all__ = ["PaperOrderPreview", "build_paper_order_preview", "build_paper_order_preview_markdown"]

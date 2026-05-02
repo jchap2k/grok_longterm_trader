@@ -14,6 +14,19 @@ from portfolio.portfolio_profile import PortfolioProfile
 from research.intake import create_research_packet_from_idea
 
 
+def _actionable_promotion(symbol="NVDA"):
+    return {
+        "symbol": symbol,
+        "promotion_decision": "ACTIONABLE_BUY",
+        "is_orderable": True,
+        "evidence_brief": "Versioned evidence packet includes thesis and article support.",
+        "evidence_version": "2026-05-02T12:00:00Z",
+        "blockers": [],
+        "followups": [],
+        "warnings": [],
+    }
+
+
 @dataclass
 class FakeQuote:
     price: float
@@ -75,6 +88,7 @@ def _action_plan(decision_id):
                 "allowed": True,
                 "reason": "Candidate is ready.",
                 "decision_id": decision_id,
+                "promotion_review": _actionable_promotion(),
             }
         ],
     }
@@ -102,6 +116,34 @@ def test_paper_workflow_smoke_builds_price_preview_and_execution_audit(tmp_path)
     assert report["execution_audit"]["submitted_count"] == 0
     assert len(ledger.list_previews(limit=10)) == 1
     assert ledger.list_execution_events(limit=10) == []
+
+
+def test_paper_workflow_smoke_blocks_non_actionable_buy_promotion(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = _record_decision(journal, symbol="VEEV")
+    action_plan = _action_plan(decision_id)
+    action_plan["intents"][0]["symbol"] = "VEEV"
+    action_plan["intents"][0]["promotion_review"] = {
+        "promotion_decision": "WATCHLIST_PENDING_EVIDENCE",
+        "is_orderable": False,
+        "blockers": ["missing_article_evidence"],
+    }
+
+    report = build_paper_workflow_smoke_report(
+        action_plan,
+        journal=journal,
+        ledger=ledger,
+        profile=PortfolioProfile(protected_symbols=["FXAIX"]),
+        portfolio_state=PortfolioState(cash=5000, protected_symbols=["FXAIX"]),
+        quote_provider=FakeQuoteProvider({"VEEV": 200.0}),
+    )
+
+    assert report["ready_for_supervised_submit"] is False
+    assert "buy_promotion_blocked_rows" in report["blockers"]
+    assert "preview_blocked_rows" in report["blockers"]
+    assert "execution_audit_blocked_items" in report["blockers"]
+    assert report["promotion_summary"]["blocked_count"] == 1
 
 
 def test_paper_workflow_smoke_stays_ready_when_action_plan_contains_parking_intent(tmp_path):

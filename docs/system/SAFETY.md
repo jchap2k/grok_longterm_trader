@@ -57,6 +57,10 @@ Before live execution exists:
 - require paper execution eligibility checks before any future paper submission;
   eligibility rows are non-submitting and must be revalidated at the broker
   boundary
+- require actionable buy-promotion state before any stock BUY preview,
+  eligibility result, workflow smoke, or supervised Stage 6B submit can be
+  considered ready; pending-evidence BUYs remain research tasks, not order
+  candidates
 - require decision-id traceability for every future paper execution event
 - treat eligibility events and feedback refresh outputs as audit/review
   artifacts only; they must include revalidation requirements and must not be
@@ -69,8 +73,9 @@ Before live execution exists:
   authorize orders or trigger broker calls
 - keep Stage 6B limited to explicitly requested Alpaca paper `BUY` submission;
   the boundary must revalidate active rules, protected symbols, benchmark
-  state, review/thesis state, preview freshness, cash, and duplicate
-  submission state immediately before broker calls
+  state, actionable buy-promotion state, review/thesis state, preview
+  freshness, cash, and duplicate submission state immediately before broker
+  calls
 - keep rebalances and sells blocked in the first paper execution slice; do not
   submit sell-to-fund-buy flows until settlement/cash sequencing is separately
   designed and reviewed

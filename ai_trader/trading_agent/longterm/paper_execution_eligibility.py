@@ -54,7 +54,7 @@ class PaperExecutionEligibilityBuilder:
                 )
             )
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "mode": "paper_execution_eligibility",
             "paper_execution_enabled": self.paper_execution_enabled,
             "max_preview_age_hours": self.max_preview_age_hours,
@@ -84,6 +84,10 @@ class PaperExecutionEligibilityBuilder:
         protected = set(profile.protected_symbols) | set(portfolio_state.protected_symbols)
         preview_age_hours = None
         preview_is_fresh = False
+        intent_type = str(intent.get("intent_type") or "").upper()
+        order_intent = str(intent.get("order_intent") or "BUY").upper()
+        promotion_review = _promotion_review(intent, preview)
+        promotion_decision = str(promotion_review.get("promotion_decision") or "")
 
         if not decision_id:
             blocked.append("missing decision_id")
@@ -97,7 +101,7 @@ class PaperExecutionEligibilityBuilder:
             blocked.append("paper execution disabled")
             status = _first_block_status(status, "execution_disabled")
             action = "ENABLE_PAPER_EXECUTION_GATE" if status == "execution_disabled" else action
-        if str(intent.get("intent_type") or "").upper() not in {"BUY", "REBALANCE"}:
+        if intent_type not in {"BUY", "REBALANCE"}:
             blocked.append("intent is not executable")
             status = _first_block_status(status, "intent_not_executable")
             action = "NO_ORDER"
@@ -105,6 +109,15 @@ class PaperExecutionEligibilityBuilder:
             blocked.append(str(intent.get("reason") or "intent is blocked"))
             status = _first_block_status(status, "intent_blocked")
             action = "RESOLVE_INTENT_BLOCKER"
+        if intent_type == "BUY" and order_intent in {"BUY", ""}:
+            if not promotion_review:
+                blocked.append("missing_buy_promotion_review")
+                status = _first_block_status(status, "buy_promotion_missing")
+                action = "REFRESH_BUY_PROMOTION_REVIEW"
+            elif promotion_decision != "ACTIONABLE_BUY":
+                blocked.append("buy_promotion_not_actionable")
+                status = _first_block_status(status, "buy_promotion_not_actionable")
+                action = "COMPLETE_BUY_PROMOTION_FOLLOWUP"
         if preview is None:
             blocked.append("missing paper preview")
             status = _first_block_status(status, "preview_missing")
@@ -144,6 +157,8 @@ class PaperExecutionEligibilityBuilder:
             "preview_age_hours": round(preview_age_hours, 4) if preview_age_hours is not None else None,
             "preview_is_fresh": preview_is_fresh,
             "valid_until": _valid_until((preview or {}).get("timestamp"), self.max_preview_age_hours),
+            "buy_promotion_decision": promotion_decision,
+            "promotion_review": promotion_review,
         }
 
 
@@ -219,6 +234,26 @@ def _dedupe(values: list[str]) -> list[str]:
         seen.add(text)
         result.append(text)
     return result
+
+
+def _promotion_review(
+    intent: Mapping[str, Any],
+    preview: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    review = intent.get("promotion_review")
+    if isinstance(review, Mapping):
+        return dict(review)
+    risk = intent.get("risk_review")
+    if isinstance(risk, Mapping):
+        nested = risk.get("buy_promotion")
+        if isinstance(nested, Mapping):
+            return dict(nested)
+    preview_json = (preview or {}).get("preview_json")
+    if isinstance(preview_json, Mapping):
+        preview_review = preview_json.get("promotion_review")
+        if isinstance(preview_review, Mapping):
+            return dict(preview_review)
+    return {}
 
 
 __all__ = ["PaperExecutionEligibilityBuilder", "build_paper_execution_eligibility_markdown"]

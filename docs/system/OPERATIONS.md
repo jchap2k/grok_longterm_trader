@@ -551,8 +551,10 @@ python scripts/longterm_paper_workflow_smoke.py --journal-db path\to\journal.db 
 The workflow smoke fetches a read-only price map, records a whole-share preview
 to the paper ledger, and runs the paper execution boundary with submission
 disabled. It returns `ready_for_supervised_submit=true` only when the price map,
-preview, and execution audit are all clean. `--report-output` can persist the
-JSON artifact for operator review before a supervised submit.
+preview, buy-promotion state, and execution audit are all clean. The JSON
+includes `promotion_summary`; any missing or non-actionable buy promotion blocks
+the workflow with `buy_promotion_blocked_rows`. `--report-output` can persist
+the JSON artifact for operator review before a supervised submit.
 
 Inspect recorded preview rows:
 
@@ -583,10 +585,10 @@ python scripts/longterm_paper_execution_eligibility.py --portfolio-state path\to
 ```
 
 This command is still non-submitting. It checks decision-id traceability,
-explicit paper-execution gate state, protected symbols, intent blockers,
-preview freshness, and ready/blocked/no-order preview status. A ready result is
-only permission for a future Stage 6B submit boundary to revalidate the same
-facts; it is not a broker order.
+explicit paper-execution gate state, protected symbols, actionable buy-promotion
+state for stock BUYs, intent blockers, preview freshness, and ready/blocked/no-order
+preview status. A ready result is only permission for a future Stage 6B submit
+boundary to revalidate the same facts; it is not a broker order.
 
 Paper execution events are persisted by `PaperTradeLedger` for
 submit-blocked/submitted/rejected audit trails, with future room for
@@ -614,7 +616,8 @@ Stage 6B is deliberately narrow:
 - `--submit-paper-orders` also requires a ready, fresh `--runbook-check` artifact whose plan ID and canonical action-plan hash match the action plan being submitted.
 - `--submit-paper-orders` blocks when the Alpaca paper market clock is closed, so market BUY smoke orders are not left pending after hours.
 - Rebalance, sell, and sell-to-fund-buy previews are hard-blocked with `rebalance_blocked_v1`.
-- It revalidates protected symbols, benchmark guard, thesis/review status, decision confidence/recommendation, preview freshness, cash, active-rules hash, and duplicate submission state immediately before paper submission.
+- It revalidates protected symbols, actionable buy-promotion state, benchmark guard, thesis/review status, decision confidence/recommendation, preview freshness, cash, active-rules hash, and duplicate submission state immediately before paper submission.
+- A stock BUY missing `ACTIONABLE_BUY` promotion is blocked with `missing_buy_promotion_review` or `buy_promotion_not_actionable`, even if a stale or hand-edited action plan otherwise looks executable.
 - The real submit path refreshes Alpaca paper account state before broker calls; the portfolio JSON remains useful for audit/dry-run mode.
 - It uses deterministic `client_order_id` values for broker idempotency and records `submission_attempt_id` on every event.
 - It is not scheduler-wired and cannot submit live orders.

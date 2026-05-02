@@ -20,6 +20,19 @@ from research.intake import create_research_packet_from_idea
 from longterm.paper_runbook_check import hash_action_plan
 
 
+def _actionable_promotion(symbol="NVDA"):
+    return {
+        "symbol": symbol,
+        "promotion_decision": "ACTIONABLE_BUY",
+        "is_orderable": True,
+        "evidence_brief": "Versioned evidence packet includes thesis and article support.",
+        "evidence_version": "2026-05-02T12:00:00Z",
+        "blockers": [],
+        "followups": [],
+        "warnings": [],
+    }
+
+
 class FakePaperBroker:
     def __init__(self, *, status="pending_new", order_id="paper-order-1", fail=False):
         self.status = status
@@ -105,6 +118,7 @@ def _action_plan(decision_id, *, symbol="NVDA", intent_type="BUY", allowed=True,
                 "allowed": allowed,
                 "reason": "Candidate is ready.",
                 "decision_id": decision_id,
+                "promotion_review": _actionable_promotion(symbol),
             }
         ],
     }
@@ -326,6 +340,40 @@ def test_paper_execution_blocks_quantity_preview_without_positive_quantity(tmp_p
     assert ledger.list_execution_events(limit=1)[0]["status"] == "submit_blocked"
 
 
+def test_paper_execution_blocks_submit_when_buy_promotion_is_not_actionable(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = _record_decision(journal, symbol="VEEV")
+    _record_preview(ledger, decision_id, symbol="VEEV")
+    plan = _action_plan(decision_id, symbol="VEEV")
+    plan["intents"][0]["promotion_review"] = {
+        "promotion_decision": "WATCHLIST_PENDING_EVIDENCE",
+        "is_orderable": False,
+        "blockers": ["missing_article_evidence"],
+    }
+    broker = FakePaperBroker()
+
+    result = _boundary(tmp_path).run(
+        plan,
+        journal=journal,
+        ledger=ledger,
+        profile=PortfolioProfile(protected_symbols=["FXAIX"]),
+        portfolio_state=PortfolioState(cash=5000, protected_symbols=["FXAIX"]),
+        broker=broker,
+        submit=True,
+    )
+
+    item = result["items"][0]
+    event = ledger.list_execution_events(limit=1)[0]
+    assert result["submitted_count"] == 0
+    assert broker.calls == []
+    assert item["status"] == "submit_blocked"
+    assert item["buy_promotion_decision"] == "WATCHLIST_PENDING_EVIDENCE"
+    assert "buy_promotion_not_actionable" in item["blocked_reasons"]
+    assert event["status"] == "submit_blocked"
+    assert event["event_json"]["revalidation"]["buy_promotion"]["promotion_decision"] == "WATCHLIST_PENDING_EVIDENCE"
+
+
 def test_paper_execution_duplicate_preview_is_blocked_before_broker_call(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     ledger = PaperTradeLedger(tmp_path / "paper.db")
@@ -402,7 +450,13 @@ def test_paper_execution_excludes_parking_intents_without_blocking_simple_buy(tm
     plan = {
         "plan_id": "plan-1",
         "intents": [
-            {"symbol": "AMZN", "intent_type": "BUY", "allowed": True, "decision_id": decision_id},
+            {
+                "symbol": "AMZN",
+                "intent_type": "BUY",
+                "allowed": True,
+                "decision_id": decision_id,
+                "promotion_review": _actionable_promotion("AMZN"),
+            },
             {
                 "symbol": "SPY",
                 "intent_type": "PARK_IDLE_CASH",
@@ -453,10 +507,34 @@ def test_paper_execution_blocks_benchmark_review_decision_quality_and_cash(tmp_p
     plan = {
         "plan_id": "plan-1",
         "intents": [
-            {"symbol": "BMK", "intent_type": "BUY", "allowed": True, "decision_id": benchmark_id},
-            {"symbol": "REV", "intent_type": "BUY", "allowed": True, "decision_id": review_id},
-            {"symbol": "LOW", "intent_type": "BUY", "allowed": True, "decision_id": low_conf_id},
-            {"symbol": "CSH", "intent_type": "BUY", "allowed": True, "decision_id": cash_id},
+            {
+                "symbol": "BMK",
+                "intent_type": "BUY",
+                "allowed": True,
+                "decision_id": benchmark_id,
+                "promotion_review": _actionable_promotion("BMK"),
+            },
+            {
+                "symbol": "REV",
+                "intent_type": "BUY",
+                "allowed": True,
+                "decision_id": review_id,
+                "promotion_review": _actionable_promotion("REV"),
+            },
+            {
+                "symbol": "LOW",
+                "intent_type": "BUY",
+                "allowed": True,
+                "decision_id": low_conf_id,
+                "promotion_review": _actionable_promotion("LOW"),
+            },
+            {
+                "symbol": "CSH",
+                "intent_type": "BUY",
+                "allowed": True,
+                "decision_id": cash_id,
+                "promotion_review": _actionable_promotion("CSH"),
+            },
         ],
     }
 

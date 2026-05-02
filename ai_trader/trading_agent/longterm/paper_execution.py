@@ -205,7 +205,7 @@ class PaperExecutionBoundary:
             submission_attempt_id=attempt_id,
         )
         result = {
-            "schema_version": 1,
+            "schema_version": 2,
             "mode": "paper_execution_boundary",
             "paper_mode": True,
             "live_mode": False,
@@ -343,6 +343,16 @@ class PaperExecutionBoundary:
             blocked.append("rebalance_blocked_v1")
         if str(intent.get("order_intent") or "BUY").upper() not in {"BUY", ""}:
             blocked.append("rebalance_blocked_v1")
+        buy_promotion = _promotion_review(intent, preview)
+        buy_promotion_decision = str(buy_promotion.get("promotion_decision") or "")
+        if (
+            str(intent.get("intent_type") or "").upper() == "BUY"
+            and str(intent.get("order_intent") or "BUY").upper() in {"BUY", ""}
+        ):
+            if not buy_promotion:
+                blocked.append("missing_buy_promotion_review")
+            elif buy_promotion_decision != "ACTIONABLE_BUY":
+                blocked.append("buy_promotion_not_actionable")
         if symbol in protected:
             blocked.append("protected_symbol")
         if benchmark_paused:
@@ -386,6 +396,8 @@ class PaperExecutionBoundary:
             "ready_to_submit": not blocked,
             "status": "ready_to_submit" if not blocked else "submit_blocked",
             "blocked_reasons": blocked,
+            "buy_promotion_decision": buy_promotion_decision,
+            "buy_promotion": buy_promotion,
             "benchmark_guard_reason": benchmark_reason,
             "review_status": dict(status),
             "active_rules_hash": rules.sha256,
@@ -627,6 +639,26 @@ def _preview_quantity(preview: Mapping[str, Any] | None) -> float:
         return float(value or 0.0)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _promotion_review(
+    intent: Mapping[str, Any],
+    preview: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    review = intent.get("promotion_review")
+    if isinstance(review, Mapping):
+        return dict(review)
+    risk = intent.get("risk_review")
+    if isinstance(risk, Mapping):
+        nested = risk.get("buy_promotion")
+        if isinstance(nested, Mapping):
+            return dict(nested)
+    preview_json = (preview or {}).get("preview_json")
+    if isinstance(preview_json, Mapping):
+        preview_review = preview_json.get("promotion_review")
+        if isinstance(preview_review, Mapping):
+            return dict(preview_review)
+    return {}
 
 
 def _rules_excerpt(text: str) -> str:

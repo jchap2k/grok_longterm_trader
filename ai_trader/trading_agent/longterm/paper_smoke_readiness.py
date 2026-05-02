@@ -31,10 +31,13 @@ def build_paper_smoke_readiness_report(
         warnings.append("scheduler_readiness_warnings")
     if workflow_smoke and not bool(workflow_smoke.get("ready_for_supervised_submit")):
         blockers.append("workflow_smoke_not_ready")
+    workflow_promotion_summary = dict(workflow_smoke.get("promotion_summary") or {})
+    if int(workflow_promotion_summary.get("blocked_count") or 0) > 0:
+        blockers.append("workflow_buy_promotion_blockers")
     warnings.extend(str(item) for item in (broker_capabilities.get("warnings") or []))
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "mode": "paper_smoke_readiness",
         "order_submission_enabled": False,
         "ready_for_supervised_smoke": not blockers,
@@ -46,6 +49,7 @@ def build_paper_smoke_readiness_report(
         "broker_capabilities": dict(broker_capabilities),
         "scheduler_readiness": dict(scheduler_readiness),
         "workflow_smoke": dict(workflow_smoke),
+        "workflow_promotion_summary": workflow_promotion_summary,
         "notes": [
             "Read-only pre-flight report. No broker orders were submitted, canceled, or modified.",
             "A ready report means the artifacts look clean enough for a supervised smoke; it does not authorize automation.",
