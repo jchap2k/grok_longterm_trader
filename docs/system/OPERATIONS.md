@@ -339,6 +339,17 @@ status events to the paper ledger and writes the JSON report when requested.
 If the ledger has no submitted paper order IDs, the command writes an empty
 refresh report without opening a broker connection.
 
+Summarize the saved Monday paper artifacts before or after the smoke:
+
+```powershell
+python scripts/longterm_paper_monday_check.py --runbook path\to\paper_runbook.json --workflow-smoke path\to\paper_workflow_smoke.json --paper-smoke-readiness path\to\paper_smoke_readiness.json --runbook-check path\to\paper_runbook_check.json --status-refresh path\to\paper_order_status_refresh.json
+python scripts/longterm_paper_monday_check.py --runbook path\to\paper_runbook.json --workflow-smoke path\to\paper_workflow_smoke.json --paper-smoke-readiness path\to\paper_smoke_readiness.json --runbook-check path\to\paper_runbook_check.json --status-refresh path\to\paper_order_status_refresh.json --report-output path\to\paper_monday_operator_check.json --json
+```
+
+The Monday operator check is artifact-only. It reports whether workflow smoke,
+paper-smoke readiness, runbook-check evidence, action-plan hash, submit-command
+redaction, status-refresh errors, and paper-account cleanliness look reviewable.
+
 Reconcile the current paper snapshot against a dry-run action plan or expected
 cash before considering any paper-execution feature:
 
