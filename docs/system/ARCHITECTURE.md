@@ -44,6 +44,9 @@ Computes Fool-like financial metric sections from provider data in Python before
 `longterm/quality_growth_scorecard.py`
 Builds a deterministic non-Fool scorecard from Python fundamentals and relevant-news context. It produces quality, growth, valuation, safety, market-attention, superscore, investing-type, drawdown-band, and score-reason fields with `basis=deterministic_model`. This closes part of the Motley-Fool-style "at a glance" gap for non-Fool tickers while keeping the scores auditable and clearly separate from proprietary Fool data.
 
+`longterm/latest_earnings_enrichment.py`
+Builds structured latest-earnings context from filtered relevant-news articles and Python fundamental metrics. It extracts the latest available quarter when visible, key financial takeaways, positive and negative thesis developments, source URLs, warnings, and confidence. This gives non-Fool tickers a Fool-like recent-earnings section while preserving source and confidence boundaries.
+
 `longterm/research_runner.py`
 Builds context sections and runs the CGH decision committee through `CheapGrokHeavy`. It includes the current `ai_trader/rules/active_rules.txt` content as `active_rules_context` for the configured long-term agents, optional read-only current portfolio holdings/cash context, plus deterministic reviews and a thesis challenge section so the final decision sees the operating rules, bull case, bear case, key risks, current exposure, and kill criteria before producing a recommendation.
 

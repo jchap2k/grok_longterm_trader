@@ -144,6 +144,11 @@ def test_prompt_asks_for_source_backed_catalysts_not_motley_fool_impersonation()
                 "basis": "deterministic_model",
                 "superscore": 81,
             },
+            "latest_earnings_enrichment": {
+                "source_type": "python_latest_earnings_enrichment",
+                "quarter": "Q1",
+                "summary": "AWS growth remained durable.",
+            },
         },
         free_facts={"market_cap": "$2.8T"},
         as_of_date="2026-05-02",
@@ -158,6 +163,8 @@ def test_prompt_asks_for_source_backed_catalysts_not_motley_fool_impersonation()
     assert "Amazon signs AWS AI deal" in joined
     assert "python_quality_growth_scorecard" in joined
     assert "deterministic Python model output" in joined
+    assert "latest_earnings_enrichment" in joined
+    assert "primary earnings context" in joined
 
 
 def test_grok_research_enrichment_cli_can_normalize_offline_snapshots(tmp_path, capsys):
