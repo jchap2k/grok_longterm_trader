@@ -405,6 +405,33 @@ def test_next_actions_markdown_includes_deferred_research_queue(tmp_path):
     assert "python scripts/run_longterm_discovery.py" in markdown
 
 
+def test_next_actions_markdown_includes_account_action_plan_parking_intents(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
+    state = PortfolioState(cash=33150, protected_symbols=["FXAIX"])
+
+    markdown = build_next_actions_markdown(
+        journal,
+        profile=profile,
+        portfolio_state=state,
+        account_action_plan={
+            "intents": [
+                {
+                    "symbol": "SPY",
+                    "intent_type": "PARK_IDLE_CASH",
+                    "order_intent": "BUY",
+                    "trade_value": 33150.0,
+                    "allowed": True,
+                    "reason": "Normal regime parking.",
+                }
+            ]
+        },
+    )
+
+    assert "## Account Action Plan Intents" in markdown
+    assert "| SPY | PARK_IDLE_CASH | BUY | $33,150.00 | yes | Normal regime parking. |" in markdown
+
+
 def test_next_actions_cli_includes_persisted_deferred_research_items(tmp_path, capsys):
     journal_db = tmp_path / "journal.db"
     journal = LongTermDecisionJournal(journal_db)

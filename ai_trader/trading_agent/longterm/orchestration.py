@@ -237,18 +237,6 @@ def run_longterm_cycle(
             journal.record_recommendation_rank_snapshot(
                 journal.list_recommendation_table(limit=report_limit)
             )
-        if portfolio_state is not None:
-            next_actions_markdown = next_actions_builder_func(
-                journal,
-                profile=profile,
-                portfolio_state=portfolio_state,
-                limit=report_limit,
-                **_supported_next_actions_kwargs(
-                    next_actions_builder_func,
-                    deferred_research_queue=deferred_research_queue,
-                ),
-            )
-            next_actions_generated = bool(next_actions_markdown)
         if active_sleeve_value is not None and available_cash is not None:
             alert = capital_alert_builder_func(
                 journal,
@@ -283,6 +271,18 @@ def run_longterm_cycle(
             if hasattr(journal, "record_action_plan"):
                 journal.record_action_plan(account_action_plan)
             account_action_plan_generated = bool(account_action_plan)
+            next_actions_markdown = next_actions_builder_func(
+                journal,
+                profile=profile,
+                portfolio_state=portfolio_state,
+                limit=report_limit,
+                **_supported_next_actions_kwargs(
+                    next_actions_builder_func,
+                    deferred_research_queue=deferred_research_queue,
+                    account_action_plan=account_action_plan,
+                ),
+            )
+            next_actions_generated = bool(next_actions_markdown)
 
     return LongTermCycleResult(
         status=status,

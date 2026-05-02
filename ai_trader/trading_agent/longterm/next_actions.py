@@ -170,6 +170,7 @@ def build_next_actions_markdown(
     paper_execution_status_by_decision: dict[str, dict] | None = None,
     paper_execution_status_by_symbol: dict[str, dict] | None = None,
     paper_execution_eligibility: Mapping[str, Any] | None = None,
+    account_action_plan: Mapping[str, Any] | None = None,
     limit: int = 10,
 ) -> str:
     guard = benchmark_guard or BenchmarkGuard()
@@ -222,6 +223,8 @@ def build_next_actions_markdown(
         lines.append(
             f"| {action.priority} | {action.category} | {action.symbol} | {action.action} | {action.reason} |"
         )
+    if account_action_plan:
+        lines.extend(_account_action_plan_lines(account_action_plan))
     if deferred_research_queue:
         lines.extend(_deferred_research_queue_lines(deferred_research_queue))
     return "\n".join(lines) + "\n"
@@ -261,6 +264,41 @@ def _deferred_research_queue_lines(deferred_research_queue: list[Mapping[str, An
     if command_lines:
         lines.extend(["", "Suggested enrichment commands:", *command_lines])
     return lines
+
+
+def _account_action_plan_lines(account_action_plan: Mapping[str, Any]) -> list[str]:
+    intents = account_action_plan.get("intents") or []
+    if not isinstance(intents, list) or not intents:
+        return []
+    lines = [
+        "",
+        "## Account Action Plan Intents",
+        "",
+        "| Symbol | Intent | Order | Trade Value | Allowed | Reason |",
+        "|---|---|---|---:|---|---|",
+    ]
+    for intent in intents:
+        if not isinstance(intent, Mapping):
+            continue
+        trade_value = _format_currency(intent.get("trade_value"))
+        allowed = "yes" if bool(intent.get("allowed")) else "no"
+        lines.append(
+            "| "
+            f"{_markdown_cell(str(intent.get('symbol') or ''))} | "
+            f"{_markdown_cell(str(intent.get('intent_type') or ''))} | "
+            f"{_markdown_cell(str(intent.get('order_intent') or ''))} | "
+            f"{trade_value} | "
+            f"{allowed} | "
+            f"{_markdown_cell(str(intent.get('reason') or ''))} |"
+        )
+    return lines
+
+
+def _format_currency(value: Any) -> str:
+    try:
+        return f"${float(value):,.2f}"
+    except (TypeError, ValueError):
+        return "$0.00"
 
 
 def _format_missing_fields(value: Any) -> str:

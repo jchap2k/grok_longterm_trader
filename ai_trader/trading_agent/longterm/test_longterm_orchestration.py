@@ -806,6 +806,54 @@ def test_cycle_uses_market_regime_for_idle_cash_parking(tmp_path):
     ]
 
 
+def test_cycle_passes_account_action_plan_into_next_actions_markdown(tmp_path):
+    class RecordingRunner:
+        def run_and_record(self, packet, **kwargs):
+            return LongTermDecisionJournal(kwargs["journal_db_path"]).record_decision(
+                packet,
+                decision={
+                    "recommendation": "BUY",
+                    "confidence": 78,
+                    "suggested_size_pct": 2.5,
+                    "key_thesis": "AWS and advertising durability.",
+                },
+            )
+
+    received_plans = []
+
+    def next_actions_builder(journal, *, profile, portfolio_state, limit, account_action_plan=None):
+        received_plans.append(account_action_plan)
+        return "next actions"
+
+    run_longterm_cycle(
+        profile=PortfolioProfile(
+            account_strategy_mode="roth_ira",
+            tradable_capital=34000,
+            protected_symbols=["FXAIX"],
+            benchmark_symbol="FXAIX",
+            defensive_parking_symbol="SPY",
+        ),
+        manual_ideas=[
+            {
+                "symbol": "AMZN",
+                "company_name": "Amazon",
+                "idea_source": "manual",
+                "thesis_summary": "AWS and advertising durability.",
+            }
+        ],
+        motley_fool_settings=MotleyFoolCaptureSettings(enabled=False, cookie_ready=False),
+        runner=RecordingRunner(),
+        journal_db_path=tmp_path / "journal.db",
+        portfolio_state=PortfolioState(cash=5000, protected_symbols=["FXAIX"]),
+        market_regime=MarketRegimeSnapshot(risk_regime="normal"),
+        report_builder_func=lambda journal, *, limit: "",
+        next_actions_builder_func=next_actions_builder,
+    )
+
+    assert received_plans
+    assert received_plans[0]["intents"][1]["intent_type"] == "PARK_IDLE_CASH"
+
+
 def test_orchestration_cli_loads_market_regime_file(tmp_path, capsys):
     profile_path = tmp_path / "profile.json"
     profile_path.write_text(
