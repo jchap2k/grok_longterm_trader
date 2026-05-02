@@ -27,6 +27,15 @@ class FakeQuoteProvider:
         return FakeQuote(self.prices[symbol])
 
 
+class ChattyQuoteProvider(FakeQuoteProvider):
+    def get_quote(self, symbol):
+        print(f"quote noise for {symbol}")
+        return super().get_quote(symbol)
+
+    def close(self):
+        print("workflow provider close noise")
+
+
 def _record_decision(journal, symbol="NVDA"):
     return journal.record_decision(
         create_research_packet_from_idea(
@@ -178,6 +187,42 @@ def test_paper_workflow_smoke_cli_outputs_json(tmp_path, capsys):
 
     assert payload["ready_for_supervised_submit"] is True
     assert payload["order_submission_enabled"] is False
+
+
+def test_paper_workflow_smoke_cli_keeps_json_stdout_clean_when_provider_is_chatty(tmp_path, capsys):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    decision_id = _record_decision(journal)
+    profile_path = tmp_path / "profile.json"
+    portfolio_path = tmp_path / "portfolio.json"
+    action_plan_path = tmp_path / "action_plan.json"
+    profile_path.write_text(json.dumps({"protected_symbols": ["FXAIX"]}), encoding="utf-8")
+    portfolio_path.write_text(json.dumps({"cash": 5000, "protected_symbols": ["FXAIX"]}), encoding="utf-8")
+    action_plan_path.write_text(json.dumps(_action_plan(decision_id)), encoding="utf-8")
+    args = build_parser().parse_args(
+        [
+            "--journal-db",
+            str(journal.db_path),
+            "--ledger-db",
+            str(tmp_path / "paper.db"),
+            "--profile-config",
+            str(profile_path),
+            "--portfolio-state",
+            str(portfolio_path),
+            "--action-plan",
+            str(action_plan_path),
+            "--json",
+        ]
+    )
+
+    assert run_cli(args, quote_provider_factory=lambda: ChattyQuoteProvider({"NVDA": 193.5})) == 0
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert payload["ready_for_supervised_submit"] is True
+    assert "quote noise" not in captured.out
+    assert "workflow provider close noise" not in captured.out
+    assert "quote noise" in captured.err
+    assert "workflow provider close noise" in captured.err
 
 
 def test_paper_workflow_smoke_cli_writes_report_output(tmp_path, capsys):

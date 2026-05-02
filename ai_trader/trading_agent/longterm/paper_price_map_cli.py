@@ -33,13 +33,16 @@ def run_cli(
 ) -> int:
     profile = PortfolioProfile.from_file(args.profile_config)
     action_plan = _load_json(args.action_plan)
-    provider = quote_provider_factory() if quote_provider_factory else _default_quote_provider()
     with redirect_stdout(sys.stderr):
-        result = build_price_map_from_action_plan(
-            action_plan,
-            quote_provider=provider,
-            protected_symbols=set(profile.protected_symbols),
-        ).to_dict()
+        provider = quote_provider_factory() if quote_provider_factory else _default_quote_provider()
+        try:
+            result = build_price_map_from_action_plan(
+                action_plan,
+                quote_provider=provider,
+                protected_symbols=set(profile.protected_symbols),
+            ).to_dict()
+        finally:
+            _close_quote_provider(provider)
     if args.price_map_output:
         _write_json(args.price_map_output, result["price_map"])
     if args.json:
@@ -65,17 +68,36 @@ def _default_quote_provider() -> object:
 class _DisconnectingQuoteProvider:
     def __init__(self, broker: object):
         self.broker = broker
+        self._closed = False
 
     def get_quote(self, symbol: str) -> object:
         return self.broker.get_quote(symbol)
 
-    def __del__(self) -> None:
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
         disconnect = getattr(self.broker, "disconnect", None)
         if callable(disconnect):
-            try:
-                disconnect()
-            except Exception:
-                pass
+            disconnect()
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            pass
+
+
+def _close_quote_provider(provider: object) -> None:
+    for attr in ("close", "disconnect"):
+        method = getattr(provider, attr, None)
+        if callable(method):
+            method()
+            return
+    broker = getattr(provider, "broker", None)
+    disconnect = getattr(broker, "disconnect", None)
+    if callable(disconnect):
+        disconnect()
 
 
 def _load_json(path: str | Path) -> dict:

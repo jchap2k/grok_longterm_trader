@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
+from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Callable
 
 from longterm.decision_journal import LongTermDecisionJournal
 from longterm.orchestration_cli import DEFAULT_PROFILE_PATH
 from longterm.paper_price_map_cli import _default_quote_provider
+from longterm.paper_price_map_cli import _close_quote_provider
 from longterm.paper_trade_ledger import PaperTradeLedger
 from longterm.paper_workflow_smoke import (
     build_paper_workflow_smoke_markdown,
@@ -40,16 +43,20 @@ def run_cli(
     profile = PortfolioProfile.from_file(args.profile_config)
     state = PortfolioState.from_file(args.portfolio_state, profile=profile)
     action_plan = _load_json(args.action_plan)
-    provider = quote_provider_factory() if quote_provider_factory else _default_quote_provider()
-    report = build_paper_workflow_smoke_report(
-        action_plan,
-        journal=LongTermDecisionJournal(args.journal_db),
-        ledger=PaperTradeLedger(args.ledger_db),
-        profile=profile,
-        portfolio_state=state,
-        quote_provider=provider,
-        max_preview_age_hours=args.max_preview_age_hours,
-    )
+    with redirect_stdout(sys.stderr):
+        provider = quote_provider_factory() if quote_provider_factory else _default_quote_provider()
+        try:
+            report = build_paper_workflow_smoke_report(
+                action_plan,
+                journal=LongTermDecisionJournal(args.journal_db),
+                ledger=PaperTradeLedger(args.ledger_db),
+                profile=profile,
+                portfolio_state=state,
+                quote_provider=provider,
+                max_preview_age_hours=args.max_preview_age_hours,
+            )
+        finally:
+            _close_quote_provider(provider)
     if args.report_output:
         Path(args.report_output).write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
     if args.json:

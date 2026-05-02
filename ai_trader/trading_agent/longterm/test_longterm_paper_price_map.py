@@ -27,6 +27,20 @@ class FakeQuoteProvider:
         return FakeQuote(value)
 
 
+class ChattyQuoteProvider(FakeQuoteProvider):
+    def get_quote(self, symbol):
+        print(f"price noise for {symbol}")
+        return super().get_quote(symbol)
+
+    def close(self):
+        print("provider close noise")
+
+
+def _chatty_provider_factory():
+    print("provider factory noise")
+    return ChattyQuoteProvider({"NVDA": 910.0})
+
+
 def test_price_map_fetches_buy_and_rebalance_symbols_without_protected_symbols():
     plan = {
         "intents": [
@@ -95,3 +109,31 @@ def test_price_map_cli_outputs_json_and_price_map_file(tmp_path, capsys):
 
     assert payload["price_map"] == {"NVDA": 910.0}
     assert written == {"NVDA": 910.0}
+
+
+def test_price_map_cli_keeps_json_stdout_clean_when_provider_is_chatty(tmp_path, capsys):
+    profile_path = tmp_path / "profile.json"
+    plan_path = tmp_path / "plan.json"
+    profile_path.write_text(json.dumps({"protected_symbols": ["FXAIX"]}), encoding="utf-8")
+    plan_path.write_text(json.dumps({"intents": [{"symbol": "NVDA", "intent_type": "BUY"}]}), encoding="utf-8")
+    args = build_parser().parse_args(
+        [
+            "--profile-config",
+            str(profile_path),
+            "--action-plan",
+            str(plan_path),
+            "--json",
+        ]
+    )
+
+    assert run_cli(args, quote_provider_factory=_chatty_provider_factory) == 0
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert payload["price_map"] == {"NVDA": 910.0}
+    assert "price noise" not in captured.out
+    assert "provider factory noise" not in captured.out
+    assert "provider close noise" not in captured.out
+    assert "price noise" in captured.err
+    assert "provider factory noise" in captured.err
+    assert "provider close noise" in captured.err
