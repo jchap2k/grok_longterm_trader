@@ -121,16 +121,27 @@ news pass filters duplicate URLs and generic price-action headlines, then keeps
 only thesis-relevant articles with catalyst categories such as earnings,
 product/technology, contracts, regulatory events, M&A, or management changes.
 
+Also enrich the batch with Python-computed fundamental metric tables before
+Grok synthesis. This closes part of the gap with Fool company pages without
+asking Grok to invent numbers. Snapshot mode accepts symbol-keyed raw
+fundamentals from any provider; yfinance mode is a free fallback for non-Fool
+tickers.
+
+```powershell
+python scripts/longterm_fundamental_metrics_enrichment.py --idea-batch path\to\research_ideas.json --snapshot-file path\to\fundamentals_raw.json --output path\to\research_ideas.fundamentals_enriched.json
+python scripts/longterm_fundamental_metrics_enrichment.py --idea-batch path\to\research_ideas.json --provider yfinance --output path\to\research_ideas.fundamentals_enriched.json --limit 5
+```
+
 Offline/snapshot mode for development:
 
 ```powershell
-python scripts/longterm_news_relevance_enrichment.py --idea-batch path\to\research_ideas.json --snapshot-file path\to\raw_news.json --output path\to\research_ideas.news_enriched.json
+python scripts/longterm_news_relevance_enrichment.py --idea-batch path\to\research_ideas.fundamentals_enriched.json --snapshot-file path\to\raw_news.json --output path\to\research_ideas.news_enriched.json
 ```
 
 Live Polygon mode, when `POLYGON_API_KEY` is configured:
 
 ```powershell
-python scripts/longterm_news_relevance_enrichment.py --idea-batch path\to\research_ideas.json --cache-path path\to\polygon_news_cache.json --published-after 2026-04-01 --output path\to\research_ideas.news_enriched.json --rate-limit-batch-size 5 --rate-limit-pause-seconds 66
+python scripts/longterm_news_relevance_enrichment.py --idea-batch path\to\research_ideas.fundamentals_enriched.json --cache-path path\to\polygon_news_cache.json --published-after 2026-04-01 --output path\to\research_ideas.news_enriched.json --rate-limit-batch-size 5 --rate-limit-pause-seconds 66
 ```
 
 For broad universe work, prefer overnight batches over paid speed upgrades.
