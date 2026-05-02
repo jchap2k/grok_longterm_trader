@@ -197,6 +197,13 @@ Live xAI mode, when `XAI_API_KEY` is configured:
 python scripts/longterm_grok_research_enrichment.py --idea-batch path\to\research_ideas.earnings_enriched.json --facts-file path\to\finnhub_facts.json --output path\to\research_ideas.grok_enriched.json --limit 5
 ```
 
+When `relevant_news` is present, Grok enrichment should produce
+`article_evidence_summaries` for the strongest primary-company articles. These
+summaries are snippet-grounded: they summarize only the article title, provider
+summary/snippet, source, date, URL, relevance, and impact category already in
+the enrichment payload. They are useful for the research committee, but they are
+not proof that the full article page was opened or read.
+
 Write research-ready candidates as an idea batch for the existing research
 cycle:
 

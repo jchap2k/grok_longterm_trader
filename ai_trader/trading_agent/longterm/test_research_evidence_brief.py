@@ -78,6 +78,20 @@ def _enriched_idea() -> dict:
         ],
         "grok_research_enrichment": {
             "confidence": 0.85,
+            "article_evidence_summaries": [
+                {
+                    "title": "Amazon reports AWS growth and advertising margin expansion in Q1",
+                    "url": "https://example.com/amzn-earnings",
+                    "source": "Yahoo Finance",
+                    "date": "2026-05-01",
+                    "summary": "AWS and advertising growth offset retail margin pressure.",
+                    "thesis_relevance": "Supports the durable cloud and ads thesis.",
+                    "key_facts": ["AWS growth stayed durable.", "Advertising margins expanded."],
+                    "risk_flags": ["AI capex remains elevated."],
+                    "confidence": 0.82,
+                    "basis": "snippet_grounded",
+                }
+            ],
             "thesis_relevant_catalysts": [
                 "AWS achieved 28% Q1 revenue growth and remains an AI infrastructure leader.",
                 "Advertising growth diversifies the thesis beyond ecommerce.",
@@ -103,6 +117,9 @@ def test_build_research_evidence_brief_summarizes_enriched_context():
     assert "AWS growth and advertising margin expansion" in brief
     assert "Primary news:" in brief
     assert "Amazon Just Proved It's No Longer an AI Underdog" in brief
+    assert "Article evidence:" in brief
+    assert "AWS and advertising growth offset retail margin pressure" in brief
+    assert "snippet_grounded" in brief
     assert "Grok catalyst synthesis:" in brief
     assert "AWS achieved 28% Q1 revenue growth" in brief
     assert "Warnings:" in brief

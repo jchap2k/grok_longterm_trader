@@ -36,6 +36,20 @@ def _raw_enrichment(symbol: str = "AMZN") -> dict:
                 "confidence": 0.78,
             }
         ],
+        "article_evidence_summaries": [
+            {
+                "title": "Amazon reports AWS growth and advertising margin expansion in Q1",
+                "url": "https://example.com/amzn-earnings",
+                "source": "Yahoo Finance",
+                "date": "2026-05-01",
+                "summary": "AWS and advertising growth offset retail margin pressure.",
+                "thesis_relevance": "Supports the durable cloud and ads thesis.",
+                "key_facts": ["AWS growth stayed durable.", "Advertising margins expanded."],
+                "risk_flags": ["AI capex remains elevated."],
+                "confidence": 0.82,
+                "basis": "snippet_grounded",
+            }
+        ],
         "bull_cases": ["AWS can keep compounding at high margins."],
         "bear_cases": ["AI capex could pressure free cash flow."],
         "thesis_watch_items": ["AWS growth", "free cash flow after capex"],
@@ -72,12 +86,16 @@ def test_normalize_grok_research_result_requires_source_urls_and_model_estimate_
     assert normalized["model_estimated_scores"]["basis"] == "model_estimate"
     assert normalized["source_urls"] == ["https://example.com/amzn-earnings"]
     assert normalized["warnings"] == []
+    assert normalized["article_evidence_summaries"][0]["basis"] == "snippet_grounded"
+    assert normalized["article_evidence_summaries"][0]["confidence"] == 0.82
+    assert "AWS growth stayed durable." in normalized["article_evidence_summaries"][0]["key_facts"]
 
 
 def test_unsourced_grok_research_result_is_warned_not_silently_trusted():
     raw = _raw_enrichment()
     raw["source_urls"] = []
     raw["thesis_relevant_catalysts"][0]["source_urls"] = []
+    raw["article_evidence_summaries"][0]["url"] = ""
 
     normalized = normalize_grok_research_result(
         raw,
@@ -165,6 +183,8 @@ def test_prompt_asks_for_source_backed_catalysts_not_motley_fool_impersonation()
     assert "deterministic Python model output" in joined
     assert "latest_earnings_enrichment" in joined
     assert "primary earnings context" in joined
+    assert "article_evidence_summaries" in joined
+    assert "snippet-grounded" in joined
 
 
 def test_grok_research_enrichment_cli_can_normalize_offline_snapshots(tmp_path, capsys):

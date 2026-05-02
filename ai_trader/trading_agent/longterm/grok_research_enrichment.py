@@ -170,12 +170,17 @@ def normalize_grok_research_result(
     warnings = _string_list(raw.get("warnings"))
     source_urls = _dedupe(_string_list(raw.get("source_urls")))
     catalysts = [_normalize_catalyst(item) for item in _mapping_list(raw.get("thesis_relevant_catalysts"))]
+    article_summaries = [
+        _normalize_article_evidence_summary(item)
+        for item in _mapping_list(raw.get("article_evidence_summaries"))
+    ]
     catalyst_urls = [
         url
         for catalyst in catalysts
         for url in _string_list(catalyst.get("source_urls"))
     ]
-    source_urls = _dedupe([*source_urls, *catalyst_urls])
+    article_urls = [item["url"] for item in article_summaries if item.get("url")]
+    source_urls = _dedupe([*source_urls, *catalyst_urls, *article_urls])
     if not source_urls and not allow_unsourced and "missing_source_urls" not in warnings:
         warnings.append("missing_source_urls")
 
@@ -193,6 +198,7 @@ def normalize_grok_research_result(
         "source_type": "grok_research_enrichment",
         "business_summary": str(raw.get("business_summary") or ""),
         "earnings_summary": dict(raw.get("earnings_summary") or {}),
+        "article_evidence_summaries": article_summaries,
         "thesis_relevant_catalysts": catalysts,
         "bull_cases": _string_list(raw.get("bull_cases")),
         "bear_cases": _string_list(raw.get("bear_cases")),
@@ -234,7 +240,10 @@ def build_grok_research_messages(
         "news_instruction": (
             "If relevant_news is supplied, use only those article titles, URLs, "
             "dates, summaries, relevance scores, and impact categories when "
-            "writing latest developments or news-backed catalysts."
+            "writing latest developments or news-backed catalysts. Also create "
+            "article_evidence_summaries for the top primary-company articles. "
+            "These summaries are snippet-grounded: summarize only the supplied "
+            "title/summary/metadata unless full article text is explicitly provided."
         ),
         "scorecard_instruction": (
             "If python_quality_growth_scorecard is supplied, treat it as a "
@@ -263,6 +272,20 @@ def build_grok_research_messages(
                     "evidence": "source-backed evidence",
                     "source_urls": ["https://..."],
                     "confidence": 0.0,
+                }
+            ],
+            "article_evidence_summaries": [
+                {
+                    "title": "article title",
+                    "url": "https://...",
+                    "source": "publisher/source",
+                    "date": "YYYY-MM-DD",
+                    "summary": "snippet-grounded article summary",
+                    "thesis_relevance": "why this matters to the long-term thesis",
+                    "key_facts": ["fact from supplied snippet"],
+                    "risk_flags": ["risk from supplied snippet"],
+                    "confidence": 0.0,
+                    "basis": "snippet_grounded",
                 }
             ],
             "bull_cases": ["source-backed bull case"],
@@ -343,6 +366,21 @@ def _normalize_catalyst(value: Mapping[str, Any]) -> dict[str, Any]:
         "evidence": str(value.get("evidence") or ""),
         "source_urls": _dedupe(_string_list(value.get("source_urls"))),
         "confidence": _bounded_float(value.get("confidence"), default=0.0),
+    }
+
+
+def _normalize_article_evidence_summary(value: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "title": str(value.get("title") or ""),
+        "url": str(value.get("url") or ""),
+        "source": str(value.get("source") or ""),
+        "date": str(value.get("date") or ""),
+        "summary": str(value.get("summary") or ""),
+        "thesis_relevance": str(value.get("thesis_relevance") or ""),
+        "key_facts": _string_list(value.get("key_facts")),
+        "risk_flags": _string_list(value.get("risk_flags")),
+        "confidence": _bounded_float(value.get("confidence"), default=0.0),
+        "basis": str(value.get("basis") or "snippet_grounded"),
     }
 
 

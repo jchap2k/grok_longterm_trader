@@ -16,6 +16,7 @@ Fundamentals: factual provider metrics aligned to quality, growth, valuation, an
 Scorecard: deterministic non-Fool quality-growth scorecard, not proprietary Fool data.
 Latest earnings: source-filtered earnings context with confidence and thesis developments.
 Primary news: primary-company articles only, with source, impact, relevance, and subject score.
+Article evidence: snippet-grounded Grok summaries of the primary articles when present.
 Grok catalyst synthesis: source-backed catalyst narrative when present, labeled separately.
 Warnings: thin coverage, provider gaps, valuation/safety concerns, and model/source caveats.
 """
@@ -54,6 +55,9 @@ def build_research_evidence_brief(
         sections.append(f"Primary news: {news}")
 
     grok = _grok_section(idea.get("grok_research_enrichment"))
+    article_evidence = _article_evidence_section(idea.get("grok_research_enrichment"))
+    if article_evidence:
+        sections.append(f"Article evidence: {article_evidence}")
     if grok:
         sections.append(f"Grok catalyst synthesis: {grok}")
 
@@ -168,6 +172,45 @@ def _grok_section(value: Any) -> str:
     if risks:
         parts.append(f"risks {', '.join(risks)}")
     return _join_parts(parts)
+
+
+def _article_evidence_section(value: Any) -> str:
+    if not isinstance(value, Mapping):
+        return ""
+    articles = value.get("article_evidence_summaries")
+    if not isinstance(articles, list):
+        return ""
+    parts = []
+    for item in articles[:DEFAULT_MAX_NEWS_ITEMS]:
+        if not isinstance(item, Mapping):
+            continue
+        title = _clean(item.get("title"))
+        summary = _clean(item.get("summary"))
+        if not title and not summary:
+            continue
+        meta = _join_parts(
+            [
+                _metric("source", item.get("source")),
+                _metric("date", item.get("date")),
+                _metric("confidence", item.get("confidence")),
+                _metric("basis", item.get("basis")),
+            ],
+            separator=", ",
+        )
+        facts = _list_items(item.get("key_facts"), limit=2)
+        risks = _list_items(item.get("risk_flags"), limit=2)
+        article_parts = [
+            title,
+            summary,
+            _metric("thesis relevance", item.get("thesis_relevance")),
+        ]
+        if facts:
+            article_parts.append(f"facts {', '.join(facts)}")
+        if risks:
+            article_parts.append(f"risks {', '.join(risks)}")
+        body = _join_parts(article_parts)
+        parts.append(f"{body} ({meta})" if meta else body)
+    return " | ".join(parts)
 
 
 def _warnings_section(idea: Mapping[str, Any]) -> str:
