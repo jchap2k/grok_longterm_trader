@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from longterm.motley_fool_setup import MotleyFoolSetupResult
 from longterm.motley_fool_settings import MotleyFoolCaptureSettings
 from longterm.decision_journal import LongTermDecisionJournal
+from longterm.idle_cash_policy import MarketRegimeSnapshot
 from longterm.orchestration_cli import build_parser, run_cli
 from longterm.orchestration import run_longterm_cycle
 from longterm.portfolio_state import PortfolioState
@@ -758,6 +759,81 @@ def test_cycle_passes_portfolio_state_into_research_runner(tmp_path):
 
     assert result.decision_ids == ["decision-AMZN"]
     assert runner.portfolio_states == [portfolio_state]
+
+
+def test_cycle_uses_market_regime_for_idle_cash_parking(tmp_path):
+    class RecordingRunner:
+        def run_and_record(self, packet, **kwargs):
+            return LongTermDecisionJournal(kwargs["journal_db_path"]).record_decision(
+                packet,
+                decision={
+                    "recommendation": "BUY",
+                    "confidence": 78,
+                    "suggested_size_pct": 2.5,
+                    "key_thesis": "AWS and advertising durability.",
+                },
+            )
+
+    result = run_longterm_cycle(
+        profile=PortfolioProfile(
+            account_strategy_mode="roth_ira",
+            tradable_capital=34000,
+            protected_symbols=["FXAIX"],
+            benchmark_symbol="FXAIX",
+            defensive_parking_symbol="SPY",
+        ),
+        manual_ideas=[
+            {
+                "symbol": "AMZN",
+                "company_name": "Amazon",
+                "idea_source": "manual",
+                "thesis_summary": "AWS and advertising durability.",
+            }
+        ],
+        motley_fool_settings=MotleyFoolCaptureSettings(enabled=False, cookie_ready=False),
+        runner=RecordingRunner(),
+        journal_db_path=tmp_path / "journal.db",
+        portfolio_state=PortfolioState(cash=5000, protected_symbols=["FXAIX"]),
+        market_regime=MarketRegimeSnapshot(risk_regime="normal"),
+        report_builder_func=lambda journal, *, limit: "",
+        next_actions_builder_func=lambda journal, *, profile, portfolio_state, limit: "",
+    )
+
+    intents = result.account_action_plan["intents"]
+    assert [(intent["symbol"], intent["intent_type"], intent["trade_value"]) for intent in intents] == [
+        ("AMZN", "BUY", 850.0),
+        ("SPY", "PARK_IDLE_CASH", 4150.0),
+    ]
+
+
+def test_orchestration_cli_loads_market_regime_file(tmp_path, capsys):
+    profile_path = tmp_path / "profile.json"
+    profile_path.write_text(
+        '{"account_strategy_mode":"roth_ira","tradable_capital":35000,"protected_symbols":["FXAIX"],"benchmark_symbol":"FXAIX","defensive_parking_symbol":"SPY"}',
+        encoding="utf-8",
+    )
+    regime_path = tmp_path / "regime.json"
+    regime_path.write_text('{"vix_level":35,"spy_above_200d":false,"ten_year_yield_trend":"falling"}', encoding="utf-8")
+    cycle_calls = []
+
+    def fake_cycle(**kwargs):
+        cycle_calls.append(kwargs)
+        return {"status": "completed", "total_idea_count": 0}
+
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--profile-config",
+            str(profile_path),
+            "--market-regime-file",
+            str(regime_path),
+        ]
+    )
+
+    exit_code = run_cli(args, cycle_func=fake_cycle)
+
+    assert exit_code == 0
+    assert cycle_calls[0]["market_regime"].risk_regime == "equity_panic_falling_rates"
 
 
 def test_orchestration_cli_loads_idea_file_and_prints_summary(tmp_path, capsys):

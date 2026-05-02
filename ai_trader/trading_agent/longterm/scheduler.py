@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from longterm.discovery_enrichment import apply_discovery_enrichment, load_discovery_enrichment_file
+from longterm.idle_cash_policy import load_market_regime_snapshot
 from longterm.motley_fool_settings import load_motley_fool_capture_settings
 from longterm.orchestration import run_longterm_cycle
 from longterm.orchestration_cli import _load_manual_ideas
@@ -31,6 +32,7 @@ class LongTermSchedulerInputs:
     motley_fool_config: str | Path | None = None
     journal_db: str | Path | None = None
     portfolio_state: str | Path | None = None
+    market_regime_file: str | Path | None = None
     agent_config: str | Path | None = None
     agent_preset: str = "decision_4"
     launch_login_if_needed: bool = False
@@ -105,6 +107,11 @@ def build_cycle_kwargs(inputs: LongTermSchedulerInputs) -> dict[str, Any]:
         "motley_fool_settings": settings,
         "journal_db_path": inputs.journal_db,
         "portfolio_state": portfolio_state,
+        "market_regime": (
+            load_market_regime_snapshot(inputs.market_regime_file)
+            if inputs.market_regime_file
+            else None
+        ),
         "agent_preset": inputs.agent_preset,
         "launch_login_if_needed": inputs.launch_login_if_needed,
         "active_sleeve_value": inputs.active_sleeve_value,

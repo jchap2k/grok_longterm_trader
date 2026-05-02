@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+from pathlib import Path
 from typing import Mapping
 
 from portfolio.portfolio_profile import PortfolioProfile
@@ -73,6 +75,27 @@ class MarketRegimeSnapshot:
             ten_year_yield_trend=yield_trend,
             reason="Constructive or unconfirmed regime defaults to normal parking.",
         )
+
+
+def load_market_regime_snapshot(path: str | Path) -> MarketRegimeSnapshot:
+    """Load an explicit regime snapshot from JSON."""
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("Market regime file must contain a JSON object.")
+    if payload.get("risk_regime"):
+        return MarketRegimeSnapshot(
+            risk_regime=str(payload.get("risk_regime") or "normal"),
+            vix_level=payload.get("vix_level"),
+            spy_above_200d=payload.get("spy_above_200d"),
+            ten_year_yield_trend=str(payload.get("ten_year_yield_trend") or ""),
+            reason=str(payload.get("reason") or ""),
+        )
+    return MarketRegimeSnapshot.from_signals(
+        vix_level=payload.get("vix_level"),
+        spy_above_200d=payload.get("spy_above_200d"),
+        ten_year_yield_trend=str(payload.get("ten_year_yield_trend") or ""),
+        inflation_pressure=bool(payload.get("inflation_pressure") or False),
+    )
 
 
 @dataclass(frozen=True)
@@ -161,6 +184,7 @@ def _normalize_regime(value: str) -> str:
 
 __all__ = [
     "IdleCashDeploymentPolicy",
+    "load_market_regime_snapshot",
     "MarketRegimeSnapshot",
     "ParkingAllocation",
 ]

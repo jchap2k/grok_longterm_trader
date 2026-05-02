@@ -10,6 +10,7 @@ from typing import Any
 
 from longterm.discovery_enrichment import apply_discovery_enrichment, load_discovery_enrichment_file
 from longterm.discovery_sources import load_candidate_source_file
+from longterm.idle_cash_policy import load_market_regime_snapshot
 from longterm.motley_fool_settings import load_motley_fool_capture_settings
 from longterm.orchestration import run_longterm_cycle
 from longterm.portfolio_state import PortfolioState
@@ -33,6 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--motley-fool-config", default=None)
     parser.add_argument("--journal-db", default=None)
     parser.add_argument("--portfolio-state", default="")
+    parser.add_argument("--market-regime-file", default="")
     parser.add_argument("--agent-config", default=None)
     parser.add_argument("--agent-preset", default="decision_4")
     parser.add_argument("--launch-login-if-needed", action="store_true")
@@ -70,6 +72,11 @@ def run_cli(
         "motley_fool_settings": settings,
         "journal_db_path": args.journal_db,
         "portfolio_state": portfolio_state,
+        "market_regime": (
+            load_market_regime_snapshot(args.market_regime_file)
+            if args.market_regime_file
+            else None
+        ),
         "agent_preset": args.agent_preset,
         "launch_login_if_needed": args.launch_login_if_needed,
         "active_sleeve_value": args.active_sleeve_value,

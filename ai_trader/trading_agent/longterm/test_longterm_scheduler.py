@@ -48,6 +48,25 @@ def test_build_cycle_kwargs_loads_fresh_portfolio_state_each_time(tmp_path):
     assert second["verbose"] is False
 
 
+def test_build_cycle_kwargs_loads_market_regime_file(tmp_path):
+    profile_path = tmp_path / "profile.json"
+    _write_profile(profile_path)
+    regime_path = tmp_path / "regime.json"
+    regime_path.write_text(
+        '{"vix_level":35,"spy_above_200d":false,"ten_year_yield_trend":"rising"}',
+        encoding="utf-8",
+    )
+
+    kwargs = build_cycle_kwargs(
+        LongTermSchedulerInputs(
+            profile_config=profile_path,
+            market_regime_file=regime_path,
+        )
+    )
+
+    assert kwargs["market_regime"].risk_regime == "inflation_rate_shock"
+
+
 def test_build_cycle_kwargs_loads_discovery_source_file(tmp_path):
     profile_path = tmp_path / "profile.json"
     _write_profile(profile_path)
@@ -270,6 +289,40 @@ def test_scheduler_cli_forwards_inputs_and_prints_summary(tmp_path, capsys):
     assert inputs.launch_login_if_needed is True
     assert inputs.quiet is True
     assert config.max_runs == 1
+
+
+def test_scheduler_cli_forwards_market_regime_file(tmp_path, capsys):
+    profile_path = tmp_path / "profile.json"
+    _write_profile(profile_path)
+    regime_path = tmp_path / "regime.json"
+    regime_path.write_text('{"risk_regime":"normal"}', encoding="utf-8")
+    scheduler_calls = []
+
+    def fake_scheduler(*, inputs, config):
+        scheduler_calls.append((inputs, config))
+        return {
+            "status": "completed",
+            "run_count": 1,
+            "success_count": 1,
+            "error_count": 0,
+            "runs": [],
+        }
+
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--profile-config",
+            str(profile_path),
+            "--market-regime-file",
+            str(regime_path),
+            "--run-once",
+        ]
+    )
+
+    exit_code = run_cli(args, scheduler_func=fake_scheduler)
+
+    assert exit_code == 0
+    assert scheduler_calls[0][0].market_regime_file == regime_path
 
 
 def test_scheduler_cli_forwards_discovery_source_file(tmp_path, capsys):

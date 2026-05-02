@@ -12,6 +12,7 @@ from longterm.capital_alert import build_capital_needed_alert
 from longterm.decision_journal import LongTermDecisionJournal
 from longterm.benchmark_guard import BenchmarkGuard
 from longterm.discovery import DiscoveryEngine
+from longterm.idle_cash_policy import MarketRegimeSnapshot
 from longterm.motley_fool_capture import capture_motley_fool_ideas
 from longterm.motley_fool_settings import (
     MotleyFoolCaptureSettings,
@@ -81,6 +82,7 @@ def run_longterm_cycle(
     runner: LongTermResearchRunner | Any | None = None,
     journal_db_path: str | Path | None = None,
     portfolio_state: PortfolioState | None = None,
+    market_regime: MarketRegimeSnapshot | None = None,
     report_builder_func: Callable[..., str] = build_markdown_report,
     next_actions_builder_func: Callable[..., str] = build_next_actions_markdown,
     capital_alert_builder_func: Callable[..., Any] = build_capital_needed_alert,
@@ -268,7 +270,10 @@ def run_longterm_cycle(
             )
             rebalance_markdown = _rebalance_markdown(proposal)
             rebalance_generated = proposal.should_rebalance
-            plan = (account_action_plan_builder or AccountActionPlanBuilder()).build(
+            plan_builder = account_action_plan_builder or AccountActionPlanBuilder(
+                market_regime=market_regime,
+            )
+            plan = plan_builder.build(
                 journal,
                 profile=profile,
                 portfolio_state=portfolio_state,

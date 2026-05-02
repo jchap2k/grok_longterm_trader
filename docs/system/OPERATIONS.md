@@ -768,6 +768,27 @@ Add dry-run capital-needed alert markdown to the same cycle result:
 python scripts/run_longterm_cycle.py --idea-batch path\to\ideas.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --active-sleeve-value 35000 --available-cash 500
 ```
 
+Optionally provide a market-regime file so the dry-run account action plan can
+park leftover active-sleeve cash instead of leaving it idle:
+
+```powershell
+python scripts/run_longterm_cycle.py --idea-batch path\to\ideas.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --market-regime-file path\to\market_regime.json
+```
+
+Example `market_regime.json`:
+
+```json
+{
+  "vix_level": 35,
+  "spy_above_200d": false,
+  "ten_year_yield_trend": "falling"
+}
+```
+
+If `risk_regime` is supplied directly, it is used as the explicit operator
+classification. Otherwise, the file is classified from the supplied signals.
+This remains dry-run planning only; it does not submit broker orders.
+
 Cycle result JSON includes operator artifacts:
 - `idea_provenance_summary`
 - `packet_completeness_warnings`
