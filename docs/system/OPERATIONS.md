@@ -1032,7 +1032,9 @@ Observed fragments are merged after the base observed file, so later fragments
 can intentionally override earlier gate values.
 The bundle command assembles broker-capability, paper-trading verification, and
 optional paper-smoke readiness evidence from local artifacts, but it is still
-evidence-only and does not enable live execution.
+evidence-only and does not enable live execution. Paper-smoke readiness counts
+only when the artifact is promotion-aware schema v2 or newer and has no
+buy-promotion blockers.
 
 Run exactly one scheduled cycle:
 

@@ -46,6 +46,18 @@ def _base_observed():
     }
 
 
+def _ready_paper_smoke():
+    return {
+        "schema_version": 2,
+        "ready_for_supervised_smoke": True,
+        "workflow_promotion_summary": {
+            "blocked_count": 0,
+            "missing_count": 0,
+            "non_actionable_count": 0,
+        },
+    }
+
+
 def test_live_readiness_bundle_combines_base_broker_and_paper_evidence(tmp_path):
     ledger = PaperTradeLedger(tmp_path / "paper.db")
     _filled_event(ledger)
@@ -53,7 +65,7 @@ def test_live_readiness_bundle_combines_base_broker_and_paper_evidence(tmp_path)
     bundle = build_live_readiness_bundle(
         base_observed=_base_observed(),
         paper_ledger=ledger,
-        paper_smoke_readiness={"ready_for_supervised_smoke": True},
+        paper_smoke_readiness=_ready_paper_smoke(),
         required_order_model="whole_share",
     )
 
@@ -82,6 +94,36 @@ def test_live_readiness_bundle_blocks_when_paper_smoke_not_ready(tmp_path):
     assert bundle["observed"]["paper_smoke_ready"] is False
 
 
+def test_live_readiness_bundle_blocks_old_or_promotion_blocked_paper_smoke(tmp_path):
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    _filled_event(ledger)
+
+    old_bundle = build_live_readiness_bundle(
+        base_observed=_base_observed(),
+        paper_ledger=ledger,
+        paper_smoke_readiness={"schema_version": 1, "ready_for_supervised_smoke": True},
+        required_order_model="whole_share",
+    )
+    blocked_bundle = build_live_readiness_bundle(
+        base_observed=_base_observed(),
+        paper_ledger=ledger,
+        paper_smoke_readiness={
+            "schema_version": 2,
+            "ready_for_supervised_smoke": True,
+            "workflow_promotion_summary": {"blocked_count": 1, "non_actionable_count": 1},
+        },
+        required_order_model="whole_share",
+    )
+
+    assert old_bundle["ready"] is False
+    assert old_bundle["observed"]["paper_smoke_ready"] is False
+    assert "paper_smoke_ready" in old_bundle["unmet_gate_keys"]
+    assert old_bundle["paper_smoke_safety"]["schema_ok"] is False
+    assert blocked_bundle["ready"] is False
+    assert blocked_bundle["observed"]["paper_smoke_ready"] is False
+    assert blocked_bundle["paper_smoke_safety"]["promotion_blocked_count"] == 1
+
+
 def test_live_readiness_bundle_keeps_notional_fractional_schwab_mismatch_unmet(tmp_path):
     ledger = PaperTradeLedger(tmp_path / "paper.db")
     _filled_event(ledger)
@@ -89,7 +131,7 @@ def test_live_readiness_bundle_keeps_notional_fractional_schwab_mismatch_unmet(t
     bundle = build_live_readiness_bundle(
         base_observed=_base_observed(),
         paper_ledger=ledger,
-        paper_smoke_readiness={"ready_for_supervised_smoke": True},
+        paper_smoke_readiness=_ready_paper_smoke(),
         required_order_model="notional_fractional",
     )
 
@@ -104,7 +146,7 @@ def test_live_readiness_bundle_cli_outputs_json(tmp_path, capsys):
     base_path = tmp_path / "base.json"
     smoke_path = tmp_path / "paper_smoke.json"
     base_path.write_text(json.dumps(_base_observed()), encoding="utf-8")
-    smoke_path.write_text(json.dumps({"ready_for_supervised_smoke": True}), encoding="utf-8")
+    smoke_path.write_text(json.dumps(_ready_paper_smoke()), encoding="utf-8")
     parser = build_parser()
     args = parser.parse_args(
         [
@@ -135,7 +177,7 @@ def test_live_readiness_bundle_cli_writes_report_output(tmp_path, capsys):
     smoke_path = tmp_path / "paper_smoke.json"
     report_path = tmp_path / "live_readiness_bundle.json"
     base_path.write_text(json.dumps(_base_observed()), encoding="utf-8")
-    smoke_path.write_text(json.dumps({"ready_for_supervised_smoke": True}), encoding="utf-8")
+    smoke_path.write_text(json.dumps(_ready_paper_smoke()), encoding="utf-8")
     args = build_parser().parse_args(
         [
             "--observed-file",

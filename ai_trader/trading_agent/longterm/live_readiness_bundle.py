@@ -9,6 +9,8 @@ from longterm.live_readiness import LiveReadinessChecklist
 from longterm.paper_trade_ledger import PaperTradeLedger
 from longterm.paper_trading_verification import build_paper_trading_verification_report
 
+MIN_PROMOTION_AWARE_SCHEMA_VERSION = 2
+
 
 def build_live_readiness_bundle(
     *,
@@ -39,10 +41,11 @@ def build_live_readiness_bundle(
     observed.update(broker.get("live_readiness_observed") or {})
     observed.update(paper.get("live_readiness_observed") or {})
     smoke = dict(paper_smoke_readiness or {})
-    observed["paper_smoke_ready"] = bool(smoke.get("ready_for_supervised_smoke"))
+    smoke_safety = _paper_smoke_safety(smoke)
+    observed["paper_smoke_ready"] = bool(smoke_safety["ready"])
     result = LiveReadinessChecklist.default().evaluate(observed)
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "mode": "live_readiness_bundle",
         "order_submission_enabled": False,
         "ready": result.ready,
@@ -52,6 +55,7 @@ def build_live_readiness_bundle(
         "broker_capabilities": broker,
         "paper_trading_verification": paper,
         "paper_smoke_readiness": smoke,
+        "paper_smoke_safety": smoke_safety,
         "notes": [
             "Read-only evidence bundle. No broker orders were submitted, canceled, or modified.",
             "A ready checklist does not enable live trading; it only summarizes local evidence.",
@@ -88,6 +92,38 @@ def build_live_readiness_bundle_markdown(bundle: Mapping[str, Any]) -> str:
             )
         )
     return "\n".join(lines) + "\n"
+
+
+def _paper_smoke_safety(smoke: Mapping[str, Any]) -> dict[str, Any]:
+    promotion = smoke.get("workflow_promotion_summary") if isinstance(smoke, Mapping) else {}
+    promotion = promotion if isinstance(promotion, Mapping) else {}
+    schema_version = _schema_version(smoke)
+    promotion_blocked = int(promotion.get("blocked_count") or 0)
+    ready_flag = bool(smoke.get("ready_for_supervised_smoke"))
+    schema_ok = schema_version >= MIN_PROMOTION_AWARE_SCHEMA_VERSION
+    ready = ready_flag and schema_ok and promotion_blocked == 0
+    blockers = []
+    if not ready_flag:
+        blockers.append("paper_smoke_not_ready")
+    if not schema_ok:
+        blockers.append("paper_smoke_schema_too_old")
+    if promotion_blocked:
+        blockers.append("paper_smoke_buy_promotion_blockers")
+    return {
+        "ready": ready,
+        "schema_version": schema_version,
+        "schema_ok": schema_ok,
+        "ready_flag": ready_flag,
+        "promotion_blocked_count": promotion_blocked,
+        "blockers": blockers,
+    }
+
+
+def _schema_version(payload: Mapping[str, Any]) -> int:
+    try:
+        return int(payload.get("schema_version") or 1)
+    except (TypeError, ValueError):
+        return 1
 
 
 __all__ = ["build_live_readiness_bundle", "build_live_readiness_bundle_markdown"]

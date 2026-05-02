@@ -116,7 +116,7 @@ Classifies a supplied market-regime snapshot and chooses where leftover active-s
 Builds a dry-run live-readiness checklist. It reports unmet gates such as benchmark proof, paper trading, broker-capability match, protected-symbol enforcement, manual approval, kill switch, audit logs, broker-read reconciliation, explicit live-mode config, and secrets hygiene. The broker-capability gate prevents Alpaca paper notional/fractional behavior from being treated as proof that a future live broker supports the same sizing model. It does not enable live execution.
 
 `longterm/live_readiness_bundle.py`
-Combines local advisory evidence into one live-readiness checklist result. It can merge a base observed file with broker capability evidence and paper-trading verification from the paper ledger. It is read-only and does not enable live execution.
+Combines local advisory evidence into one live-readiness checklist result. It can merge a base observed file with broker capability evidence, paper-trading verification from the paper ledger, and promotion-aware paper-smoke readiness evidence. It only treats paper smoke as ready when the supplied smoke artifact is schema v2 or newer, reports ready, and has no buy-promotion blockers. It is read-only and does not enable live execution.
 
 `longterm/broker_capabilities.py`
 Builds an advisory broker-capability compatibility report between the paper simulator and an intended live API. V1 includes Alpaca paper and Schwab API profiles and can emit a `broker_capability_match` observed JSON fragment for the live-readiness checklist. It is static/read-only and does not call any broker.

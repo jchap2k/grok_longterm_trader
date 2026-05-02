@@ -89,6 +89,9 @@ Before live execution exists:
 - keep scheduler-readiness reports advisory-only; readiness checks may surface
   blockers and warnings, but they must not enable scheduler submission or call
   broker execution paths
+- keep live-readiness paper-smoke evidence promotion-aware; old schema-v1 or
+  promotion-blocked smoke artifacts must not satisfy the `paper_smoke_ready`
+  live-readiness gate
 - keep operator status bundles read-only; they may combine lifecycle, readiness,
   and position intelligence artifacts, but they must not submit orders or alter
   scheduler configuration
