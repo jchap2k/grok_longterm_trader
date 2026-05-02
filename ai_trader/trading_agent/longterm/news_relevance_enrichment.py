@@ -21,6 +21,12 @@ NOISE_PHRASES = (
     "price target",
     "premarket",
     "pre-market",
+    "stock market today",
+    "s&p 500",
+    "nasdaq to records",
+    "broad market roundup",
+    "make you rich",
+    "battle royale",
 )
 
 CATALYST_KEYWORDS = {

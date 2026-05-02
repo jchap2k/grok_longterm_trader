@@ -35,6 +35,22 @@ def _articles() -> list[dict]:
             "tickers": ["AMZN"],
         },
         {
+            "title": "Stock Market Today: Apple Earnings Power S&P 500, Nasdaq To Records; Trump Hits EU",
+            "url": "https://example.com/market-roundup",
+            "published_utc": "2026-05-01T15:00:00Z",
+            "publisher": {"name": "Investor's Business Daily"},
+            "description": "A broad market roundup mentioning dozens of large-cap stocks.",
+            "tickers": ["AMZN", "TSLA", "AAPL", "SPY", "QQQ"],
+        },
+        {
+            "title": "Battle Royale: Joby Aviation vs. Boeing. Only One Can Make You Rich.",
+            "url": "https://example.com/make-you-rich",
+            "published_utc": "2026-05-01T15:30:00Z",
+            "publisher": {"name": "Generic Blog"},
+            "description": "A promotional comparison with little thesis evidence.",
+            "tickers": ["EMBJ"],
+        },
+        {
             "title": "Amazon reports AWS growth and advertising margin expansion in Q1",
             "url": "https://example.com/amzn-earnings",
             "published_utc": "2026-04-29T21:00:00Z",
@@ -69,6 +85,27 @@ def test_rank_relevant_news_filters_price_action_noise_and_dedupes_urls():
     assert ranked[0]["source"] == "Reuters"
     assert ranked[0]["relevance_score"] > ranked[1]["relevance_score"]
     assert all("stock moved" not in item["title"].lower() for item in ranked)
+    assert all("stock market today" not in item["title"].lower() for item in ranked)
+    assert all("make you rich" not in item["title"].lower() for item in ranked)
+
+
+def test_rank_relevant_news_drops_broad_market_roundups_even_from_quality_sources():
+    ranked = rank_relevant_news(
+        "TSLA",
+        [
+            {
+                "title": "Stock Market Today: Apple Earnings Power S&P 500, Nasdaq To Records; Trump Hits EU",
+                "url": "https://example.com/market-roundup",
+                "published_utc": "2026-05-01T15:00:00Z",
+                "publisher": {"name": "Reuters"},
+                "description": "Tesla, Amazon, Nvidia, and Apple were mentioned in a broad market roundup.",
+                "tickers": ["TSLA", "AMZN", "NVDA", "AAPL", "SPY", "QQQ"],
+            }
+        ],
+        business_context="Tesla electric vehicles batteries software autonomy robotaxi energy",
+    )
+
+    assert ranked == []
 
 
 def test_enrich_idea_with_relevant_news_adds_packet_context_and_source_note():
