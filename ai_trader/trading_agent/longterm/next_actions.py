@@ -11,6 +11,7 @@ from typing import Any, Mapping
 
 from longterm.action_planner import ActionPlanner
 from longterm.benchmark_guard import BenchmarkGuard, BenchmarkGuardResult
+from longterm.buy_promotion import BuyPromotionReview, BuyPromotionReviewer
 from longterm.decision_journal import LongTermDecisionJournal
 from longterm.portfolio_state import PortfolioState
 from longterm.report_builder import RecommendationEnricher, RecommendationTableBuilder
@@ -40,6 +41,7 @@ class NextActionsPlanner:
         paper_preview_status_by_symbol: dict[str, dict] | None = None,
         paper_execution_status_by_decision: dict[str, dict] | None = None,
         paper_execution_status_by_symbol: dict[str, dict] | None = None,
+        buy_promotion_reviewer: BuyPromotionReviewer | None = None,
     ):
         self.enricher = enricher
         self.review_status_by_symbol = review_status_by_symbol or {}
@@ -47,6 +49,7 @@ class NextActionsPlanner:
         self.paper_preview_status_by_symbol = paper_preview_status_by_symbol or {}
         self.paper_execution_status_by_decision = paper_execution_status_by_decision or {}
         self.paper_execution_status_by_symbol = paper_execution_status_by_symbol or {}
+        self.buy_promotion_reviewer = buy_promotion_reviewer or BuyPromotionReviewer()
 
     def plan(
         self,
@@ -67,9 +70,19 @@ class NextActionsPlanner:
             paper_execution_status_by_symbol=self.paper_execution_status_by_symbol,
         ).build(limit=limit)
         actions: list[NextAction] = []
+        promotion_reviews = {
+            str(row.get("decision_id") or ""): self.buy_promotion_reviewer.evaluate_decision_row(
+                row,
+                packet=_load_packet(row),
+                profile=profile,
+                portfolio_state=portfolio_state,
+            )
+            for row in recommendations
+        }
 
         for row in recommendations:
             symbol = row["symbol"]
+            promotion_review = promotion_reviews.get(str(row.get("decision_id") or ""))
             packet = create_research_packet_from_idea({"symbol": symbol}, profile=profile)
             planned = ActionPlanner().plan(
                 packet,
@@ -82,6 +95,17 @@ class NextActionsPlanner:
                 },
             )
             if portfolio_state.holding_value(symbol) <= 0 and planned.order_intent == "BUY":
+                if promotion_review and promotion_review.promotion_decision != "ACTIONABLE_BUY":
+                    actions.append(
+                        NextAction(
+                            priority=len(actions) + 1,
+                            category=_promotion_category(promotion_review),
+                            symbol=symbol,
+                            action=_promotion_action(promotion_review),
+                            reason=_promotion_reason(promotion_review),
+                        )
+                    )
+                    continue
                 reason = planned.reason
                 if row.get("review_due"):
                     reason += " Review due before committing new capital."
@@ -307,6 +331,51 @@ def _format_missing_fields(value: Any) -> str:
     return str(value or "")
 
 
+def _load_packet(row: Mapping[str, Any]) -> Mapping[str, Any]:
+    packet_json = row.get("packet_json")
+    if isinstance(packet_json, str) and packet_json.strip():
+        try:
+            payload = json.loads(packet_json)
+        except json.JSONDecodeError:
+            payload = {}
+        if isinstance(payload, Mapping):
+            return payload
+    return {
+        "symbol": row.get("symbol") or "",
+        "company_name": row.get("company_name") or "",
+    }
+
+
+def _promotion_category(review: BuyPromotionReview) -> str:
+    if review.promotion_decision == "WATCHLIST_PENDING_EVIDENCE":
+        return "buy_promotion_pending_evidence"
+    if review.promotion_decision == "WATCHLIST_PENDING_CONFIRMATION":
+        return "buy_promotion_pending_confirmation"
+    if review.promotion_decision == "REVIEW_EXISTING_POSITION":
+        return "review_holding"
+    if review.promotion_decision == "BLOCKED":
+        return "buy_promotion_blocked"
+    return "buy_promotion_review"
+
+
+def _promotion_action(review: BuyPromotionReview) -> str:
+    if review.promotion_decision == "WATCHLIST_PENDING_EVIDENCE":
+        return "ENRICH"
+    if review.promotion_decision == "WATCHLIST_PENDING_CONFIRMATION":
+        return "CONFIRM"
+    if review.promotion_decision == "BLOCKED":
+        return "BLOCKED"
+    return "REVIEW"
+
+
+def _promotion_reason(review: BuyPromotionReview) -> str:
+    details = review.blockers or review.followups or review.reasons
+    suffix = "; ".join(details)
+    if suffix:
+        return f"Buy promotion review: {review.promotion_decision}. {suffix}"
+    return f"Buy promotion review: {review.promotion_decision}."
+
+
 def _markdown_cell(value: str) -> str:
     return value.replace("|", "\\|").replace("\n", " ")
 
@@ -324,6 +393,9 @@ def _prioritize_actions(actions: list[NextAction]) -> list[NextAction]:
         "paper_execution_rejected": 1,
         "paper_execution_submitted": 2,
         "paused_buy_candidate": 1,
+        "buy_promotion_blocked": 1,
+        "buy_promotion_pending_evidence": 2,
+        "buy_promotion_pending_confirmation": 2,
         "capital_needed": 2,
         "buy_candidate": 3,
         "review_holding": 4,

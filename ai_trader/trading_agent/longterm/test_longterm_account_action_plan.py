@@ -12,9 +12,35 @@ from portfolio.portfolio_profile import PortfolioProfile
 from research.intake import create_research_packet_from_idea
 
 
-def _record(journal, symbol, recommendation="BUY", confidence=90, size=6, thesis="Good idea."):
+def _evidence_brief(symbol, *, warnings=""):
+    lines = [
+        f"research_evidence_brief_v1 | {symbol}",
+        "Fundamentals: durable growth and acceptable leverage.",
+        "Article evidence: primary-company article (source Reuters, confidence 0.8, basis snippet_grounded).",
+        "Grok catalyst synthesis: long-term catalyst remains intact.",
+    ]
+    if warnings:
+        lines.append(f"Warnings: {warnings}")
+    return "\n".join(lines)
+
+
+def _record(
+    journal,
+    symbol,
+    recommendation="BUY",
+    confidence=90,
+    size=6,
+    thesis="Good idea.",
+    evidence_warnings="",
+):
     return journal.record_decision(
-        create_research_packet_from_idea({"symbol": symbol, "benchmark_symbol": "FXAIX"}),
+        create_research_packet_from_idea(
+            {
+                "symbol": symbol,
+                "benchmark_symbol": "FXAIX",
+                "evidence_brief": _evidence_brief(symbol, warnings=evidence_warnings),
+            }
+        ),
         decision={
             "recommendation": recommendation,
             "confidence": confidence,
@@ -50,6 +76,7 @@ def test_account_action_plan_builds_allowed_buy_intent(tmp_path):
     assert payload["intents"][0]["decision_id"] == decision_id
     assert payload["intents"][0]["risk_review"]["allowed"] is True
     assert payload["intents"][0]["risk_review"]["risk_level"] in {"low", "medium"}
+    assert payload["intents"][0]["risk_review"]["buy_promotion"]["promotion_decision"] == "ACTIONABLE_BUY"
 
 
 def test_account_action_plan_pauses_new_buy_but_keeps_review_intent(tmp_path):
@@ -103,6 +130,32 @@ def test_account_action_plan_suppresses_capital_needed_when_active_sell_can_fund
     assert plan.intents[0].symbol == "NVDA"
     assert "fund the stronger idea" in plan.intents[0].reason
     assert not any(intent.intent_type == "CAPITAL_NEEDED" for intent in plan.intents)
+
+
+def test_account_action_plan_routes_pending_evidence_buy_to_review_not_buy(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    _record(
+        journal,
+        "VEEV",
+        recommendation="BUY",
+        confidence=75,
+        size=3,
+        evidence_warnings="missing_earnings_article",
+    )
+    profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
+    state = PortfolioState(cash=5000, protected_symbols=["FXAIX"])
+
+    plan = AccountActionPlanBuilder().build(
+        journal,
+        profile=profile,
+        portfolio_state=state,
+    )
+
+    assert [intent.intent_type for intent in plan.intents] == ["REVIEW"]
+    assert plan.intents[0].symbol == "VEEV"
+    assert plan.intents[0].order_intent == "NONE"
+    assert plan.intents[0].risk_review["buy_promotion"]["promotion_decision"] == "WATCHLIST_PENDING_EVIDENCE"
+    assert "missing_earnings_article" in plan.intents[0].reason
 
 
 def test_account_action_plan_includes_rebalance_intent(tmp_path):

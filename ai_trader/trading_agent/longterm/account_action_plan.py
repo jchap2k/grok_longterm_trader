@@ -5,10 +5,11 @@ from __future__ import annotations
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
-from typing import Callable
+from typing import Any, Callable, Mapping
 
 from longterm.action_planner import ActionPlanner
 from longterm.benchmark_guard import BenchmarkGuard
+from longterm.buy_promotion import BuyPromotionReview, BuyPromotionReviewer
 from longterm.capital_alert import _capital_request_suppression_reason
 from longterm.decision_journal import LongTermDecisionJournal
 from longterm.idle_cash_policy import IdleCashDeploymentPolicy, MarketRegimeSnapshot
@@ -35,6 +36,7 @@ class AccountActionIntent:
     trade_id: str = ""
     lesson_id: str = ""
     risk_review: dict = field(default_factory=dict)
+    promotion_review: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -65,6 +67,7 @@ class AccountActionPlanBuilder:
         risk_review_builder: RiskReviewBuilder | None = None,
         idle_cash_policy: IdleCashDeploymentPolicy | None = None,
         market_regime: MarketRegimeSnapshot | None = None,
+        buy_promotion_reviewer: BuyPromotionReviewer | None = None,
     ):
         self.benchmark_guard = benchmark_guard or BenchmarkGuard()
         self.rebalance_planner = rebalance_planner or RebalancePlanner()
@@ -73,6 +76,7 @@ class AccountActionPlanBuilder:
         self.risk_review_builder = risk_review_builder or RiskReviewBuilder()
         self.idle_cash_policy = idle_cash_policy or IdleCashDeploymentPolicy()
         self.market_regime = market_regime
+        self.buy_promotion_reviewer = buy_promotion_reviewer or BuyPromotionReviewer()
 
     def build(
         self,
@@ -99,9 +103,19 @@ class AccountActionPlanBuilder:
         )
         intents: list[AccountActionIntent] = []
         blocked_reasons: list[str] = []
+        promotion_reviews = {
+            str(row.get("decision_id") or ""): self.buy_promotion_reviewer.evaluate_decision_row(
+                row,
+                packet=_load_packet(row),
+                profile=profile,
+                portfolio_state=portfolio_state,
+            )
+            for row in recommendations
+        }
 
         for row in recommendations:
             symbol = str(row.get("symbol") or "").upper()
+            promotion_review = promotion_reviews.get(str(row.get("decision_id") or ""))
             risk_review = self.risk_review_builder.build(
                 row,
                 profile=profile,
@@ -123,7 +137,14 @@ class AccountActionPlanBuilder:
             )
 
             if planned.action == "PROTECTED_HOLD":
-                intents.append(_blocked_intent(row, planned.reason, risk_review=risk_review.to_dict()))
+                intents.append(
+                    _blocked_intent(
+                        row,
+                        planned.reason,
+                        risk_review=_risk_with_promotion(risk_review.to_dict(), promotion_review),
+                        promotion_review=promotion_review,
+                    )
+                )
                 blocked_reasons.append(planned.reason)
                 continue
 
@@ -141,20 +162,51 @@ class AccountActionPlanBuilder:
                         allowed=True,
                         reason=reason,
                         decision_id=str(row.get("decision_id") or ""),
-                        risk_review=risk_review.to_dict(),
+                        risk_review=_risk_with_promotion(risk_review.to_dict(), promotion_review),
+                        promotion_review=_promotion_dict(promotion_review),
                     )
                 )
                 continue
 
             if planned.order_intent == "BUY":
+                if promotion_review and promotion_review.promotion_decision != "ACTIONABLE_BUY":
+                    intents.append(
+                        AccountActionIntent(
+                            symbol=symbol,
+                            intent_type="REVIEW",
+                            order_intent="NONE",
+                            trade_value=0.0,
+                            target_value=0.0,
+                            allowed=True,
+                            reason=_promotion_reason(promotion_review),
+                            decision_id=str(row.get("decision_id") or ""),
+                            risk_review=_risk_with_promotion(risk_review.to_dict(), promotion_review),
+                            promotion_review=promotion_review.to_dict(),
+                        )
+                    )
+                    continue
                 if not risk_review.allowed:
                     reason = "; ".join(risk_review.veto_reasons) or guard_result.reason
-                    intents.append(_blocked_intent(row, reason, risk_review=risk_review.to_dict()))
+                    intents.append(
+                        _blocked_intent(
+                            row,
+                            reason,
+                            risk_review=_risk_with_promotion(risk_review.to_dict(), promotion_review),
+                            promotion_review=promotion_review,
+                        )
+                    )
                     blocked_reasons.append(reason)
                     continue
                 if planned.capital_needed_alert:
                     if suppression_reason:
-                        intents.append(_blocked_intent(row, suppression_reason, risk_review=risk_review.to_dict()))
+                        intents.append(
+                            _blocked_intent(
+                                row,
+                                suppression_reason,
+                                risk_review=_risk_with_promotion(risk_review.to_dict(), promotion_review),
+                                promotion_review=promotion_review,
+                            )
+                        )
                         blocked_reasons.append(suppression_reason)
                     else:
                         intents.append(
@@ -170,7 +222,8 @@ class AccountActionPlanBuilder:
                                     "additional active-sleeve cash."
                                 ),
                                 decision_id=str(row.get("decision_id") or ""),
-                                risk_review=risk_review.to_dict(),
+                                risk_review=_risk_with_promotion(risk_review.to_dict(), promotion_review),
+                                promotion_review=_promotion_dict(promotion_review),
                             )
                         )
                         blocked_reasons.append("Capital shortfall.")
@@ -185,12 +238,19 @@ class AccountActionPlanBuilder:
                         allowed=planned.allowed,
                         reason=planned.reason,
                         decision_id=str(row.get("decision_id") or ""),
-                        risk_review=risk_review.to_dict(),
+                        risk_review=_risk_with_promotion(risk_review.to_dict(), promotion_review),
+                        promotion_review=_promotion_dict(promotion_review),
                     )
                 )
 
+        rebalance_recommendations = [
+            row
+            for row in recommendations
+            if portfolio_state.holding_value(str(row.get("symbol") or "")) > 0
+            or _is_actionable_promotion(promotion_reviews.get(str(row.get("decision_id") or "")))
+        ]
         proposal = self.rebalance_planner.propose(
-            recommendations,
+            rebalance_recommendations,
             profile=profile,
             portfolio_state=portfolio_state,
             benchmark_guard_result=guard_result,
@@ -248,7 +308,13 @@ class AccountActionPlanBuilder:
         )
 
 
-def _blocked_intent(row: dict, reason: str, *, risk_review: dict | None = None) -> AccountActionIntent:
+def _blocked_intent(
+    row: dict,
+    reason: str,
+    *,
+    risk_review: dict | None = None,
+    promotion_review: BuyPromotionReview | None = None,
+) -> AccountActionIntent:
     return AccountActionIntent(
         symbol=str(row.get("symbol") or "").upper(),
         intent_type="BLOCKED",
@@ -259,7 +325,48 @@ def _blocked_intent(row: dict, reason: str, *, risk_review: dict | None = None) 
         reason=reason,
         decision_id=str(row.get("decision_id") or ""),
         risk_review=risk_review or {},
+        promotion_review=_promotion_dict(promotion_review),
     )
+
+
+def _load_packet(row: Mapping[str, Any]) -> Mapping[str, Any]:
+    packet_json = row.get("packet_json")
+    if isinstance(packet_json, str) and packet_json.strip():
+        import json
+
+        try:
+            payload = json.loads(packet_json)
+        except json.JSONDecodeError:
+            payload = {}
+        if isinstance(payload, Mapping):
+            return payload
+    return {
+        "symbol": row.get("symbol") or "",
+        "company_name": row.get("company_name") or "",
+    }
+
+
+def _promotion_dict(review: BuyPromotionReview | None) -> dict:
+    return review.to_dict() if review else {}
+
+
+def _risk_with_promotion(risk_review: dict, promotion_review: BuyPromotionReview | None) -> dict:
+    payload = dict(risk_review or {})
+    if promotion_review:
+        payload["buy_promotion"] = promotion_review.to_dict()
+    return payload
+
+
+def _is_actionable_promotion(review: BuyPromotionReview | None) -> bool:
+    return bool(review and review.promotion_decision == "ACTIONABLE_BUY")
+
+
+def _promotion_reason(review: BuyPromotionReview) -> str:
+    details = review.blockers or review.followups or review.reasons
+    suffix = "; ".join(details)
+    if suffix:
+        return f"Buy promotion review: {review.promotion_decision}. {suffix}"
+    return f"Buy promotion review: {review.promotion_decision}."
 
 
 def _idle_cash_intents(

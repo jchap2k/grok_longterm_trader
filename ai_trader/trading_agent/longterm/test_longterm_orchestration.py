@@ -747,6 +747,12 @@ def test_cycle_passes_portfolio_state_into_research_runner(tmp_path):
                 "company_name": "Amazon",
                 "idea_source": "manual",
                 "thesis_summary": "AWS and advertising durability.",
+                "evidence_brief": (
+                    "research_evidence_brief_v1 | AMZN\n"
+                    "Fundamentals: durable growth and acceptable leverage.\n"
+                    "Article evidence: primary-company article (source Reuters, confidence 0.8, basis snippet_grounded).\n"
+                    "Grok catalyst synthesis: AWS and advertising durability."
+                ),
             }
         ],
         motley_fool_settings=MotleyFoolCaptureSettings(enabled=False, cookie_ready=False),
@@ -788,6 +794,12 @@ def test_cycle_uses_market_regime_for_idle_cash_parking(tmp_path):
                 "company_name": "Amazon",
                 "idea_source": "manual",
                 "thesis_summary": "AWS and advertising durability.",
+                "evidence_brief": (
+                    "research_evidence_brief_v1 | AMZN\n"
+                    "Fundamentals: durable growth and acceptable leverage.\n"
+                    "Article evidence: primary-company article (source Reuters, confidence 0.8, basis snippet_grounded).\n"
+                    "Grok catalyst synthesis: AWS and advertising durability."
+                ),
             }
         ],
         motley_fool_settings=MotleyFoolCaptureSettings(enabled=False, cookie_ready=False),
@@ -839,6 +851,12 @@ def test_cycle_passes_account_action_plan_into_next_actions_markdown(tmp_path):
                 "company_name": "Amazon",
                 "idea_source": "manual",
                 "thesis_summary": "AWS and advertising durability.",
+                "evidence_brief": (
+                    "research_evidence_brief_v1 | AMZN\n"
+                    "Fundamentals: durable growth and acceptable leverage.\n"
+                    "Article evidence: primary-company article (source Reuters, confidence 0.8, basis snippet_grounded).\n"
+                    "Grok catalyst synthesis: AWS and advertising durability."
+                ),
             }
         ],
         motley_fool_settings=MotleyFoolCaptureSettings(enabled=False, cookie_ready=False),

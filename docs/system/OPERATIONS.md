@@ -220,6 +220,15 @@ python scripts/longterm_buy_promotion.py --journal-db path\to\journal.db --portf
 python scripts/longterm_buy_promotion.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --json --output path\to\buy_promotion.json
 ```
 
+Account-action plans and next-actions also consult the promotion review. A
+first-pass `BUY` that is missing article evidence, has low confidence, or carries
+an enrichment warning becomes a review/enrichment task with `order_intent=NONE`
+instead of a dry-run buy. It is also excluded from rebalance targets until it
+clears promotion. This keeps the sequence explicit:
+research committee says "interesting buy" -> promotion gate says "actionable
+enough" -> account planning sizes the candidate -> Stage 6B eligibility
+revalidates again before any supervised paper submission.
+
 Write research-ready candidates as an idea batch for the existing research
 cycle:
 

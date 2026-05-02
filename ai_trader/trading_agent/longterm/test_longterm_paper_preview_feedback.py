@@ -17,6 +17,15 @@ from portfolio.portfolio_profile import PortfolioProfile
 from research.intake import create_research_packet_from_idea
 
 
+def _evidence_brief(symbol):
+    return (
+        f"research_evidence_brief_v1 | {symbol}\n"
+        "Fundamentals: durable growth and acceptable leverage.\n"
+        "Article evidence: primary-company article (source Reuters, confidence 0.8, basis snippet_grounded).\n"
+        "Grok catalyst synthesis: long-term catalyst remains intact."
+    )
+
+
 def _record_decision(journal, symbol="NVDA", recommendation="BUY", confidence=92, size=8):
     return journal.record_decision(
         create_research_packet_from_idea(
@@ -26,6 +35,7 @@ def _record_decision(journal, symbol="NVDA", recommendation="BUY", confidence=92
                 "idea_source": "unit_test",
                 "business_summary": "Durable business.",
                 "benchmark_symbol": "FXAIX",
+                "evidence_brief": _evidence_brief(symbol),
             }
         ),
         decision={

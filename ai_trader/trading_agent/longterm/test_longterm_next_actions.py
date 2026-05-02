@@ -16,9 +16,35 @@ from portfolio.portfolio_profile import PortfolioProfile
 from research.intake import create_research_packet_from_idea
 
 
-def _record_decision(journal, symbol, recommendation="BUY", confidence=88, size=6, thesis="Good idea."):
+def _evidence_brief(symbol, *, warnings=""):
+    lines = [
+        f"research_evidence_brief_v1 | {symbol}",
+        "Fundamentals: durable growth and acceptable leverage.",
+        "Article evidence: primary-company article (source Reuters, confidence 0.8, basis snippet_grounded).",
+        "Grok catalyst synthesis: long-term catalyst remains intact.",
+    ]
+    if warnings:
+        lines.append(f"Warnings: {warnings}")
+    return "\n".join(lines)
+
+
+def _record_decision(
+    journal,
+    symbol,
+    recommendation="BUY",
+    confidence=88,
+    size=6,
+    thesis="Good idea.",
+    evidence_warnings="",
+):
     return journal.record_decision(
-        create_research_packet_from_idea({"symbol": symbol, "benchmark_symbol": "FXAIX"}),
+        create_research_packet_from_idea(
+            {
+                "symbol": symbol,
+                "benchmark_symbol": "FXAIX",
+                "evidence_brief": _evidence_brief(symbol, warnings=evidence_warnings),
+            }
+        ),
         decision={
             "recommendation": recommendation,
             "confidence": confidence,
@@ -316,6 +342,31 @@ def test_next_actions_planner_surfaces_capital_needed_alert(tmp_path):
     assert actions[0].category == "capital_needed"
     assert actions[0].action == "ALERT"
     assert "$2,220.00" in actions[0].reason
+
+
+def test_next_actions_planner_routes_pending_evidence_buy_to_enrichment(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    _record_decision(
+        journal,
+        "VEEV",
+        confidence=75,
+        size=3,
+        thesis="Vertical SaaS quality but earnings evidence is thin.",
+        evidence_warnings="missing_earnings_article",
+    )
+    profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
+    state = PortfolioState(cash=5000, protected_symbols=["FXAIX"])
+
+    actions = NextActionsPlanner().plan(
+        journal,
+        profile=profile,
+        portfolio_state=state,
+    )
+
+    assert actions[0].symbol == "VEEV"
+    assert actions[0].category == "buy_promotion_pending_evidence"
+    assert actions[0].action == "ENRICH"
+    assert "missing_earnings_article" in actions[0].reason
 
 
 def test_next_actions_planner_uses_recommendation_table_builder_rows(tmp_path):
