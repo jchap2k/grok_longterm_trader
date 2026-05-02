@@ -34,7 +34,6 @@ FOOTER_LABELS = {
 }
 EARNINGS_STOP_LABELS = {
     *FOOTER_LABELS,
-    "Upcoming Earnings",
     "Watch & Listen",
     "Potential Bull Cases",
     "Potential Bear Cases",

@@ -53,6 +53,13 @@ Operating Income
 941.0M
 Free Cash Flow
 1.4B
+Upcoming Earnings
+EPS Estimate
+0.12
+Revenue Estimate
+2.3B
+Announce Date
+3/31/2026
 View Full Earnings Report
 Q2 Earnings
 Synthetic Earnings Headline For Parser Testing
