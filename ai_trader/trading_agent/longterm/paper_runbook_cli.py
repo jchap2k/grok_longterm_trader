@@ -15,6 +15,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--portfolio-state", required=True)
     parser.add_argument("--action-plan", required=True)
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--profile-config", default="")
     parser.add_argument("--expected-cash", type=float, default=None)
     parser.add_argument("--json", action="store_true")
     return parser
@@ -28,6 +29,7 @@ def run_cli(args: argparse.Namespace) -> int:
         action_plan=args.action_plan,
         output_dir=args.output_dir,
         expected_cash=args.expected_cash,
+        profile_config=args.profile_config,
     )
     if args.json:
         print(json.dumps(runbook, indent=2, sort_keys=True))

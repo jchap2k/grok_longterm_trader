@@ -14,6 +14,7 @@ def build_paper_runbook(
     action_plan: str,
     output_dir: str,
     expected_cash: float | None = None,
+    profile_config: str = "",
 ) -> dict[str, Any]:
     """Build ordered operator commands for a supervised paper-trading smoke."""
     artifacts = {
@@ -26,13 +27,14 @@ def build_paper_runbook(
         "live_readiness_bundle": _artifact(output_dir, "live_readiness_bundle.json"),
     }
     expected_cash_arg = f" --expected-cash {_format_number(expected_cash)}" if expected_cash is not None else ""
+    profile_arg = f" --profile-config {profile_config}" if profile_config else ""
     steps = [
         {
             "step_id": "snapshot",
             "title": "Export fresh Alpaca paper portfolio state",
             "command": (
                 "python scripts/longterm_alpaca_paper_snapshot.py "
-                f"--portfolio-state-output {portfolio_state}"
+                f"--portfolio-state-output {portfolio_state}{profile_arg}"
             ),
             "save_stdout_to": artifacts["paper_snapshot"],
         },
@@ -43,7 +45,7 @@ def build_paper_runbook(
                 "python scripts/longterm_paper_workflow_smoke.py "
                 f"--journal-db {journal_db} --ledger-db {ledger_db} "
                 f"--portfolio-state {portfolio_state} --action-plan {action_plan} "
-                f"--report-output {artifacts['workflow_smoke']} --json"
+                f"--report-output {artifacts['workflow_smoke']}{profile_arg} --json"
             ),
         },
         {
@@ -77,13 +79,22 @@ def build_paper_runbook(
                 f"--portfolio-state {portfolio_state} --action-plan {action_plan} "
                 "--submit-paper-orders --confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY "
                 f"--runbook-check {artifacts['runbook_check']} "
-                f"--audit-output {artifacts['paper_execution_audit']} --json"
+                f"--audit-output {artifacts['paper_execution_audit']}{profile_arg} --json"
             ),
         },
         {
             "step_id": "status_refresh",
             "title": "Refresh submitted paper order statuses",
             "command": f"python scripts/longterm_paper_order_status_refresh.py --ledger-db {ledger_db} --json",
+        },
+        {
+            "step_id": "paper_cleanup_reminder",
+            "title": "Sell or cancel the temporary paper position manually",
+            "command": (
+                "Manual cleanup required: after the paper smoke is observed, "
+                "sell/cancel any temporary paper position in Alpaca paper before the next run."
+            ),
+            "manual_step": True,
         },
         {
             "step_id": "paper_trading_verification",
@@ -110,6 +121,7 @@ def build_paper_runbook(
         "mode": "paper_runbook",
         "order_submission_enabled": False,
         "expected_cash": expected_cash,
+        "profile_config": profile_config,
         "artifacts": artifacts,
         "steps": steps,
         "notes": [

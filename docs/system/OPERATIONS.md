@@ -294,19 +294,23 @@ been adapted to whole-share sizing.
 Generate an ordered Monday paper-trading runbook:
 
 ```powershell
-python scripts/longterm_paper_runbook.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --output-dir path\to\paper_artifacts --expected-cash 74000
-python scripts/longterm_paper_runbook.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --output-dir path\to\paper_artifacts --expected-cash 74000 --json
+python scripts/longterm_paper_runbook.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --output-dir path\to\paper_artifacts --profile-config path\to\profile.json --expected-cash 74000
+python scripts/longterm_paper_runbook.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --output-dir path\to\paper_artifacts --profile-config path\to\profile.json --expected-cash 74000 --json
 ```
 
 The runbook is a deterministic checklist and command generator only. It does
 not read Alpaca, write ledgers, or submit orders. The supervised submit command
 it prints still requires `--confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY`.
+When `--profile-config` is supplied, the generated snapshot, workflow-smoke,
+and supervised-submit commands reuse the same paper profile. After any future
+supervised paper buy is observed, the runbook includes a manual cleanup reminder
+to sell or cancel the temporary paper position in Alpaca before the next run.
 
 Check saved pre-submit runbook artifacts:
 
 ```powershell
-python scripts/longterm_paper_runbook_check.py --workflow-smoke path\to\paper_workflow_smoke.json --paper-smoke-readiness path\to\paper_smoke_readiness.json
-python scripts/longterm_paper_runbook_check.py --workflow-smoke path\to\paper_workflow_smoke.json --paper-smoke-readiness path\to\paper_smoke_readiness.json --report-output path\to\paper_runbook_check.json --json
+python scripts/longterm_paper_runbook_check.py --workflow-smoke path\to\paper_workflow_smoke.json --paper-smoke-readiness path\to\paper_smoke_readiness.json --action-plan path\to\account_action_plan.json
+python scripts/longterm_paper_runbook_check.py --workflow-smoke path\to\paper_workflow_smoke.json --paper-smoke-readiness path\to\paper_smoke_readiness.json --action-plan path\to\account_action_plan.json --report-output path\to\paper_runbook_check.json --json
 ```
 
 The check reads saved artifacts only. It blocks if the workflow smoke or
