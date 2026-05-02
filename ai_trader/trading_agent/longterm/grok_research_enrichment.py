@@ -229,10 +229,16 @@ def build_grok_research_messages(
         "idea": dict(idea),
         "finnhub_or_free_facts": dict(free_facts or {}),
         "relevant_news": list(idea.get("relevant_news") or []),
+        "python_quality_growth_scorecard": dict(idea.get("quality_growth_scorecard") or {}),
         "news_instruction": (
             "If relevant_news is supplied, use only those article titles, URLs, "
             "dates, summaries, relevance scores, and impact categories when "
             "writing latest developments or news-backed catalysts."
+        ),
+        "scorecard_instruction": (
+            "If python_quality_growth_scorecard is supplied, treat it as a "
+            "deterministic Python model output, not as Motley Fool data. You may "
+            "explain its implications but must not rename it as proprietary scores."
         ),
         "required_output": {
             "symbol": "upper-case ticker",

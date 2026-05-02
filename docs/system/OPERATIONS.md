@@ -132,6 +132,15 @@ python scripts/longterm_fundamental_metrics_enrichment.py --idea-batch path\to\r
 python scripts/longterm_fundamental_metrics_enrichment.py --idea-batch path\to\research_ideas.json --provider yfinance --output path\to\research_ideas.fundamentals_enriched.json --limit 5
 ```
 
+After fundamentals and relevant news are attached, add the deterministic
+quality-growth scorecard. This is a non-Fool, auditable Python scorecard that
+summarizes quality, growth, valuation, safety, market attention, composite
+superscore, investing type, and rough drawdown band.
+
+```powershell
+python scripts/longterm_quality_growth_scorecard.py --idea-batch path\to\research_ideas.news_enriched.json --output path\to\research_ideas.scorecard_enriched.json
+```
+
 Offline/snapshot mode for development:
 
 ```powershell
@@ -159,13 +168,13 @@ noise before Grok synthesis.
 Offline/snapshot mode for development:
 
 ```powershell
-python scripts/longterm_grok_research_enrichment.py --idea-batch path\to\research_ideas.news_enriched.json --facts-file path\to\finnhub_facts.json --snapshot-file path\to\grok_snapshots.json --output path\to\research_ideas.grok_enriched.json
+python scripts/longterm_grok_research_enrichment.py --idea-batch path\to\research_ideas.scorecard_enriched.json --facts-file path\to\finnhub_facts.json --snapshot-file path\to\grok_snapshots.json --output path\to\research_ideas.grok_enriched.json
 ```
 
 Live xAI mode, when `XAI_API_KEY` is configured:
 
 ```powershell
-python scripts/longterm_grok_research_enrichment.py --idea-batch path\to\research_ideas.news_enriched.json --facts-file path\to\finnhub_facts.json --output path\to\research_ideas.grok_enriched.json --limit 5
+python scripts/longterm_grok_research_enrichment.py --idea-batch path\to\research_ideas.scorecard_enriched.json --facts-file path\to\finnhub_facts.json --output path\to\research_ideas.grok_enriched.json --limit 5
 ```
 
 Write research-ready candidates as an idea batch for the existing research

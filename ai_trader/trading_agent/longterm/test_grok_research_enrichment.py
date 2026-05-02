@@ -139,6 +139,11 @@ def test_prompt_asks_for_source_backed_catalysts_not_motley_fool_impersonation()
                     "impact_category": "Major Contract - High",
                 }
             ],
+            "quality_growth_scorecard": {
+                "source_type": "python_quality_growth_scorecard",
+                "basis": "deterministic_model",
+                "superscore": 81,
+            },
         },
         free_facts={"market_cap": "$2.8T"},
         as_of_date="2026-05-02",
@@ -151,6 +156,8 @@ def test_prompt_asks_for_source_backed_catalysts_not_motley_fool_impersonation()
     assert "model_estimate" in joined
     assert "relevant_news" in joined
     assert "Amazon signs AWS AI deal" in joined
+    assert "python_quality_growth_scorecard" in joined
+    assert "deterministic Python model output" in joined
 
 
 def test_grok_research_enrichment_cli_can_normalize_offline_snapshots(tmp_path, capsys):
