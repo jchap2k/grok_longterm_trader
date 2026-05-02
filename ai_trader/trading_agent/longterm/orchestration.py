@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from longterm.account_action_plan import AccountActionPlanBuilder
+from longterm.buy_promotion import build_buy_promotion_markdown, build_buy_promotion_reviews
 from longterm.capital_alert import build_capital_needed_alert
 from longterm.decision_journal import LongTermDecisionJournal
 from longterm.benchmark_guard import BenchmarkGuard
@@ -54,6 +55,7 @@ class LongTermCycleResult:
     login_url: str = ""
     profile_dir: Path | None = None
     recommendation_report_markdown: str = ""
+    buy_promotion_markdown: str = ""
     next_actions_markdown: str = ""
     capital_alert_markdown: str = ""
     rebalance_markdown: str = ""
@@ -61,6 +63,7 @@ class LongTermCycleResult:
     capital_alert_generated: bool = False
     rebalance_generated: bool = False
     account_action_plan_generated: bool = False
+    buy_promotion_generated: bool = False
     discovery_generated: bool = False
     report_generated: bool = False
     next_actions_generated: bool = False
@@ -214,6 +217,7 @@ def run_longterm_cycle(
         )
 
     recommendation_report_markdown = ""
+    buy_promotion_markdown = ""
     next_actions_markdown = ""
     capital_alert_markdown = ""
     rebalance_markdown = ""
@@ -221,6 +225,7 @@ def run_longterm_cycle(
     capital_alert_generated = False
     rebalance_generated = False
     account_action_plan_generated = False
+    buy_promotion_generated = False
     report_generated = False
     next_actions_generated = False
     if journal_db_path:
@@ -248,6 +253,15 @@ def run_longterm_cycle(
             capital_alert_markdown = getattr(alert, "markdown", "") or ""
             capital_alert_generated = bool(getattr(alert, "should_alert", False))
         if portfolio_state is not None:
+            promotion_reviews = build_buy_promotion_reviews(
+                journal,
+                profile=profile,
+                portfolio_state=portfolio_state,
+                limit=report_limit,
+            )
+            if promotion_reviews:
+                buy_promotion_markdown = build_buy_promotion_markdown(promotion_reviews)
+                buy_promotion_generated = True
             guard = benchmark_guard or BenchmarkGuard()
             guard_result = guard.evaluate(journal.summarize_benchmark_performance())
             proposal = (rebalance_planner or RebalancePlanner()).propose(
@@ -301,6 +315,7 @@ def run_longterm_cycle(
         login_url=settings.login_url if settings.should_open_login else "",
         profile_dir=settings.profile_dir if settings.should_open_login else settings.profile_dir,
         recommendation_report_markdown=recommendation_report_markdown,
+        buy_promotion_markdown=buy_promotion_markdown,
         next_actions_markdown=next_actions_markdown,
         capital_alert_markdown=capital_alert_markdown,
         rebalance_markdown=rebalance_markdown,
@@ -308,6 +323,7 @@ def run_longterm_cycle(
         capital_alert_generated=capital_alert_generated,
         rebalance_generated=rebalance_generated,
         account_action_plan_generated=account_action_plan_generated,
+        buy_promotion_generated=buy_promotion_generated,
         discovery_generated=discovery_generated,
         report_generated=report_generated,
         next_actions_generated=next_actions_generated,

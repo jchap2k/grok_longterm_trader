@@ -139,6 +139,7 @@ def test_scheduler_run_once_records_explicit_outputs(tmp_path):
                 }
             ],
             "recommendation_report_markdown": "# report\n",
+            "buy_promotion_markdown": "# promotion\n",
             "next_actions_markdown": "# actions\n",
             "capital_alert_markdown": "# capital\n",
             "rebalance_markdown": "# rebalance\n",
@@ -168,6 +169,7 @@ def test_scheduler_run_once_records_explicit_outputs(tmp_path):
         "research_context",
     ]
     assert summary.runs[0].recommendation_report_markdown == "# report\n"
+    assert summary.runs[0].buy_promotion_markdown == "# promotion\n"
     assert summary.runs[0].next_actions_markdown == "# actions\n"
     assert summary.runs[0].capital_alert_markdown == "# capital\n"
     assert summary.runs[0].rebalance_markdown == "# rebalance\n"

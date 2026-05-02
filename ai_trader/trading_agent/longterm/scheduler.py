@@ -62,6 +62,7 @@ class LongTermSchedulerRunRecord:
     deferred_research_queue: list[dict[str, Any]] = field(default_factory=list)
     decision_ids: list[str] = field(default_factory=list)
     recommendation_report_markdown: str = ""
+    buy_promotion_markdown: str = ""
     next_actions_markdown: str = ""
     capital_alert_markdown: str = ""
     rebalance_markdown: str = ""
@@ -213,6 +214,7 @@ def _record_from_result(
         deferred_research_queue=[dict(item) for item in (payload.get("deferred_research_queue") or [])],
         decision_ids=list(payload.get("decision_ids") or []),
         recommendation_report_markdown=str(payload.get("recommendation_report_markdown") or ""),
+        buy_promotion_markdown=str(payload.get("buy_promotion_markdown") or ""),
         next_actions_markdown=str(payload.get("next_actions_markdown") or ""),
         capital_alert_markdown=str(payload.get("capital_alert_markdown") or ""),
         rebalance_markdown=str(payload.get("rebalance_markdown") or ""),

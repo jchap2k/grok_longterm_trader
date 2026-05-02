@@ -723,6 +723,54 @@ def test_cycle_can_build_account_action_plan(tmp_path):
     assert FakeJournal.recorded_plans[0]["mode"] == "dry_run"
 
 
+def test_cycle_generates_buy_promotion_markdown(tmp_path):
+    class RecordingRunner:
+        def run_and_record(self, packet, **kwargs):
+            return LongTermDecisionJournal(kwargs["journal_db_path"]).record_decision(
+                packet,
+                decision={
+                    "recommendation": "BUY",
+                    "confidence": 78,
+                    "suggested_size_pct": 2.5,
+                    "key_thesis": "AWS and advertising durability.",
+                },
+            )
+
+    result = run_longterm_cycle(
+        profile=PortfolioProfile(
+            account_strategy_mode="roth_ira",
+            tradable_capital=34000,
+            protected_symbols=["FXAIX"],
+            benchmark_symbol="FXAIX",
+            defensive_parking_symbol="SPY",
+        ),
+        manual_ideas=[
+            {
+                "symbol": "AMZN",
+                "company_name": "Amazon",
+                "idea_source": "manual",
+                "thesis_summary": "AWS and advertising durability.",
+                "evidence_brief": (
+                    "research_evidence_brief_v1 | AMZN\n"
+                    "Fundamentals: durable growth and acceptable leverage.\n"
+                    "Article evidence: primary-company article (source Reuters, confidence 0.8, basis snippet_grounded).\n"
+                    "Grok catalyst synthesis: AWS and advertising durability."
+                ),
+            }
+        ],
+        motley_fool_settings=MotleyFoolCaptureSettings(enabled=False, cookie_ready=False),
+        runner=RecordingRunner(),
+        journal_db_path=tmp_path / "journal.db",
+        portfolio_state=PortfolioState(cash=5000, protected_symbols=["FXAIX"]),
+        report_builder_func=lambda journal, *, limit: "",
+        next_actions_builder_func=lambda journal, *, profile, portfolio_state, limit: "",
+    )
+
+    assert result.buy_promotion_generated is True
+    assert "# Buy Promotion Review" in result.buy_promotion_markdown
+    assert "| AMZN | ACTIONABLE_BUY | BUY | 78 |" in result.buy_promotion_markdown
+
+
 def test_cycle_passes_portfolio_state_into_research_runner(tmp_path):
     class FakeRunner:
         def __init__(self):

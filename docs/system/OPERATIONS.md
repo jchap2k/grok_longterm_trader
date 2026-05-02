@@ -229,6 +229,12 @@ research committee says "interesting buy" -> promotion gate says "actionable
 enough" -> account planning sizes the candidate -> Stage 6B eligibility
 revalidates again before any supervised paper submission.
 
+When a research cycle or scheduler run has both a journal and portfolio state,
+the result JSON also includes `buy_promotion_markdown` and
+`buy_promotion_generated`. This makes promotion decisions visible in the same
+operator artifact stream as the recommendation report, next-actions report, and
+account action plan.
+
 Write research-ready candidates as an idea batch for the existing research
 cycle:
 
