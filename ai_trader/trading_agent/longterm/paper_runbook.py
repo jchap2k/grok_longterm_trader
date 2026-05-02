@@ -52,9 +52,9 @@ def build_paper_runbook(
                 "python scripts/longterm_paper_smoke_readiness.py "
                 f"--portfolio-state {portfolio_state}{expected_cash_arg} "
                 "--required-order-model whole_share "
-                f"--workflow-smoke {artifacts['workflow_smoke']} --json"
+                f"--workflow-smoke {artifacts['workflow_smoke']} "
+                f"--report-output {artifacts['paper_smoke_readiness']} --json"
             ),
-            "save_stdout_to": artifacts["paper_smoke_readiness"],
         },
         {
             "step_id": "supervised_submit",
@@ -87,9 +87,9 @@ def build_paper_runbook(
                 "python scripts/longterm_live_readiness_bundle.py "
                 f"--paper-ledger-db {ledger_db} "
                 f"--paper-smoke-readiness {artifacts['paper_smoke_readiness']} "
-                "--required-order-model whole_share --json"
+                "--required-order-model whole_share "
+                f"--report-output {artifacts['live_readiness_bundle']} --json"
             ),
-            "save_stdout_to": artifacts["live_readiness_bundle"],
         },
     ]
     return {

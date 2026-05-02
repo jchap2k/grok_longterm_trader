@@ -120,3 +120,33 @@ def test_paper_smoke_readiness_cli_outputs_json(tmp_path, capsys):
     assert payload["mode"] == "paper_smoke_readiness"
     assert payload["ready_for_supervised_smoke"] is True
     assert payload["workflow_smoke"]["ready_for_supervised_submit"] is True
+
+
+def test_paper_smoke_readiness_cli_writes_report_output(tmp_path, capsys):
+    portfolio_path = tmp_path / "portfolio.json"
+    report_path = tmp_path / "paper_smoke_readiness.json"
+    portfolio_path.write_text(
+        json.dumps({"cash": 74000, "holdings": [], "protected_symbols": ["FXAIX"]}),
+        encoding="utf-8",
+    )
+
+    args = build_parser().parse_args(
+        [
+            "--portfolio-state",
+            str(portfolio_path),
+            "--expected-cash",
+            "74000",
+            "--required-order-model",
+            "whole_share",
+            "--report-output",
+            str(report_path),
+            "--json",
+        ]
+    )
+
+    assert run_cli(args) == 0
+    stdout_payload = json.loads(capsys.readouterr().out)
+    file_payload = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert stdout_payload["ready_for_supervised_smoke"] is True
+    assert file_payload["ready_for_supervised_smoke"] is True

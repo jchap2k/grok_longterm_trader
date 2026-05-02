@@ -34,6 +34,8 @@ def test_paper_runbook_lists_monday_artifacts_and_ordered_commands():
         "live_readiness_bundle",
     ]
     assert "--confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY" in runbook["steps"][3]["command"]
+    assert "--report-output artifacts\\paper_smoke_readiness.json" in runbook["steps"][2]["command"]
+    assert "--report-output artifacts\\live_readiness_bundle.json" in runbook["steps"][6]["command"]
     assert "Monday Paper Trading Runbook" in build_paper_runbook_markdown(runbook)
 
 

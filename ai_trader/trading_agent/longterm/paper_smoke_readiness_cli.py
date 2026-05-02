@@ -29,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--scheduler-readiness", default="")
     parser.add_argument("--workflow-smoke", default="")
+    parser.add_argument("--report-output", default="")
     parser.add_argument("--json", action="store_true")
     return parser
 
@@ -50,6 +51,8 @@ def run_cli(args: argparse.Namespace) -> int:
         scheduler_readiness=_load_json(args.scheduler_readiness) if args.scheduler_readiness else {},
         workflow_smoke=_load_json(args.workflow_smoke) if args.workflow_smoke else {},
     )
+    if args.report_output:
+        Path(args.report_output).write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:

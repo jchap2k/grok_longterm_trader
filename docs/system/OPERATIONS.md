@@ -280,7 +280,7 @@ Build one pre-flight report before a supervised paper smoke:
 
 ```powershell
 python scripts/longterm_paper_smoke_readiness.py --portfolio-state path\to\portfolio.json --expected-cash 74000 --scheduler-readiness path\to\scheduler_readiness.json
-python scripts/longterm_paper_smoke_readiness.py --portfolio-state path\to\portfolio.json --expected-cash 74000 --required-order-model whole_share --workflow-smoke path\to\paper_workflow_smoke.json --json
+python scripts/longterm_paper_smoke_readiness.py --portfolio-state path\to\portfolio.json --expected-cash 74000 --required-order-model whole_share --workflow-smoke path\to\paper_workflow_smoke.json --report-output path\to\paper_smoke_readiness.json --json
 ```
 
 The smoke-readiness report combines account cleanliness, broker-capability
@@ -750,7 +750,7 @@ python scripts/longterm_broker_capabilities.py --required-order-model whole_shar
 python scripts/longterm_live_readiness.py
 python scripts/longterm_live_readiness.py --observed-file path\to\live_readiness_observed.json
 python scripts/longterm_live_readiness.py --observed-file path\to\base_observed.json --observed-fragment path\to\broker_capability_observed.json
-python scripts/longterm_live_readiness_bundle.py --observed-file path\to\base_observed.json --paper-ledger-db path\to\paper_ledger.db --paper-smoke-readiness path\to\paper_smoke_readiness.json --required-order-model whole_share
+python scripts/longterm_live_readiness_bundle.py --observed-file path\to\base_observed.json --paper-ledger-db path\to\paper_ledger.db --paper-smoke-readiness path\to\paper_smoke_readiness.json --required-order-model whole_share --report-output path\to\live_readiness_bundle.json
 ```
 
 The live-readiness checklist is intentionally conservative. It reports unmet

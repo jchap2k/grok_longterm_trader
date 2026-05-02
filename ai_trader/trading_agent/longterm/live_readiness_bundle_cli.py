@@ -25,6 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="notional_fractional",
         choices=["notional_fractional", "whole_share"],
     )
+    parser.add_argument("--report-output", default="")
     parser.add_argument("--json", action="store_true")
     return parser
 
@@ -38,6 +39,8 @@ def run_cli(args: argparse.Namespace) -> int:
         required_order_model=args.required_order_model,
         paper_smoke_readiness=_load_json(args.paper_smoke_readiness) if args.paper_smoke_readiness else {},
     )
+    if args.report_output:
+        Path(args.report_output).write_text(json.dumps(bundle, indent=2, sort_keys=True), encoding="utf-8")
     if args.json:
         print(json.dumps(bundle, indent=2, sort_keys=True))
     else:

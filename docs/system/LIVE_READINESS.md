@@ -46,7 +46,7 @@ python scripts/longterm_live_readiness.py
 python scripts/longterm_live_readiness.py --json
 python scripts/longterm_live_readiness.py --observed-file path\to\live_readiness_observed.json
 python scripts/longterm_live_readiness.py --observed-file path\to\base_observed.json --observed-fragment path\to\broker_capability_observed.json
-python scripts/longterm_live_readiness_bundle.py --observed-file path\to\base_observed.json --paper-ledger-db path\to\paper_ledger.db --paper-smoke-readiness path\to\paper_smoke_readiness.json --required-order-model whole_share
+python scripts/longterm_live_readiness_bundle.py --observed-file path\to\base_observed.json --paper-ledger-db path\to\paper_ledger.db --paper-smoke-readiness path\to\paper_smoke_readiness.json --required-order-model whole_share --report-output path\to\live_readiness_bundle.json
 ```
 
 `longterm_broker_capabilities.py` is advisory-only. With the default

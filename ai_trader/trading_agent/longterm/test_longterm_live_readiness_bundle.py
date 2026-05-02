@@ -126,3 +126,35 @@ def test_live_readiness_bundle_cli_outputs_json(tmp_path, capsys):
     assert payload["mode"] == "live_readiness_bundle"
     assert payload["ready"] is True
     assert payload["observed"]["paper_smoke_ready"] is True
+
+
+def test_live_readiness_bundle_cli_writes_report_output(tmp_path, capsys):
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    _filled_event(ledger)
+    base_path = tmp_path / "base.json"
+    smoke_path = tmp_path / "paper_smoke.json"
+    report_path = tmp_path / "live_readiness_bundle.json"
+    base_path.write_text(json.dumps(_base_observed()), encoding="utf-8")
+    smoke_path.write_text(json.dumps({"ready_for_supervised_smoke": True}), encoding="utf-8")
+    args = build_parser().parse_args(
+        [
+            "--observed-file",
+            str(base_path),
+            "--paper-ledger-db",
+            str(ledger.db_path),
+            "--paper-smoke-readiness",
+            str(smoke_path),
+            "--required-order-model",
+            "whole_share",
+            "--report-output",
+            str(report_path),
+            "--json",
+        ]
+    )
+
+    assert run_cli(args) == 0
+    stdout_payload = json.loads(capsys.readouterr().out)
+    file_payload = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert stdout_payload["ready"] is True
+    assert file_payload["ready"] is True
