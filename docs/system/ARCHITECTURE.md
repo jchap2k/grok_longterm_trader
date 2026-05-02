@@ -8,6 +8,9 @@ Defines the canonical `ResearchPacket` and Lynch-style company categories.
 `research/intake.py`
 Normalizes raw idea dictionaries into research packets and applies portfolio profile defaults.
 
+`research/research_evidence_brief.py`
+Builds a compact, versioned research evidence brief from transient enrichment fields before a `ResearchPacket` is created. It summarizes Python fundamentals, deterministic scorecard output, latest earnings context, primary-company news, Grok catalyst synthesis, and warnings into a stable `research_evidence_brief_v1` text block. The brief is research context only: it does not change ranking, sizing, paper eligibility, broker behavior, or journal outcomes.
+
 `portfolio/portfolio_profile.py`
 Defines account-level constraints: protected symbols, benchmark, defensive parking symbol, low-risk parking symbol, duration-hedge symbol, cash symbol, and tradable capital.
 

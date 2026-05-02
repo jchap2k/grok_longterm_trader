@@ -45,6 +45,7 @@ class ResearchPacket:
     reviewer_support: List[str] = field(default_factory=list)
     reviewer_objections: List[str] = field(default_factory=list)
     source_notes: List[str] = field(default_factory=list)
+    evidence_brief: str = ""
 
     def __post_init__(self) -> None:
         self.symbol = (self.symbol or "").upper()
@@ -66,6 +67,7 @@ class ResearchPacket:
         self.reviewer_support = list(self.reviewer_support or [])
         self.reviewer_objections = list(self.reviewer_objections or [])
         self.source_notes = list(self.source_notes or [])
+        self.evidence_brief = self.evidence_brief or ""
 
         if self.combined_attractiveness_score is None:
             self.combined_attractiveness_score = self._compute_combined_score()
@@ -87,7 +89,7 @@ class ResearchPacket:
             warnings.append(f"{symbol}: missing company_name")
         if not self.idea_source:
             warnings.append(f"{symbol}: missing idea_source")
-        if not self.business_summary and not self.thesis_summary and not self.source_notes:
+        if not self.business_summary and not self.thesis_summary and not self.source_notes and not self.evidence_brief:
             warnings.append(f"{symbol}: missing research context")
         return warnings
 

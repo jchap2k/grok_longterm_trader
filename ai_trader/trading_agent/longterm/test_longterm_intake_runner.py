@@ -85,6 +85,39 @@ def test_research_packet_completeness_blocks_thin_ticker_stub():
     assert packet.is_minimally_complete_for_research() is False
 
 
+def test_create_research_packet_from_enriched_idea_adds_evidence_brief_without_bloating_notes():
+    packet = create_research_packet_from_idea(
+        {
+            "symbol": "AMZN",
+            "company_name": "Amazon",
+            "idea_source": "comparison_run",
+            "business_summary": "Cloud ecommerce advertising AI logistics platform.",
+            "source_notes": ["Original source note."],
+            "fundamental_metrics": {
+                "revenue_growth_cagr": {"3_yr_revenue_growth": "11.73%"},
+                "valuation_ttm": {"price_earnings": "37.1x"},
+                "profitability_ttm": {"gross_margin": "50.29%"},
+            },
+            "relevant_news": [
+                {
+                    "date": "2026-05-02",
+                    "source": "The Motley Fool",
+                    "title": "Amazon Just Proved It's No Longer an AI Underdog",
+                    "impact_category": "Product/Tech - High",
+                    "relevance_score": 0.435,
+                    "primary_subject_score": 0.95,
+                }
+            ],
+        }
+    )
+
+    assert packet.source_notes == ["Original source note."]
+    assert packet.evidence_brief.startswith("research_evidence_brief_v1 | AMZN")
+    assert "3yr revenue growth 11.73%" in packet.evidence_brief
+    assert "Amazon Just Proved It's No Longer an AI Underdog" in packet.evidence_brief
+    assert "fundamental_metrics" not in packet.evidence_brief
+
+
 def test_longterm_research_runner_builds_context_and_calls_grok_helper(monkeypatch):
     captured = {}
 
@@ -155,6 +188,48 @@ def test_longterm_research_runner_builds_context_and_calls_grok_helper(monkeypat
     assert "review_cadence" in captured["context_sections"]
     assert "Start new positions small" in captured["context_sections"]["sizing_policy_context"]
     assert "AAPL" in captured["task_prompt"]
+
+
+def test_longterm_research_runner_passes_evidence_brief_as_dedicated_context(monkeypatch):
+    captured = {}
+
+    class FakeCheapGrokHeavy:
+        def __init__(self, **kwargs):
+            pass
+
+        def call_with_context(self, task_prompt, context_sections=None):
+            captured["context_sections"] = context_sections or {}
+            return '{"recommendation":"PASS","confidence":75}'
+
+    monkeypatch.setattr(
+        "longterm.research_runner.CheapGrokHeavy",
+        FakeCheapGrokHeavy,
+    )
+
+    packet = create_research_packet_from_idea(
+        {
+            "symbol": "AMZN",
+            "company_name": "Amazon",
+            "idea_source": "comparison_run",
+            "business_summary": "Cloud ecommerce advertising AI logistics platform.",
+            "fundamental_metrics": {
+                "revenue_growth_cagr": {"3_yr_revenue_growth": "11.73%"},
+                "valuation_ttm": {"price_earnings": "37.1x"},
+                "profitability_ttm": {"gross_margin": "50.29%"},
+            },
+        }
+    )
+    runner = LongTermResearchRunner(
+        api_key="test-key",
+        config_path="dummy-config.json",
+        verbose=False,
+    )
+
+    runner.run(packet)
+
+    assert "research_evidence_brief" in captured["context_sections"]
+    assert "research_evidence_brief_v1 | AMZN" in captured["context_sections"]["research_evidence_brief"]
+    assert "3yr revenue growth 11.73%" in captured["context_sections"]["research_evidence_brief"]
 
 
 def test_longterm_research_runner_includes_active_rules_context(monkeypatch, tmp_path):

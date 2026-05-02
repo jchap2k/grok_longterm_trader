@@ -6,6 +6,7 @@ from dataclasses import fields
 from typing import Any, Mapping
 
 from portfolio.portfolio_profile import PortfolioProfile
+from research.research_evidence_brief import build_research_evidence_brief
 from research.research_packet import CompanyCategory, ResearchPacket
 
 
@@ -43,6 +44,11 @@ def create_research_packet_from_idea(
         payload.setdefault("protected_symbols", profile.protected_symbols)
         payload.setdefault("benchmark_symbol", profile.benchmark_symbol)
         payload.setdefault("defensive_parking_symbol", profile.defensive_parking_symbol)
+
+    if not payload.get("evidence_brief"):
+        evidence_brief = build_research_evidence_brief(payload)
+        if evidence_brief:
+            payload["evidence_brief"] = evidence_brief
 
     packet_fields = {field.name for field in fields(ResearchPacket)}
     return ResearchPacket(**{key: value for key, value in payload.items() if key in packet_fields})

@@ -106,6 +106,7 @@ class LongTermResearchRunner:
             ),
             "financial_metrics": financial_metrics,
             "business_summary": packet.business_summary,
+            "research_evidence_brief": packet.evidence_brief or "none supplied",
             "macro_regime": macro_regime,
             "portfolio_context": _format_portfolio_context(packet, portfolio_state),
             "market_risk_context": market_risk_context,

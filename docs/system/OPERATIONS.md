@@ -153,6 +153,14 @@ URLs, confidence, and warnings.
 python scripts/longterm_latest_earnings_enrichment.py --idea-batch path\to\research_ideas.scorecard_enriched.json --output path\to\research_ideas.earnings_enriched.json
 ```
 
+When the enriched idea batch is loaded into the research cycle,
+`research/research_evidence_brief.py` automatically compresses those transient
+enrichment fields into a first-class `evidence_brief` on each `ResearchPacket`.
+That brief is the handoff to the research committee: enrichment assembles
+evidence, the brief summarizes it, and the CGH committee judges the thesis under
+`active_rules.txt`. The brief is not a trade signal and does not affect paper
+preview or execution eligibility.
+
 Offline/snapshot mode for development:
 
 ```powershell
