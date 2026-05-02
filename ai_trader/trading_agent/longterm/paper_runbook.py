@@ -165,6 +165,7 @@ def build_paper_runbook(
                 f"--action-plan {action_plan} "
                 f"--monday-operator-check {artifacts['paper_monday_operator_check']} "
                 f"--live-readiness-bundle {artifacts['live_readiness_bundle']} "
+                f"--status-refresh {artifacts['paper_order_status_refresh']} "
                 f"--report-output {artifacts['operator_status_bundle']} --json"
             ),
         },

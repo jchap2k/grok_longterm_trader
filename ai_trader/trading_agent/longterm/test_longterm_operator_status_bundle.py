@@ -183,6 +183,30 @@ def test_operator_status_bundle_surfaces_live_readiness_summary(tmp_path):
     assert "- manual_approval_recorded" in markdown
 
 
+def test_operator_status_bundle_surfaces_status_refresh_summary(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    status_refresh = {
+        "mode": "paper_order_status_refresh",
+        "submitted_order_count": 2,
+        "refreshed_count": 2,
+        "events_recorded": 1,
+        "skipped_count": 1,
+        "error_count": 1,
+        "status_counts": {"filled": 1, "status_refresh_error": 1},
+    }
+
+    bundle = build_operator_status_bundle(journal, status_refresh=status_refresh)
+
+    assert bundle["status_refresh_summary"]["submitted_order_count"] == 2
+    assert bundle["status_refresh_summary"]["error_count"] == 1
+    assert bundle["status_refresh_summary"]["status_counts"]["filled"] == 1
+    markdown = build_operator_status_markdown(bundle)
+    assert "## Paper Status Refresh" in markdown
+    assert "- Submitted orders checked: 2" in markdown
+    assert "- Errors: 1" in markdown
+    assert "| filled | 1 |" in markdown
+
+
 def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     decision_id = _record_decision(journal)
@@ -194,6 +218,7 @@ def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
     feedback_path = tmp_path / "feedback.json"
     monday_check_path = tmp_path / "monday_check.json"
     live_readiness_path = tmp_path / "live_readiness_bundle.json"
+    status_refresh_path = tmp_path / "paper_order_status_refresh.json"
     report_path = tmp_path / "operator_status_bundle.json"
     PaperTradeLedger(ledger_path).record_execution_event(
         {
@@ -251,6 +276,18 @@ def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
         ),
         encoding="utf-8",
     )
+    status_refresh_path.write_text(
+        json.dumps(
+            {
+                "mode": "paper_order_status_refresh",
+                "submitted_order_count": 0,
+                "refreshed_count": 0,
+                "error_count": 0,
+                "status_counts": {},
+            }
+        ),
+        encoding="utf-8",
+    )
     parser = build_parser()
     args = parser.parse_args(
         [
@@ -270,6 +307,8 @@ def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
             str(monday_check_path),
             "--live-readiness-bundle",
             str(live_readiness_path),
+            "--status-refresh",
+            str(status_refresh_path),
             "--report-output",
             str(report_path),
             "--json",
@@ -283,4 +322,5 @@ def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
     assert payload["paper_lifecycle"]["state_counts"]["outcome_evaluated"] == 1
     assert payload["monday_operator_check_summary"]["ready_for_review"] is True
     assert payload["live_readiness_summary"]["unmet_gate_keys"] == ["paper_trading_verified"]
+    assert payload["status_refresh_summary"]["submitted_order_count"] == 0
     assert json.loads(report_path.read_text(encoding="utf-8"))["mode"] == "operator_status_bundle"

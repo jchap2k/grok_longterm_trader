@@ -25,6 +25,7 @@ def build_operator_status_bundle(
     feedback_summary: Mapping[str, Any] | None = None,
     monday_operator_check: Mapping[str, Any] | None = None,
     live_readiness_bundle: Mapping[str, Any] | None = None,
+    status_refresh: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble the read-only operator artifacts needed before automation."""
     lifecycle = (
@@ -58,6 +59,7 @@ def build_operator_status_bundle(
         "buy_promotion_summary": _buy_promotion_summary(action_plan),
         "monday_operator_check_summary": _monday_operator_check_summary(monday_operator_check),
         "live_readiness_summary": _live_readiness_summary(live_readiness_bundle),
+        "status_refresh_summary": _status_refresh_summary(status_refresh),
         "scheduler_readiness": readiness,
         "position_report_markdown": position_report,
         "notes": [
@@ -85,6 +87,7 @@ def build_operator_status_markdown(payload: Mapping[str, Any]) -> str:
     lines.extend(_buy_promotion_markdown_lines(payload.get("buy_promotion_summary") or {}))
     lines.extend(_monday_operator_check_markdown_lines(payload.get("monday_operator_check_summary") or {}))
     lines.extend(_live_readiness_markdown_lines(payload.get("live_readiness_summary") or {}))
+    lines.extend(_status_refresh_markdown_lines(payload.get("status_refresh_summary") or {}))
     lines.extend(["", "## Scheduler Readiness", ""])
     lines.extend(readiness_markdown.splitlines()[2:])
     position_report = str(payload.get("position_report_markdown") or "").strip()
@@ -150,6 +153,43 @@ def _buy_promotion_markdown_lines(summary: Mapping[str, Any]) -> list[str]:
             f"{_cell(', '.join(str(value) for value in (item.get('followups') or [])))} | "
             f"{_cell(', '.join(str(value) for value in (item.get('blockers') or [])))} |"
         )
+    return lines
+
+
+def _status_refresh_summary(payload: Mapping[str, Any] | None) -> dict[str, Any]:
+    if not payload:
+        return {}
+    counts = payload.get("status_counts") if isinstance(payload, Mapping) else {}
+    counts = counts if isinstance(counts, Mapping) else {}
+    return {
+        "mode": str(payload.get("mode") or ""),
+        "submitted_order_count": int(payload.get("submitted_order_count") or 0),
+        "refreshed_count": int(payload.get("refreshed_count") or 0),
+        "events_recorded": int(payload.get("events_recorded") or 0),
+        "skipped_count": int(payload.get("skipped_count") or 0),
+        "error_count": int(payload.get("error_count") or 0),
+        "status_counts": {str(status): int(count or 0) for status, count in counts.items()},
+    }
+
+
+def _status_refresh_markdown_lines(summary: Mapping[str, Any]) -> list[str]:
+    if not summary:
+        return []
+    lines = [
+        "",
+        "## Paper Status Refresh",
+        "",
+        f"- Submitted orders checked: {int(summary.get('submitted_order_count') or 0)}",
+        f"- Refreshed: {int(summary.get('refreshed_count') or 0)}",
+        f"- Events recorded: {int(summary.get('events_recorded') or 0)}",
+        f"- Skipped: {int(summary.get('skipped_count') or 0)}",
+        f"- Errors: {int(summary.get('error_count') or 0)}",
+        "",
+        "| Status | Count |",
+        "| --- | ---: |",
+    ]
+    for status, count in sorted((summary.get("status_counts") or {}).items()):
+        lines.append(f"| {_cell(str(status))} | {int(count or 0)} |")
     return lines
 
 

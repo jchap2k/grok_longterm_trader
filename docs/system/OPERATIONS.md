@@ -739,15 +739,15 @@ remains visible as a warning.
 Build the full read-only operator status bundle:
 
 ```powershell
-python scripts/longterm_operator_status_bundle.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --paper-ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --price-map path\to\prices.json --feedback-summary path\to\feedback_summary.json --monday-operator-check path\to\paper_monday_operator_check.json --live-readiness-bundle path\to\live_readiness_bundle.json --report-output path\to\operator_status_bundle.json
-python scripts/longterm_operator_status_bundle.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --paper-ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --monday-operator-check path\to\paper_monday_operator_check.json --live-readiness-bundle path\to\live_readiness_bundle.json --report-output path\to\operator_status_bundle.json --json
+python scripts/longterm_operator_status_bundle.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --paper-ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --price-map path\to\prices.json --feedback-summary path\to\feedback_summary.json --monday-operator-check path\to\paper_monday_operator_check.json --live-readiness-bundle path\to\live_readiness_bundle.json --status-refresh path\to\paper_order_status_refresh.json --report-output path\to\operator_status_bundle.json
+python scripts/longterm_operator_status_bundle.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --paper-ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --monday-operator-check path\to\paper_monday_operator_check.json --live-readiness-bundle path\to\live_readiness_bundle.json --status-refresh path\to\paper_order_status_refresh.json --report-output path\to\operator_status_bundle.json --json
 ```
 
 The bundle combines paper lifecycle, buy-promotion state, optional Monday
-artifact status, optional live-readiness evidence, advisory scheduler readiness,
-and position intelligence into one operator surface. It is intended for manual
-review before any later scheduler automation design and keeps order submission
-disabled.
+artifact status, optional live-readiness evidence, optional paper status-refresh
+state, advisory scheduler readiness, and position intelligence into one
+operator surface. It is intended for manual review before any later scheduler
+automation design and keeps order submission disabled.
 
 ## Position Intelligence Report
 
