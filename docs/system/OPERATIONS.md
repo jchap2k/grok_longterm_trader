@@ -394,12 +394,13 @@ Submit eligible simple BUY previews to Alpaca paper only when explicitly
 intended:
 
 ```powershell
-python scripts/longterm_paper_execution.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --submit-paper-orders --audit-output path\to\paper_execution_audit.json
+python scripts/longterm_paper_execution.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --submit-paper-orders --confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY --audit-output path\to\paper_execution_audit.json
 ```
 
 Stage 6B is deliberately narrow:
 
 - It submits only simple `BUY` previews.
+- `--submit-paper-orders` also requires the exact `--confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY` latch; without it, the command exits before refreshing broker state or constructing the submit adapter.
 - Rebalance, sell, and sell-to-fund-buy previews are hard-blocked with `rebalance_blocked_v1`.
 - It revalidates protected symbols, benchmark guard, thesis/review status, decision confidence/recommendation, preview freshness, cash, active-rules hash, and duplicate submission state immediately before paper submission.
 - The real submit path refreshes Alpaca paper account state before broker calls; the portfolio JSON remains useful for audit/dry-run mode.

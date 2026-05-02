@@ -19,6 +19,8 @@ from longterm.portfolio_state import PortfolioState
 from longterm.decision_journal import LongTermDecisionJournal
 from portfolio.portfolio_profile import PortfolioProfile
 
+PAPER_SUBMIT_CONFIRMATION_TOKEN = "SUPERVISED_PAPER_BUY_ONLY"
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the supervised long-term paper execution boundary.")
@@ -29,6 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--action-plan", required=True)
     parser.add_argument("--max-preview-age-hours", type=int, default=24)
     parser.add_argument("--submit-paper-orders", action="store_true")
+    parser.add_argument("--confirm-paper-submit", default="")
     parser.add_argument("--audit-output", default=None)
     parser.add_argument("--json", action="store_true")
     return parser
@@ -44,6 +47,15 @@ def run_cli(
     action_plan = _load_json(args.action_plan)
     broker = None
     if args.submit_paper_orders:
+        if args.confirm_paper_submit != PAPER_SUBMIT_CONFIRMATION_TOKEN:
+            result = _confirmation_required_result(action_plan)
+            if args.audit_output:
+                Path(args.audit_output).write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
+            if args.json:
+                print(json.dumps(result, indent=2, sort_keys=True))
+            else:
+                print(_confirmation_required_markdown(result), end="")
+            return 2
         if broker_factory:
             broker = broker_factory()
         else:
@@ -77,6 +89,39 @@ def _load_json(path: str | Path) -> dict:
     return payload
 
 
+def _confirmation_required_result(action_plan: dict) -> dict:
+    return {
+        "schema_version": 1,
+        "mode": "paper_execution_submit_confirmation",
+        "paper_mode": True,
+        "live_mode": False,
+        "submit_requested": True,
+        "order_submission_enabled": False,
+        "plan_id": str(action_plan.get("plan_id") or ""),
+        "blockers": ["missing_or_invalid_confirm_paper_submit"],
+        "required_confirmation": PAPER_SUBMIT_CONFIRMATION_TOKEN,
+        "notes": [
+            "Paper submission was requested but the confirmation token was missing or invalid.",
+            "No broker state was refreshed and no broker orders were submitted.",
+        ],
+    }
+
+
+def _confirmation_required_markdown(result: dict) -> str:
+    return "\n".join(
+        [
+            "# Paper Execution Confirmation Required",
+            "",
+            "Paper submission was requested, but the confirmation token was missing or invalid.",
+            "",
+            f"- Submit requested: `{str(result.get('submit_requested')).lower()}`",
+            f"- Order submission enabled: `{str(result.get('order_submission_enabled')).lower()}`",
+            f"- Required confirmation: `{result.get('required_confirmation')}`",
+            "",
+        ]
+    )
+
+
 def _fresh_alpaca_paper_state(profile: PortfolioProfile) -> PortfolioState:
     """Read fresh Alpaca paper state before the real submit adapter is used."""
     from brokers.alpaca_broker import AlpacaBroker
@@ -94,4 +139,4 @@ def _fresh_alpaca_paper_state(profile: PortfolioProfile) -> PortfolioState:
 
 
 
-__all__ = ["build_parser", "main", "run_cli"]
+__all__ = ["PAPER_SUBMIT_CONFIRMATION_TOKEN", "build_parser", "main", "run_cli"]
