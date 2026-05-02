@@ -28,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["notional_fractional", "whole_share"],
     )
     parser.add_argument("--scheduler-readiness", default="")
+    parser.add_argument("--workflow-smoke", default="")
     parser.add_argument("--json", action="store_true")
     return parser
 
@@ -47,6 +48,7 @@ def run_cli(args: argparse.Namespace) -> int:
         account_cleanliness=cleanliness,
         broker_capabilities=broker_capabilities,
         scheduler_readiness=_load_json(args.scheduler_readiness) if args.scheduler_readiness else {},
+        workflow_smoke=_load_json(args.workflow_smoke) if args.workflow_smoke else {},
     )
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))

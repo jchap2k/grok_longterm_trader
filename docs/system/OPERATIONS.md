@@ -280,14 +280,16 @@ Build one pre-flight report before a supervised paper smoke:
 
 ```powershell
 python scripts/longterm_paper_smoke_readiness.py --portfolio-state path\to\portfolio.json --expected-cash 74000 --scheduler-readiness path\to\scheduler_readiness.json
-python scripts/longterm_paper_smoke_readiness.py --portfolio-state path\to\portfolio.json --expected-cash 74000 --required-order-model whole_share --json
+python scripts/longterm_paper_smoke_readiness.py --portfolio-state path\to\portfolio.json --expected-cash 74000 --required-order-model whole_share --workflow-smoke path\to\paper_workflow_smoke.json --json
 ```
 
 The smoke-readiness report combines account cleanliness, broker-capability
-compatibility, and optional scheduler-readiness output. The default
-`notional_fractional` model intentionally blocks Schwab API live compatibility;
-use `--required-order-model whole_share` only when the planned smoke/live path
-has been adapted to whole-share sizing.
+compatibility, optional scheduler-readiness output, and optional workflow-smoke
+evidence. If `--workflow-smoke` is provided and that audit-only rehearsal is not
+ready, the readiness report blocks. The default `notional_fractional` model
+intentionally blocks Schwab API live compatibility; use
+`--required-order-model whole_share` only when the planned smoke/live path has
+been adapted to whole-share sizing.
 
 Reconcile the current paper snapshot against a dry-run action plan or expected
 cash before considering any paper-execution feature:

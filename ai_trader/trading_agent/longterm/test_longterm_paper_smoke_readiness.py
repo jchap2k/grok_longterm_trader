@@ -37,6 +37,29 @@ def test_paper_smoke_readiness_passes_with_clean_account_and_compatible_paper_mo
     assert "Ready for supervised smoke: yes" in build_paper_smoke_readiness_markdown(report)
 
 
+def test_paper_smoke_readiness_uses_workflow_smoke_when_provided():
+    cleanliness = evaluate_paper_account_cleanliness(
+        PortfolioState(cash=74000, holdings=[], protected_symbols=["FXAIX"]),
+        expected_cash=74000,
+    )
+    broker_capabilities = evaluate_broker_capability_match(
+        paper_broker="alpaca_paper",
+        live_broker="schwab_api",
+        required_order_model="whole_share",
+    )
+
+    report = build_paper_smoke_readiness_report(
+        account_cleanliness=cleanliness,
+        broker_capabilities=broker_capabilities,
+        scheduler_readiness={"blocker_count": 0, "warning_count": 0},
+        workflow_smoke={"ready_for_supervised_submit": False, "blockers": ["preview_blocked_rows"]},
+    )
+
+    assert report["ready_for_supervised_smoke"] is False
+    assert "workflow_smoke_not_ready" in report["blockers"]
+    assert report["workflow_smoke"]["blockers"] == ["preview_blocked_rows"]
+
+
 def test_paper_smoke_readiness_blocks_dirty_account_and_incompatible_broker_model():
     cleanliness = evaluate_paper_account_cleanliness(
         PortfolioState(
@@ -71,6 +94,8 @@ def test_paper_smoke_readiness_cli_outputs_json(tmp_path, capsys):
     )
     scheduler_path = tmp_path / "scheduler.json"
     scheduler_path.write_text(json.dumps({"blocker_count": 0, "warning_count": 1}), encoding="utf-8")
+    workflow_path = tmp_path / "workflow.json"
+    workflow_path.write_text(json.dumps({"ready_for_supervised_submit": True, "blockers": []}), encoding="utf-8")
 
     parser = build_parser()
     args = parser.parse_args(
@@ -81,6 +106,8 @@ def test_paper_smoke_readiness_cli_outputs_json(tmp_path, capsys):
             "74000",
             "--scheduler-readiness",
             str(scheduler_path),
+            "--workflow-smoke",
+            str(workflow_path),
             "--required-order-model",
             "whole_share",
             "--json",
@@ -92,3 +119,4 @@ def test_paper_smoke_readiness_cli_outputs_json(tmp_path, capsys):
 
     assert payload["mode"] == "paper_smoke_readiness"
     assert payload["ready_for_supervised_smoke"] is True
+    assert payload["workflow_smoke"]["ready_for_supervised_submit"] is True

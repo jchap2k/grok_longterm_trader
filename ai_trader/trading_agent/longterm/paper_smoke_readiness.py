@@ -10,11 +10,13 @@ def build_paper_smoke_readiness_report(
     account_cleanliness: Mapping[str, Any] | None = None,
     broker_capabilities: Mapping[str, Any] | None = None,
     scheduler_readiness: Mapping[str, Any] | None = None,
+    workflow_smoke: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Combine existing advisory artifacts into one paper-smoke pre-flight report."""
     account_cleanliness = account_cleanliness or {}
     broker_capabilities = broker_capabilities or {}
     scheduler_readiness = scheduler_readiness or {}
+    workflow_smoke = workflow_smoke or {}
     blockers: list[str] = []
     warnings: list[str] = []
 
@@ -27,6 +29,8 @@ def build_paper_smoke_readiness_report(
         blockers.append("scheduler_readiness_blockers")
     if int(scheduler_readiness.get("warning_count") or 0):
         warnings.append("scheduler_readiness_warnings")
+    if workflow_smoke and not bool(workflow_smoke.get("ready_for_supervised_submit")):
+        blockers.append("workflow_smoke_not_ready")
     warnings.extend(str(item) for item in (broker_capabilities.get("warnings") or []))
 
     return {
@@ -41,6 +45,7 @@ def build_paper_smoke_readiness_report(
         "account_cleanliness": dict(account_cleanliness),
         "broker_capabilities": dict(broker_capabilities),
         "scheduler_readiness": dict(scheduler_readiness),
+        "workflow_smoke": dict(workflow_smoke),
         "notes": [
             "Read-only pre-flight report. No broker orders were submitted, canceled, or modified.",
             "A ready report means the artifacts look clean enough for a supervised smoke; it does not authorize automation.",
