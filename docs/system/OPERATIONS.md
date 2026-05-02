@@ -336,6 +336,8 @@ python scripts/longterm_paper_order_status_refresh.py --ledger-db path\to\paper_
 The Monday runbook includes this artifact path automatically. Status refresh
 does not submit, cancel, or modify orders; it only appends read-only broker
 status events to the paper ledger and writes the JSON report when requested.
+If the ledger has no submitted paper order IDs, the command writes an empty
+refresh report without opening a broker connection.
 
 Reconcile the current paper snapshot against a dry-run action plan or expected
 cash before considering any paper-execution feature:

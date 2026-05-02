@@ -98,6 +98,32 @@ def build_paper_order_status_refresh_markdown(payload: Mapping[str, Any]) -> str
     return "\n".join(lines) + "\n"
 
 
+def build_empty_paper_order_status_refresh() -> dict[str, Any]:
+    """Build a status-refresh payload without touching a broker."""
+    return {
+        "schema_version": 1,
+        "mode": "paper_order_status_refresh",
+        "paper_mode": True,
+        "live_mode": False,
+        "submitted_order_count": 0,
+        "refreshed_count": 0,
+        "events_recorded": 0,
+        "skipped_count": 0,
+        "error_count": 0,
+        "status_counts": {},
+        "items": [],
+        "notes": [
+            "Read-only status refresh. No submitted paper orders were found.",
+            "No broker connection was opened.",
+        ],
+    }
+
+
+def has_submitted_paper_orders(ledger: PaperTradeLedger, *, limit: int = 100) -> bool:
+    """Return whether the ledger has submitted broker order IDs to refresh."""
+    return bool(_latest_submitted_by_broker_order_id(ledger, limit=limit))
+
+
 def _latest_submitted_by_broker_order_id(
     ledger: PaperTradeLedger,
     *,
@@ -169,4 +195,9 @@ def _iso_or_empty(value: Any) -> str:
     return str(value)
 
 
-__all__ = ["PaperOrderStatusRefresh", "build_paper_order_status_refresh_markdown"]
+__all__ = [
+    "PaperOrderStatusRefresh",
+    "build_empty_paper_order_status_refresh",
+    "build_paper_order_status_refresh_markdown",
+    "has_submitted_paper_orders",
+]

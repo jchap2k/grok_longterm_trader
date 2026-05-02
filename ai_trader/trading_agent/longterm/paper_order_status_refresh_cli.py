@@ -10,7 +10,9 @@ from typing import Callable
 from longterm.paper_order_status_refresh import (
     PaperOrderStatusBroker,
     PaperOrderStatusRefresh,
+    build_empty_paper_order_status_refresh,
     build_paper_order_status_refresh_markdown,
+    has_submitted_paper_orders,
 )
 from longterm.paper_trade_ledger import PaperTradeLedger
 
@@ -29,12 +31,22 @@ def run_cli(
     *,
     broker_factory: Callable[[], PaperOrderStatusBroker] | None = None,
 ) -> int:
+    ledger = PaperTradeLedger(args.ledger_db)
+    if not has_submitted_paper_orders(ledger, limit=args.limit):
+        payload = build_empty_paper_order_status_refresh()
+        _emit_payload(args, payload)
+        return 0
     broker = broker_factory() if broker_factory else _default_broker()
     payload = PaperOrderStatusRefresh().run(
-        ledger=PaperTradeLedger(args.ledger_db),
+        ledger=ledger,
         broker=broker,
         limit=args.limit,
     )
+    _emit_payload(args, payload)
+    return 0 if payload.get("error_count", 0) == 0 else 1
+
+
+def _emit_payload(args: argparse.Namespace, payload: dict) -> None:
     if args.report_output:
         Path(args.report_output).parent.mkdir(parents=True, exist_ok=True)
         Path(args.report_output).write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
@@ -42,7 +54,6 @@ def run_cli(
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
         print(build_paper_order_status_refresh_markdown(payload), end="")
-    return 0 if payload.get("error_count", 0) == 0 else 1
 
 
 def main(argv: list[str] | None = None) -> int:

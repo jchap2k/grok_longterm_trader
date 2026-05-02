@@ -202,3 +202,29 @@ def test_status_refresh_cli_writes_report_output_with_injected_broker(tmp_path, 
 
     assert printed["status_counts"]["filled"] == 1
     assert saved["status_counts"]["filled"] == 1
+
+
+def test_status_refresh_cli_skips_broker_connection_when_no_submitted_orders(tmp_path, capsys):
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    report_path = tmp_path / "empty_status_refresh.json"
+
+    def raise_if_called():
+        raise AssertionError("broker should not be constructed when there are no submitted orders")
+
+    args = build_parser().parse_args(
+        [
+            "--ledger-db",
+            str(ledger.db_path),
+            "--report-output",
+            str(report_path),
+            "--json",
+        ]
+    )
+
+    assert run_cli(args, broker_factory=raise_if_called) == 0
+    printed = json.loads(capsys.readouterr().out)
+    saved = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert printed["submitted_order_count"] == 0
+    assert printed["refreshed_count"] == 0
+    assert saved["submitted_order_count"] == 0
