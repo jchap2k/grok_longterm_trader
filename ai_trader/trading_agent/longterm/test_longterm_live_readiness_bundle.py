@@ -53,14 +53,33 @@ def test_live_readiness_bundle_combines_base_broker_and_paper_evidence(tmp_path)
     bundle = build_live_readiness_bundle(
         base_observed=_base_observed(),
         paper_ledger=ledger,
+        paper_smoke_readiness={"ready_for_supervised_smoke": True},
         required_order_model="whole_share",
     )
 
     assert bundle["ready"] is True
     assert bundle["observed"]["paper_trading_verified"] is True
+    assert bundle["observed"]["paper_smoke_ready"] is True
     assert bundle["observed"]["broker_capability_match"] is True
     assert bundle["paper_trading_verification"]["paper_trading_verified"] is True
+    assert bundle["paper_smoke_readiness"]["ready_for_supervised_smoke"] is True
     assert "Ready for live trading: yes" in build_live_readiness_bundle_markdown(bundle)
+
+
+def test_live_readiness_bundle_blocks_when_paper_smoke_not_ready(tmp_path):
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    _filled_event(ledger)
+
+    bundle = build_live_readiness_bundle(
+        base_observed=_base_observed(),
+        paper_ledger=ledger,
+        paper_smoke_readiness={"ready_for_supervised_smoke": False, "blockers": ["workflow_smoke_not_ready"]},
+        required_order_model="whole_share",
+    )
+
+    assert bundle["ready"] is False
+    assert "paper_smoke_ready" in bundle["unmet_gate_keys"]
+    assert bundle["observed"]["paper_smoke_ready"] is False
 
 
 def test_live_readiness_bundle_keeps_notional_fractional_schwab_mismatch_unmet(tmp_path):
@@ -70,6 +89,7 @@ def test_live_readiness_bundle_keeps_notional_fractional_schwab_mismatch_unmet(t
     bundle = build_live_readiness_bundle(
         base_observed=_base_observed(),
         paper_ledger=ledger,
+        paper_smoke_readiness={"ready_for_supervised_smoke": True},
         required_order_model="notional_fractional",
     )
 
@@ -82,7 +102,9 @@ def test_live_readiness_bundle_cli_outputs_json(tmp_path, capsys):
     ledger = PaperTradeLedger(tmp_path / "paper.db")
     _filled_event(ledger)
     base_path = tmp_path / "base.json"
+    smoke_path = tmp_path / "paper_smoke.json"
     base_path.write_text(json.dumps(_base_observed()), encoding="utf-8")
+    smoke_path.write_text(json.dumps({"ready_for_supervised_smoke": True}), encoding="utf-8")
     parser = build_parser()
     args = parser.parse_args(
         [
@@ -90,6 +112,8 @@ def test_live_readiness_bundle_cli_outputs_json(tmp_path, capsys):
             str(base_path),
             "--paper-ledger-db",
             str(ledger.db_path),
+            "--paper-smoke-readiness",
+            str(smoke_path),
             "--required-order-model",
             "whole_share",
             "--json",
@@ -101,3 +125,4 @@ def test_live_readiness_bundle_cli_outputs_json(tmp_path, capsys):
 
     assert payload["mode"] == "live_readiness_bundle"
     assert payload["ready"] is True
+    assert payload["observed"]["paper_smoke_ready"] is True

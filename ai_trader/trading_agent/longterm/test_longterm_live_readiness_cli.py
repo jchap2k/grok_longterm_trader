@@ -14,9 +14,10 @@ def test_live_readiness_cli_merges_base_observed_file_and_fragments(tmp_path, ca
         json.dumps(
             {
                 "dry_run_cycles": 30,
-                "benchmark_proven": True,
-                "paper_trading_verified": True,
-                "protected_symbol_enforced": True,
+                    "benchmark_proven": True,
+                    "paper_trading_verified": True,
+                    "paper_smoke_ready": True,
+                    "protected_symbol_enforced": True,
                 "manual_approval": True,
                 "kill_switch": True,
                 "audit_logs": True,

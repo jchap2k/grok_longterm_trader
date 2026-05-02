@@ -50,6 +50,7 @@ class LiveReadinessChecklist:
                 LiveReadinessGate("dry_run_history", "Sufficient dry-run history", 30),
                 LiveReadinessGate("benchmark_proven", "Active sleeve benchmark proof"),
                 LiveReadinessGate("paper_trading_verified", "Paper trading verified"),
+                LiveReadinessGate("paper_smoke_ready", "Supervised paper smoke readiness"),
                 LiveReadinessGate(
                     "broker_capability_match",
                     "Live broker capabilities match paper sizing",

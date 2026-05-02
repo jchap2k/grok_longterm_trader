@@ -17,6 +17,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build a live-readiness evidence bundle.")
     parser.add_argument("--observed-file", default="")
     parser.add_argument("--paper-ledger-db", default="")
+    parser.add_argument("--paper-smoke-readiness", default="")
     parser.add_argument("--paper-broker", default="alpaca_paper")
     parser.add_argument("--live-broker", default="schwab_api")
     parser.add_argument(
@@ -35,6 +36,7 @@ def run_cli(args: argparse.Namespace) -> int:
         paper_broker=args.paper_broker,
         live_broker=args.live_broker,
         required_order_model=args.required_order_model,
+        paper_smoke_readiness=_load_json(args.paper_smoke_readiness) if args.paper_smoke_readiness else {},
     )
     if args.json:
         print(json.dumps(bundle, indent=2, sort_keys=True))

@@ -17,6 +17,7 @@ def build_live_readiness_bundle(
     paper_broker: str = "alpaca_paper",
     live_broker: str = "schwab_api",
     required_order_model: str = "notional_fractional",
+    paper_smoke_readiness: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Merge local advisory evidence and evaluate the live-readiness checklist."""
     broker = evaluate_broker_capability_match(
@@ -37,6 +38,8 @@ def build_live_readiness_bundle(
     observed = dict(base_observed or {})
     observed.update(broker.get("live_readiness_observed") or {})
     observed.update(paper.get("live_readiness_observed") or {})
+    smoke = dict(paper_smoke_readiness or {})
+    observed["paper_smoke_ready"] = bool(smoke.get("ready_for_supervised_smoke"))
     result = LiveReadinessChecklist.default().evaluate(observed)
     return {
         "schema_version": 1,
@@ -48,6 +51,7 @@ def build_live_readiness_bundle(
         "gates": result.gates,
         "broker_capabilities": broker,
         "paper_trading_verification": paper,
+        "paper_smoke_readiness": smoke,
         "notes": [
             "Read-only evidence bundle. No broker orders were submitted, canceled, or modified.",
             "A ready checklist does not enable live trading; it only summarizes local evidence.",
@@ -68,6 +72,7 @@ def build_live_readiness_bundle_markdown(bundle: Mapping[str, Any]) -> str:
         "",
         f"- Broker capability match: {'yes' if (bundle.get('broker_capabilities') or {}).get('compatible') else 'no'}",
         f"- Paper trading verified: {'yes' if (bundle.get('paper_trading_verification') or {}).get('paper_trading_verified') else 'no'}",
+        f"- Paper smoke ready: {'yes' if (bundle.get('paper_smoke_readiness') or {}).get('ready_for_supervised_smoke') else 'no'}",
         "",
         "## Gates",
         "",

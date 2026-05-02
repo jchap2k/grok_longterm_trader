@@ -739,7 +739,7 @@ python scripts/longterm_broker_capabilities.py --required-order-model whole_shar
 python scripts/longterm_live_readiness.py
 python scripts/longterm_live_readiness.py --observed-file path\to\live_readiness_observed.json
 python scripts/longterm_live_readiness.py --observed-file path\to\base_observed.json --observed-fragment path\to\broker_capability_observed.json
-python scripts/longterm_live_readiness_bundle.py --observed-file path\to\base_observed.json --paper-ledger-db path\to\paper_ledger.db --required-order-model whole_share
+python scripts/longterm_live_readiness_bundle.py --observed-file path\to\base_observed.json --paper-ledger-db path\to\paper_ledger.db --paper-smoke-readiness path\to\paper_smoke_readiness.json --required-order-model whole_share
 ```
 
 The live-readiness checklist is intentionally conservative. It reports unmet
@@ -750,9 +750,9 @@ being treated as Schwab API live-ready. Use `--required-order-model whole_share`
 only after the live plan has deliberately been adapted to whole-share sizing.
 Observed fragments are merged after the base observed file, so later fragments
 can intentionally override earlier gate values.
-The bundle command assembles broker-capability and paper-trading verification
-evidence automatically from local artifacts, but it is still evidence-only and
-does not enable live execution.
+The bundle command assembles broker-capability, paper-trading verification, and
+optional paper-smoke readiness evidence from local artifacts, but it is still
+evidence-only and does not enable live execution.
 
 Run exactly one scheduled cycle:
 
