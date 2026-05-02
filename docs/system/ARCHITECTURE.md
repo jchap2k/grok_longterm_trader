@@ -1,5 +1,158 @@
 # Long-Term Trader Architecture
 
+## System Map
+
+```mermaid
+flowchart TD
+    subgraph Sources["Idea & Data Sources"]
+        IDX["Index / ETF / Nasdaq Lists"]
+        MF["Motley Fool Premium Capture"]
+        MAN["Manual Watchlists"]
+        POLY["Polygon / News / yfinance / Finnhub"]
+        ALPACA_READ["Alpaca Paper Read API"]
+    end
+
+    subgraph Universe["Universe Building"]
+        DISC["Discovery Queue"]
+        DISC_ENRICH["Discovery Enrichment"]
+        BATCH["Research Universe Batches"]
+    end
+
+    subgraph Enrichment["Ticker Enrichment"]
+        MF_COMPANY["Motley Fool Company Pages"]
+        FUND["Python Fundamental Metrics"]
+        NEWS["Relevant News Filter"]
+        EARN["Latest Earnings Context"]
+        SCORE["Quality-Growth Scorecard"]
+        GROK_ENRICH["Grok Catalyst Synthesis"]
+        BRIEF["Research Evidence Brief"]
+    end
+
+    subgraph Research["Research & Decision"]
+        PACKET["ResearchPacket Intake"]
+        RULES["Active Rules Context"]
+        PORT_CTX["Read-Only Portfolio Context"]
+        REVIEWERS["Deterministic Reviewers"]
+        CHALLENGE["Bull/Bear Thesis Challenge"]
+        CGH["CGH Long-Term Committee"]
+        DECISION["Structured Decision"]
+    end
+
+    subgraph Memory["Journal & Feedback Memory"]
+        JOURNAL["Decision Journal"]
+        RANKS["Recommendation Table / Rank History"]
+        THESIS["Thesis Review Events"]
+        FEEDBACK["Symbol Feedback Profiles"]
+        PAPER_LEDGER["Paper Preview / Execution Ledger"]
+    end
+
+    subgraph Planning["Portfolio Planning"]
+        PROMOTE["Buy Promotion Gate"]
+        NEXT["Next Actions"]
+        ACTION_PLAN["Account Action Plan"]
+        IDLE["Idle Cash / Defensive Parking Policy"]
+        RISK["Risk Review"]
+        REBALANCE["Dry-Run Rebalance Planner"]
+    end
+
+    subgraph Paper["Supervised Paper Boundary"]
+        PREVIEW["Paper Order Preview"]
+        ELIG["Paper Eligibility"]
+        SMOKE["Audit-Only Workflow Smoke"]
+        READY["Paper Smoke Readiness"]
+        RUNBOOK["Monday Runbook / Runbook Check"]
+        SUBMIT["Stage 6B Alpaca Paper BUY Submit"]
+        STATUS["Paper Status Refresh"]
+    end
+
+    subgraph LivePrep["Live Readiness Only"]
+        BROKER_CAP["Broker Capability Match"]
+        VERIFY["Paper Trading Verification"]
+        LIVE_BUNDLE["Live Readiness Bundle"]
+    end
+
+    IDX --> DISC
+    MF --> DISC
+    MAN --> DISC
+    POLY --> FUND
+    POLY --> NEWS
+    DISC --> DISC_ENRICH --> BATCH
+
+    BATCH --> MF_COMPANY
+    BATCH --> FUND
+    NEWS --> EARN
+    FUND --> SCORE
+    MF_COMPANY --> BRIEF
+    FUND --> BRIEF
+    NEWS --> GROK_ENRICH --> BRIEF
+    EARN --> BRIEF
+    SCORE --> BRIEF
+
+    BRIEF --> PACKET
+    PACKET --> REVIEWERS
+    RULES --> CGH
+    PORT_CTX --> CGH
+    REVIEWERS --> CHALLENGE --> CGH
+    PACKET --> CGH
+    CGH --> DECISION --> JOURNAL
+
+    JOURNAL --> RANKS
+    JOURNAL --> THESIS
+    JOURNAL --> FEEDBACK
+    RANKS --> PROMOTE
+    THESIS --> NEXT
+    FEEDBACK --> PACKET
+
+    PROMOTE --> ACTION_PLAN
+    NEXT --> ACTION_PLAN
+    IDLE --> ACTION_PLAN
+    RISK --> ACTION_PLAN
+    REBALANCE --> ACTION_PLAN
+
+    ACTION_PLAN --> PREVIEW --> ELIG --> SMOKE --> READY --> RUNBOOK
+    RUNBOOK --> SUBMIT --> STATUS --> PAPER_LEDGER
+    PREVIEW --> PAPER_LEDGER
+    STATUS --> FEEDBACK
+
+    ALPACA_READ --> READY
+    ALPACA_READ --> STATUS
+    ALPACA_READ --> VERIFY
+
+    READY --> LIVE_BUNDLE
+    BROKER_CAP --> LIVE_BUNDLE
+    VERIFY --> LIVE_BUNDLE
+
+    LIVE_BUNDLE -. "read-only evidence; does not enable live trading" .-> SUBMIT
+```
+
+## Safety Boundary
+
+```mermaid
+flowchart LR
+    A["Research BUY / ADD"] --> B["Buy Promotion Gate"]
+    B -->|ACTIONABLE_BUY only| C["Dry-Run Account Plan"]
+    B -->|pending evidence| R["Research / Watchlist Task"]
+    C --> D["Paper Preview"]
+    D --> E["Eligibility Revalidation"]
+    E --> F["Workflow Smoke"]
+    F --> G["Paper Smoke Readiness"]
+    G --> H["Runbook Check"]
+    H --> I["Explicit Stage 6B Paper Submit"]
+
+    I -->|simple BUY only| J["Alpaca Paper Order"]
+    I -->|sell / rebalance| K["Blocked V1"]
+    I -->|market closed| K
+    I -->|stale artifacts| K
+    I -->|promotion blockers| K
+
+    J --> L["Status Refresh"]
+    L --> M["Paper Ledger / Feedback"]
+
+    N["Live Readiness Bundle"] -. "read-only evidence" .-> O["Future live design"]
+    M --> N
+    G --> N
+```
+
 ## Main Components
 
 `research/research_packet.py`
