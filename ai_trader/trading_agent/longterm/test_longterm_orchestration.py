@@ -722,6 +722,44 @@ def test_cycle_can_build_account_action_plan(tmp_path):
     assert FakeJournal.recorded_plans[0]["mode"] == "dry_run"
 
 
+def test_cycle_passes_portfolio_state_into_research_runner(tmp_path):
+    class FakeRunner:
+        def __init__(self):
+            self.portfolio_states = []
+
+        def run_and_record(self, packet, **kwargs):
+            self.portfolio_states.append(kwargs.get("portfolio_state"))
+            return f"decision-{packet.symbol}"
+
+    runner = FakeRunner()
+    portfolio_state = PortfolioState(
+        cash=5000,
+        holdings=[{"symbol": "SPY", "market_value": 12000}],
+        protected_symbols=["FXAIX"],
+    )
+
+    result = run_longterm_cycle(
+        profile=_build_profile(),
+        manual_ideas=[
+            {
+                "symbol": "AMZN",
+                "company_name": "Amazon",
+                "idea_source": "manual",
+                "thesis_summary": "AWS and advertising durability.",
+            }
+        ],
+        motley_fool_settings=MotleyFoolCaptureSettings(enabled=False, cookie_ready=False),
+        runner=runner,
+        journal_db_path=tmp_path / "journal.db",
+        portfolio_state=portfolio_state,
+        report_builder_func=lambda journal, *, limit: "",
+        next_actions_builder_func=lambda journal, *, profile, portfolio_state, limit: "",
+    )
+
+    assert result.decision_ids == ["decision-AMZN"]
+    assert runner.portfolio_states == [portfolio_state]
+
+
 def test_orchestration_cli_loads_idea_file_and_prints_summary(tmp_path, capsys):
     idea_path = tmp_path / "idea.json"
     idea_path.write_text('{"symbol":"aapl","company_name":"Apple"}', encoding="utf-8")

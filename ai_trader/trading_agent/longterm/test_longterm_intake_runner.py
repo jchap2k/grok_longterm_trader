@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from portfolio.portfolio_profile import PortfolioProfile
 from research.intake import create_research_packet_from_idea
+from longterm.portfolio_state import PortfolioState
 from longterm.research_runner import LongTermResearchRunner
 from research.research_packet import CompanyCategory
 
@@ -198,6 +199,67 @@ def test_longterm_research_runner_includes_active_rules_context(monkeypatch, tmp
     assert "active_rules_context" in captured["context_sections"]
     assert "Long-term quality-growth active sleeve" in captured["context_sections"]["active_rules_context"]
     assert "FXAIX is protected" in captured["context_sections"]["active_rules_context"]
+
+
+def test_longterm_research_runner_includes_current_portfolio_context(monkeypatch):
+    captured = {}
+
+    class FakeCheapGrokHeavy:
+        def __init__(self, **kwargs):
+            pass
+
+        def call_with_context(self, task_prompt, context_sections=None):
+            captured["context_sections"] = context_sections or {}
+            return '{"recommendation":"PASS","confidence":75}'
+
+    monkeypatch.setattr(
+        "longterm.research_runner.CheapGrokHeavy",
+        FakeCheapGrokHeavy,
+    )
+
+    profile = PortfolioProfile(
+        account_strategy_mode="roth_ira",
+        tradable_capital=34000,
+        protected_symbols=["FXAIX"],
+        benchmark_symbol="FXAIX",
+        defensive_parking_symbol="SPY",
+        low_risk_parking_symbol="SGOV",
+        duration_hedge_symbol="TLT",
+    )
+    packet = create_research_packet_from_idea(
+        {
+            "symbol": "AMZN",
+            "company_name": "Amazon",
+            "business_summary": "Large-cap platform company.",
+            "thesis_summary": "AWS and advertising durability.",
+        },
+        profile=profile,
+    )
+    portfolio_state = PortfolioState(
+        cash=5000,
+        holdings=[
+            {"symbol": "FXAIX", "market_value": 40000},
+            {"symbol": "SPY", "market_value": 33150},
+            {"symbol": "AMZN", "market_value": 813.03},
+        ],
+        protected_symbols=["FXAIX"],
+    )
+    runner = LongTermResearchRunner(
+        api_key="test-key",
+        config_path="dummy-config.json",
+        verbose=False,
+    )
+
+    runner.run(packet, portfolio_state=portfolio_state)
+
+    context = captured["context_sections"]["portfolio_context"]
+    assert "Cash: $5,000.00" in context
+    assert "Active market value: $33,963.03" in context
+    assert "Protected/core value: $40,000.00" in context
+    assert "Holding FXAIX: $40,000.00, role=protected" in context
+    assert "Holding SPY: $33,150.00, role=parking" in context
+    assert "Holding AMZN: $813.03, role=existing_candidate_position" in context
+    assert "Parking symbols: SPY, SGOV, TLT" in context
 
 
 def test_longterm_agent_specs_include_active_rules_for_every_committee_role():

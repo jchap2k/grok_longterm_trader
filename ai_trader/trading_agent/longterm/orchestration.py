@@ -207,6 +207,7 @@ def run_longterm_cycle(
             runner.run_and_record(
                 packet,
                 journal_db_path=journal_db_path,
+                portfolio_state=portfolio_state,
             )
         )
 

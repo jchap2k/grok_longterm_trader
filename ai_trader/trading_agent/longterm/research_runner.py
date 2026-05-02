@@ -9,6 +9,7 @@ from longterm.active_rules_provider import ActiveRulesProvider
 from longterm.book_principles import BookPrinciplesProvider
 from longterm.decision_journal import LongTermDecisionJournal
 from longterm.decision_parser import parse_decision_response
+from longterm.portfolio_state import PortfolioState
 from longterm.review_cadence import ReviewCadencePolicy
 from longterm.reviewers import (
     BalanceSheetReviewer,
@@ -73,6 +74,7 @@ class LongTermResearchRunner:
         self,
         packet: ResearchPacket,
         *,
+        portfolio_state: PortfolioState | None = None,
         financial_metrics: str = "",
         macro_regime: str = "",
         market_risk_context: str = "",
@@ -105,10 +107,7 @@ class LongTermResearchRunner:
             "financial_metrics": financial_metrics,
             "business_summary": packet.business_summary,
             "macro_regime": macro_regime,
-            "portfolio_context": (
-                f"Account mode: {packet.account_strategy_mode or 'standard'}. "
-                f"Protected symbols: {', '.join(packet.protected_symbols) if packet.protected_symbols else 'none'}."
-            ),
+            "portfolio_context": _format_portfolio_context(packet, portfolio_state),
             "market_risk_context": market_risk_context,
             "bull_thesis": packet.thesis_summary,
             "supporting_evidence": supporting_evidence,
@@ -141,6 +140,7 @@ class LongTermResearchRunner:
         self,
         packet: ResearchPacket,
         *,
+        portfolio_state: PortfolioState | None = None,
         financial_metrics: str = "",
         macro_regime: str = "",
         market_risk_context: str = "",
@@ -150,6 +150,7 @@ class LongTermResearchRunner:
         """Run the configured long-term research flow for one packet."""
         context_sections = self._build_context_sections(
             packet,
+            portfolio_state=portfolio_state,
             financial_metrics=financial_metrics,
             macro_regime=macro_regime,
             market_risk_context=market_risk_context,
@@ -172,6 +173,7 @@ class LongTermResearchRunner:
         journal_db_path: str | Path | None = None,
         candidate_price: float | None = None,
         benchmark_price: float | None = None,
+        portfolio_state: PortfolioState | None = None,
         financial_metrics: str = "",
         macro_regime: str = "",
         market_risk_context: str = "",
@@ -181,6 +183,7 @@ class LongTermResearchRunner:
         """Run research and record the structured decision in the journal."""
         raw_response = self.run(
             packet,
+            portfolio_state=portfolio_state,
             financial_metrics=financial_metrics,
             macro_regime=macro_regime,
             market_risk_context=market_risk_context,
@@ -196,3 +199,66 @@ class LongTermResearchRunner:
             benchmark_price=benchmark_price,
             raw_response=raw_response,
         )
+
+
+def _format_portfolio_context(
+    packet: ResearchPacket,
+    portfolio_state: PortfolioState | None,
+) -> str:
+    """Format read-only account context for the LLM committee."""
+    protected = [symbol.upper() for symbol in (packet.protected_symbols or [])]
+    parking_symbols = _dedupe_symbols(
+        [
+            packet.defensive_parking_symbol,
+            "SGOV",
+            "TLT",
+        ]
+    )
+    lines = [
+        f"Account mode: {packet.account_strategy_mode or 'standard'}.",
+        f"Protected symbols: {', '.join(protected) if protected else 'none'}.",
+        f"Benchmark symbol: {packet.benchmark_symbol or 'none'}.",
+        f"Parking symbols: {', '.join(parking_symbols) if parking_symbols else 'none'}.",
+    ]
+    if portfolio_state is None:
+        lines.append("Current portfolio state: not supplied.")
+        return "\n".join(lines)
+
+    protected_set = set(protected) | set(portfolio_state.protected_symbols)
+    parking_set = set(parking_symbols)
+    lines.extend(
+        [
+            f"Cash: {_money(portfolio_state.cash)}.",
+            f"Active market value: {_money(portfolio_state.active_market_value)}.",
+            f"Protected/core value: {_money(portfolio_state.protected_market_value)}.",
+        ]
+    )
+    if not portfolio_state.holdings:
+        lines.append("Current holdings: none.")
+        return "\n".join(lines)
+
+    for holding in portfolio_state.holdings:
+        role = "active"
+        if holding.symbol in protected_set:
+            role = "protected"
+        elif holding.symbol == packet.symbol:
+            role = "existing_candidate_position"
+        elif holding.symbol in parking_set:
+            role = "parking"
+        lines.append(
+            f"Holding {holding.symbol}: {_money(holding.market_value)}, role={role}."
+        )
+    return "\n".join(lines)
+
+
+def _money(value: float | int | None) -> str:
+    return f"${float(value or 0.0):,.2f}"
+
+
+def _dedupe_symbols(symbols: list[str | None]) -> list[str]:
+    results: list[str] = []
+    for symbol in symbols:
+        normalized = str(symbol or "").upper()
+        if normalized and normalized not in results:
+            results.append(normalized)
+    return results
