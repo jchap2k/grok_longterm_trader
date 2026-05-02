@@ -77,12 +77,22 @@ def extract_table_payloads_from_page(page) -> list[dict]:
                 }
                 return cleanText(row.innerText).split(/\\t+/).map(cleanText).filter(Boolean);
             };
+            const visibleRowLinks = (row) => Array.from(row.querySelectorAll('td,th')).map((cell) => {
+                const anchor = cell.querySelector('a[href]');
+                return anchor ? anchor.href : '';
+            });
             const heading = table.closest('section, div')?.querySelector('h1,h2,h3')?.innerText || '';
             const headers = Array.from(table.querySelectorAll('thead th')).map((cell) => cleanText(cell.innerText));
-            const rows = Array.from(table.querySelectorAll('tbody tr')).map(visibleRowCells).filter((row) =>
-                row.some(Boolean)
-            );
-            return {title: heading, headers, rows};
+            const extractedRows = Array.from(table.querySelectorAll('tbody tr')).map((row) => ({
+                cells: visibleRowCells(row),
+                links: visibleRowLinks(row),
+            })).filter((row) => row.cells.some(Boolean));
+            return {
+                title: heading,
+                headers,
+                rows: extractedRows.map((row) => row.cells),
+                row_links: extractedRows.map((row) => row.links),
+            };
         }).filter((table) => table.rows.length > 0);
         """
     )

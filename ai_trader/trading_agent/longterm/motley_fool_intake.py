@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import re
 from typing import Any
 
 
@@ -25,6 +26,8 @@ class MotleyFoolDashboardRow:
     service: str = ""
     price: str = ""
     discussion_count: int | None = None
+    company_url: str = ""
+    exchange: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "symbol", _clean_symbol(self.symbol))
@@ -41,6 +44,8 @@ class MotleyFoolCandidate:
     rank: int | None = None
     price: str = ""
     discussion_count: int | None = None
+    company_url: str = ""
+    exchange: str = ""
     source_tables: list[str] = field(default_factory=list)
 
 
@@ -62,6 +67,8 @@ def normalize_motley_fool_dashboard(
         candidate.service = candidate.service or row.service
         candidate.rank = candidate.rank if candidate.rank is not None else row.rank
         candidate.price = candidate.price or row.price
+        candidate.company_url = candidate.company_url or row.company_url
+        candidate.exchange = candidate.exchange or row.exchange
         candidate.discussion_count = (
             candidate.discussion_count
             if candidate.discussion_count is not None
@@ -96,6 +103,8 @@ def motley_rows_to_ideas(candidates: list[MotleyFoolCandidate]) -> list[dict]:
             notes.append(f"Reported price: {candidate.price}.")
         if candidate.discussion_count is not None:
             notes.append(f"Discussion count: {candidate.discussion_count}.")
+        if candidate.company_url:
+            notes.append(f"Motley Fool company URL: {candidate.company_url}.")
 
         idea = {
             "symbol": candidate.symbol,
@@ -103,6 +112,11 @@ def motley_rows_to_ideas(candidates: list[MotleyFoolCandidate]) -> list[dict]:
             "idea_source": "motley_fool_dashboard",
             "source_notes": notes,
         }
+        if candidate.company_url:
+            idea["motley_fool_company_url"] = candidate.company_url
+            idea["source_url"] = candidate.company_url
+        if candidate.exchange:
+            idea["motley_fool_exchange"] = candidate.exchange
         ideas.append(idea)
     return ideas
 
@@ -168,12 +182,19 @@ def rows_from_table_payloads(
     for table in table_payloads:
         headers = [_normalize_header(value) for value in table.get("headers", [])]
         rows = table.get("rows", [])
+        row_links = table.get("row_links", [])
         if {"symbol", "action", "rec date"}.issubset(set(headers)):
-            for row in rows:
+            for row_index, row in enumerate(rows):
                 by_header = _row_by_header(headers, row)
                 symbol = by_header.get("symbol", "")
                 if not symbol:
                     continue
+                company_url = _company_url_from_row(
+                    headers,
+                    row,
+                    row_links[row_index] if row_index < len(row_links) else [],
+                    symbol=symbol,
+                )
                 new_recommendations.append(
                     MotleyFoolDashboardRow(
                         source_table="new_recommendations",
@@ -184,16 +205,24 @@ def rows_from_table_payloads(
                         risk_type=by_header.get("type", ""),
                         service=by_header.get("service", ""),
                         discussion_count=_parse_int(row[-1] if row else None),
+                        company_url=company_url,
+                        exchange=_exchange_from_company_url(company_url),
                     )
                 )
             continue
 
         if {"#", "symbol", "price"}.issubset(set(headers)):
-            for row in rows:
+            for row_index, row in enumerate(rows):
                 by_header = _row_by_header(headers, row)
                 symbol = by_header.get("symbol", "")
                 if not symbol:
                     continue
+                company_url = _company_url_from_row(
+                    headers,
+                    row,
+                    row_links[row_index] if row_index < len(row_links) else [],
+                    symbol=symbol,
+                )
                 rankings.append(
                     MotleyFoolDashboardRow(
                         source_table=ranking_source_table,
@@ -205,6 +234,8 @@ def rows_from_table_payloads(
                         discussion_count=_parse_int(
                             by_header.get("times rec'd") or (row[-1] if row else None)
                         ),
+                        company_url=company_url,
+                        exchange=_exchange_from_company_url(company_url),
                     )
                 )
 
@@ -227,6 +258,42 @@ def _parse_int(value: Any) -> int | None:
     text = _clean_text(value).replace("+", "").replace(".", "")
     digits = "".join(char for char in text if char.isdigit())
     return int(digits) if digits else None
+
+
+def _company_url_from_row(
+    headers: list[str],
+    row: list[Any],
+    links: list[Any],
+    *,
+    symbol: str,
+) -> str:
+    """Return the Motley Fool company URL embedded in a ticker/company row."""
+    symbol = _clean_symbol(symbol)
+    preferred_indexes = [
+        index
+        for index, header in enumerate(headers)
+        if header in {"symbol", "company"} and index < len(links)
+    ]
+    for index in [*preferred_indexes, *range(len(links))]:
+        href = _clean_text(links[index] if index < len(links) else "")
+        if _is_company_url_for_symbol(href, symbol):
+            return href
+    return ""
+
+
+def _is_company_url_for_symbol(href: str, symbol: str) -> bool:
+    if not href or "/premium/company/" not in href:
+        return False
+    if re.search(r"/premium/company/\d+/?$", href, flags=re.I):
+        return True
+    if not symbol:
+        return True
+    return f"/{symbol.upper()}/" in href.upper()
+
+
+def _exchange_from_company_url(company_url: str) -> str:
+    match = re.search(r"/premium/company/([^/]+)/[^/]+/financials/", company_url or "", flags=re.I)
+    return match.group(1).upper() if match else ""
 
 
 def _clean_symbol(value: Any) -> str:

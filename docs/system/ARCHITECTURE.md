@@ -101,10 +101,10 @@ Provides a dry-run-first command surface for rendering capital-needed markdown o
 Provides a Brevo-compatible SMTP sender and config loader. It reads `ai_trader/trading_agent/config/email_notifications.json` by default, is disabled unless the local ignored config enables it, and can reuse the swing-trader alert email address.
 
 `longterm/motley_fool_intake.py`
-Normalizes Motley Fool premium table rows into investigation ideas. Motley Fool is treated as a high-quality idea source, not an automatic trading authority.
+Normalizes Motley Fool premium table rows into investigation ideas. Captured ideas preserve any per-company Motley Fool URL from the table row as `motley_fool_company_url` / `source_url` so later enrichment can revisit the ticker's Fool IQ page directly. Motley Fool is treated as a high-quality idea source, not an automatic trading authority.
 
 `longterm/motley_fool_capture.py`
-Uses the logged-in Playwright/Chrome profile to capture Motley Fool premium table payloads from full new-recommendation, analyst-ranking, AI-ranking, or dashboard pages.
+Uses the logged-in Playwright/Chrome profile to capture Motley Fool premium table payloads from full new-recommendation, analyst-ranking, AI-ranking, or dashboard pages. Table extraction preserves cell-level links alongside cell text so downstream intake can retain per-ticker source URLs.
 
 `longterm/motley_fool_capture_cli.py`
 Provides a command surface for exporting captured Motley Fool ideas as JSON. The default source set captures the full new recommendations, analyst rankings, and AI rankings pages; dashboard capture is available as a smoke test.

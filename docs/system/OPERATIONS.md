@@ -677,6 +677,12 @@ Use one capture process at a time for that profile. The default full capture run
 the pages sequentially so the profile is not opened by multiple Playwright
 sessions at once.
 
+Captured Motley Fool ideas include `motley_fool_company_url` / `source_url`
+when the premium table exposes a per-company link. Some Fool tables use numeric
+company URLs such as `https://www.fool.com/premium/company/202816`; later
+enrichment can navigate those URLs and let Fool resolve the detailed financials
+page before summarizing the ticker context.
+
 Scheduler-facing Motley Fool settings live at:
 
 ```text

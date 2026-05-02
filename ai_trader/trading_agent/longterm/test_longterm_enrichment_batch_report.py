@@ -262,6 +262,65 @@ def test_rows_from_table_payloads_keeps_full_recommendation_company():
     assert new_recs[0].company == "Moog"
 
 
+def test_motley_table_payloads_preserve_company_url_for_later_enrichment():
+    ideas = motley_table_payloads_to_ideas(
+        "new_recommendations",
+        [
+            {
+                "title": "New Recommendations",
+                "headers": ["Symbol", "Company", "Action", "Service", "Rec Date"],
+                "rows": [["EXPAND CURRENT ROW\nAMZN", "Amazon", "Buy", "SA", "03/19/26"]],
+                "row_links": [
+                    [
+                        "https://www.fool.com/premium/company/NASDAQ/AMZN/financials/summary",
+                        "https://www.fool.com/premium/company/NASDAQ/AMZN/financials/summary",
+                        "",
+                        "",
+                        "",
+                    ]
+                ],
+            }
+        ],
+    )
+
+    assert ideas[0]["motley_fool_company_url"] == (
+        "https://www.fool.com/premium/company/NASDAQ/AMZN/financials/summary"
+    )
+    assert ideas[0]["motley_fool_exchange"] == "NASDAQ"
+    assert ideas[0]["source_url"] == ideas[0]["motley_fool_company_url"]
+    assert (
+        "Motley Fool company URL: https://www.fool.com/premium/company/NASDAQ/AMZN/financials/summary."
+        in ideas[0]["source_notes"]
+    )
+
+
+def test_motley_table_payloads_accept_numeric_company_url_from_live_tables():
+    ideas = motley_table_payloads_to_ideas(
+        "new_recommendations",
+        [
+            {
+                "title": "New Recommendations",
+                "headers": ["Symbol", "Company", "Action", "Service", "Rec Date"],
+                "rows": [["EXPAND CURRENT ROW\nMOGA", "Moog", "Buy", "SA", "04/16/26"]],
+                "row_links": [
+                    [
+                        "https://www.fool.com/premium/company/206462",
+                        "",
+                        "",
+                        "https://www.fool.com/premium/my-services/stock-advisor",
+                        "https://www.fool.com/premium/18/coverage/updates/2026/04/16/buy-moog-mission-critical-components-and-more",
+                    ]
+                ],
+            }
+        ],
+    )
+
+    assert ideas[0]["symbol"] == "MOGA"
+    assert ideas[0]["motley_fool_company_url"] == "https://www.fool.com/premium/company/206462"
+    assert ideas[0]["source_url"] == "https://www.fool.com/premium/company/206462"
+    assert "motley_fool_exchange" not in ideas[0]
+
+
 def test_rows_from_table_payloads_skips_zero_width_placeholder_rows():
     new_recs, _rankings = rows_from_table_payloads(
         [
