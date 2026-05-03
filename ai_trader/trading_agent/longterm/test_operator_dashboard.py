@@ -286,6 +286,7 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     assert "Ranked Stock List" in site["index.html"]
     assert "Evidence Score" in site["index.html"]
     assert "Actionability" in site["index.html"]
+    assert "<th>Intent</th>" not in site["index.html"]
     assert "Why Not Buy" in site["index.html"]
     assert "Stock Details View" in site["index.html"]
     assert "table-scroll" in site["index.html"]

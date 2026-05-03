@@ -802,8 +802,8 @@ portfolio/exposure summary, safety/preflight guardrails, and the research board.
 The shell links navigate to real in-page sections. The left rail includes an
 explicit `All Tear Sheets` link for the research-board/ticker-page grid.
 Rankings renders a sorted stock-details table from available evidence
-scores/scorecards, including intent, actionability, why-not-buy blockers, trade
-value, quality, growth, valuation, safety, context, and score source columns;
+scores/scorecards, including actionability, why-not-buy blockers, trade value,
+quality, growth, valuation, safety, context, and score source columns;
 the symbol text links directly to that ticker's tear sheet. Wide ranking tables
 are wrapped in a local horizontal scroller and use compact human-readable
 actionability labels so the page layout remains stable. Future Scorecards,

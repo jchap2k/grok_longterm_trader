@@ -519,7 +519,6 @@ def _rankings_section(
                 "symbol": symbol,
                 "score": score,
                 "score_source": score_source,
-                "intent": _intent_type(intent) or "RESEARCH",
                 "actionability": _actionability_for_intent(intent),
                 "why_not_buy": _why_not_buy(intent),
                 "trade_value": intent.get("trade_value") or intent.get("target_value") or 0,
@@ -546,7 +545,6 @@ def _rankings_section(
             f"<td>{index}</td>"
             f"<td><a href=\"tickers/{escape(symbol)}.html\">{escape(symbol)}</a></td>"
             f"<td>{float(item['score']):g}</td>"
-            f"<td>{escape(str(item['intent']))}</td>"
             f"<td>{escape(_actionability_label(str(item['actionability'])))}</td>"
             f"<td>{escape(_short_text(str(item['why_not_buy']), 90))}</td>"
             f"<td>{escape(_money(item.get('trade_value')))}</td>"
@@ -566,7 +564,7 @@ def _rankings_section(
         "</div>"
         "<p>Stock Details View: stocks are sorted by evidence score, while Actionability explains whether the name is actually cleared for a BUY.</p>"
         "<div class=\"table-scroll\"><table class=\"rankings-table\">"
-        "<thead><tr><th>Rank</th><th>Symbol</th><th>Evidence Score</th><th>Intent</th><th>Actionability</th><th>Why Not Buy</th><th>Trade Value</th><th>Quality</th><th>Growth</th><th>Valuation</th><th>Safety</th><th>Context</th><th>Score Source</th></tr></thead>"
+        "<thead><tr><th>Rank</th><th>Symbol</th><th>Evidence Score</th><th>Actionability</th><th>Why Not Buy</th><th>Trade Value</th><th>Quality</th><th>Growth</th><th>Valuation</th><th>Safety</th><th>Context</th><th>Score Source</th></tr></thead>"
         f"<tbody>{''.join(body_rows)}</tbody>"
         "</table></div>"
         "</section>"
@@ -1169,16 +1167,15 @@ def _html_shell(*, title: str, body: str) -> str:
     .rankings-table th:nth-child(1), .rankings-table td:nth-child(1) {{ width: 54px; }}
     .rankings-table th:nth-child(2), .rankings-table td:nth-child(2) {{ width: 82px; }}
     .rankings-table th:nth-child(3), .rankings-table td:nth-child(3) {{ width: 92px; }}
-    .rankings-table th:nth-child(4), .rankings-table td:nth-child(4) {{ width: 82px; }}
-    .rankings-table th:nth-child(5), .rankings-table td:nth-child(5) {{ width: 150px; }}
-    .rankings-table th:nth-child(6), .rankings-table td:nth-child(6) {{ width: 165px; }}
-    .rankings-table th:nth-child(7), .rankings-table td:nth-child(7) {{ width: 92px; }}
+    .rankings-table th:nth-child(4), .rankings-table td:nth-child(4) {{ width: 150px; }}
+    .rankings-table th:nth-child(5), .rankings-table td:nth-child(5) {{ width: 165px; }}
+    .rankings-table th:nth-child(6), .rankings-table td:nth-child(6) {{ width: 92px; }}
+    .rankings-table th:nth-child(7), .rankings-table td:nth-child(7),
     .rankings-table th:nth-child(8), .rankings-table td:nth-child(8),
     .rankings-table th:nth-child(9), .rankings-table td:nth-child(9),
-    .rankings-table th:nth-child(10), .rankings-table td:nth-child(10),
-    .rankings-table th:nth-child(11), .rankings-table td:nth-child(11) {{ width: 78px; }}
-    .rankings-table th:nth-child(12), .rankings-table td:nth-child(12) {{ width: 260px; }}
-    .rankings-table th:nth-child(13), .rankings-table td:nth-child(13) {{ width: 120px; }}
+    .rankings-table th:nth-child(10), .rankings-table td:nth-child(10) {{ width: 78px; }}
+    .rankings-table th:nth-child(11), .rankings-table td:nth-child(11) {{ width: 280px; }}
+    .rankings-table th:nth-child(12), .rankings-table td:nth-child(12) {{ width: 120px; }}
     .ticker-grid {{
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
