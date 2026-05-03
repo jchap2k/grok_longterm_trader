@@ -1,10 +1,12 @@
 import sys
+import base64
 import json
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from longterm.operator_dashboard import (
+    _logo_data_uri,
     build_operator_dashboard,
     build_operator_dashboard_html,
     build_operator_dashboard_site,
@@ -73,6 +75,14 @@ def test_operator_dashboard_html_renders_human_control_surface():
     assert "MA" in html
     assert "SPY" in html
     assert "Order Submission Enabled: false" in html
+
+
+def test_operator_dashboard_svg_logo_uses_rail_contrast_variant():
+    data_uri = _logo_data_uri()
+    assert data_uri.startswith("data:image/svg+xml;base64,")
+    svg = base64.b64decode(data_uri.split(",", 1)[1]).decode("utf-8")
+    assert "#0F2A5E" not in svg
+    assert "#CFEFFF" in svg
 
 
 def test_operator_dashboard_advisory_distinguishes_parking_only_from_blocked():

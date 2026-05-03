@@ -475,10 +475,15 @@ def _logo_data_uri() -> str:
     logo_dir = Path(__file__).resolve().parents[1] / "agent" / "utils"
     svg_path = logo_dir / "logo.svg"
     if svg_path.exists():
+        encoded = ""
         try:
-            encoded = base64.b64encode(svg_path.read_bytes()).decode("ascii")
+            svg = svg_path.read_text(encoding="utf-8")
         except OSError:
-            encoded = ""
+            svg = ""
+        if svg:
+            # The source logo uses dark navy for the bull; lighten it for the dark rail.
+            svg = svg.replace("#0F2A5E", "#CFEFFF")
+            encoded = base64.b64encode(svg.encode("utf-8")).decode("ascii")
         if encoded:
             return f"data:image/svg+xml;base64,{encoded}"
     logo_path = logo_dir / "ltta_logo.jpg"
