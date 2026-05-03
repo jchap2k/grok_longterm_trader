@@ -266,6 +266,8 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     assert "data-page-size" in site["index.html"]
     assert "pagination-controls" in site["index.html"]
     assert "Showing" in site["index.html"]
+    assert "[hidden]" in site["index.html"]
+    assert "display: none !important" in site["index.html"]
     assert "data-search-text" in site["index.html"]
     assert "Best Buys For Review" in site["index.html"]
     assert "S&amp;P 500" in site["index.html"]

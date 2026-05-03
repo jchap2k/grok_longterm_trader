@@ -1025,6 +1025,7 @@ def _html_shell(*, title: str, body: str) -> str:
       --shadow: 0 24px 70px rgba(69, 47, 20, 0.14);
     }}
     * {{ box-sizing: border-box; }}
+    [hidden] {{ display: none !important; }}
     body {{
       margin: 0;
       color: var(--ink);
