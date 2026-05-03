@@ -143,6 +143,21 @@ def test_python_first_pass_scan_keeps_at_least_one_candidate_from_weak_market():
     assert "relative top 10.0%" in result.passed_ideas[0]["python_first_pass_scan"]["reason"]
 
 
+def test_python_first_pass_scan_reports_fundamentals_coverage():
+    ideas = [
+        {"symbol": "TOP1", "fundamental_metrics": _strong("TOP1")},
+        {"symbol": "MISSING1"},
+        {"symbol": "MID1", "fundamental_metrics": _okay("MID1")},
+    ]
+
+    result = run_python_first_pass_scan(ideas, top_percent=50)
+
+    assert result.summary["fundamentals_coverage_count"] == 2
+    assert result.summary["fundamentals_missing_count"] == 1
+    assert result.summary["fundamentals_coverage_percent"] == 66.67
+    assert result.summary["fundamentals_missing_symbols"] == ["MISSING1"]
+
+
 def test_extended_universe_scan_cli_writes_pass_defer_and_summary(tmp_path, capsys):
     ideas_path = tmp_path / "ideas.json"
     snapshots_path = tmp_path / "fundamentals.json"
@@ -239,6 +254,58 @@ def test_extended_universe_scan_cli_reuses_and_updates_provider_cache(tmp_path, 
     assert sorted(cache) == ["MID1", "TOP1"]
     assert printed["fundamentals_cache_hits"] == 1
     assert printed["fundamentals_cache_fetches"] == 1
+
+
+def test_extended_universe_scan_cli_can_fetch_only_next_missing_chunk(tmp_path, capsys):
+    ideas_path = tmp_path / "ideas.json"
+    cache_path = tmp_path / "fundamentals_cache.json"
+    passed_output = tmp_path / "passed.json"
+    ideas_path.write_text(
+        json.dumps(
+            [
+                {"symbol": "TOP1", "company_name": "Top One"},
+                {"symbol": "MID1", "company_name": "Middle One"},
+                {"symbol": "WEAK1", "company_name": "Weak One"},
+                {"symbol": "WEAK2", "company_name": "Weak Two"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    cache_path.write_text(json.dumps({"TOP1": _strong("TOP1")}), encoding="utf-8")
+    fetched = []
+
+    def fake_fetch(symbol: str) -> dict:
+        fetched.append(symbol)
+        return _okay(symbol)
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--idea-batch",
+                str(ideas_path),
+                "--provider",
+                "yfinance",
+                "--fundamentals-cache",
+                str(cache_path),
+                "--fetch-limit",
+                "2",
+                "--top-percent",
+                "50",
+                "--passed-output",
+                str(passed_output),
+            ]
+        ),
+        fetch_metrics=fake_fetch,
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert code == 0
+    assert fetched == ["MID1", "WEAK1"]
+    assert sorted(cache) == ["MID1", "TOP1", "WEAK1"]
+    assert printed["fundamentals_cache_fetches"] == 2
+    assert printed["fundamentals_fetch_skipped_count"] == 1
+    assert printed["fundamentals_fetch_skipped_symbols"] == ["WEAK2"]
 
 
 def test_extended_universe_scan_cli_records_fetch_errors_and_continues(tmp_path, capsys):

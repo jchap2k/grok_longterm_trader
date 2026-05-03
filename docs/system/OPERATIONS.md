@@ -164,6 +164,17 @@ reusing local data or still filling the cache. Individual provider failures are
 reported as `fundamentals_fetch_errors`; those symbols remain in the scanned
 set with missing-metric warnings instead of aborting the whole batch.
 
+To fill a very large cache gradually, add `--fetch-limit`. The scan still writes
+pass/defer artifacts, but the summary's `fundamentals_coverage_percent`,
+`fundamentals_fetch_skipped_count`, and `fundamentals_fetch_skipped_symbols`
+show whether the current ranking is based on broad coverage or only a partial
+cache. Prefer the final enrichment pass after coverage is high enough for the
+universe slice being evaluated.
+
+```powershell
+python scripts/longterm_extended_universe_scan.py --idea-batch path\to\extended_watchlist_ideas.json --provider yfinance --fundamentals-cache path\to\extended_fundamentals_cache.json --fetch-limit 100 --top-percent 10 --min-pass-count 10 --max-pass-count 300 --passed-output path\to\extended_watchlist.python_scan_passed.json --deferred-output path\to\extended_watchlist.python_scan_deferred.json --summary-output path\to\extended_watchlist.python_scan_summary.json
+```
+
 Then run the evidence pipeline on the Python-scan survivors before committee
 research:
 

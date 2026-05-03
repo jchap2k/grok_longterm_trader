@@ -30,6 +30,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-pass-count", type=int, default=1)
     parser.add_argument("--max-pass-count", type=int, default=None)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument(
+        "--fetch-limit",
+        type=int,
+        default=None,
+        help="With --provider/--fundamentals-cache, fetch only the next N missing symbols this run.",
+    )
     parser.add_argument("--as-of-date", default="")
     parser.add_argument("--passed-output", required=True)
     parser.add_argument("--deferred-output", default="")
@@ -46,15 +52,24 @@ def run_cli(args: argparse.Namespace, *, fetch_metrics=fetch_yfinance_fundamenta
     cache_hits = 0
     cache_fetches = 0
     fetch_errors: list[dict[str, str]] = []
+    fetch_skipped: list[str] = []
     if args.provider and args.fundamentals_cache:
         snapshots = _load_optional_symbol_cache(args.fundamentals_cache)
         requested_symbols = _requested_symbols(ideas[: args.limit] if args.limit is not None else ideas)
         cache_hits = sum(1 for symbol in requested_symbols if symbol in snapshots)
+        allowed_fetch_symbols = _allowed_fetch_symbols(requested_symbols, snapshots, args.fetch_limit)
+        fetch_skipped = [
+            symbol
+            for symbol in requested_symbols
+            if symbol not in snapshots and symbol not in allowed_fetch_symbols
+        ]
 
         def cached_fetch(symbol: str) -> Mapping[str, Any]:
             nonlocal cache_fetches
             normalized = symbol.upper()
             if normalized not in snapshots:
+                if normalized not in allowed_fetch_symbols:
+                    return {}
                 try:
                     fetched = dict(fetch_metrics(normalized))
                 except Exception as exc:  # pragma: no cover - exact provider failures vary
@@ -92,6 +107,9 @@ def run_cli(args: argparse.Namespace, *, fetch_metrics=fetch_yfinance_fundamenta
     summary["fundamentals_cache_fetches"] = cache_fetches
     summary["fundamentals_fetch_error_count"] = len(fetch_errors)
     summary["fundamentals_fetch_errors"] = fetch_errors
+    summary["fundamentals_fetch_limit"] = args.fetch_limit
+    summary["fundamentals_fetch_skipped_count"] = len(fetch_skipped)
+    summary["fundamentals_fetch_skipped_symbols"] = fetch_skipped
     summary["passed_output"] = str(passed_path)
     if deferred_path:
         summary["deferred_output"] = str(deferred_path)
@@ -136,6 +154,17 @@ def _requested_symbols(ideas: list[Mapping[str, Any]]) -> list[str]:
         if symbol and symbol not in symbols:
             symbols.append(symbol)
     return symbols
+
+
+def _allowed_fetch_symbols(
+    requested_symbols: list[str],
+    snapshots: Mapping[str, Mapping[str, Any]],
+    fetch_limit: int | None,
+) -> set[str]:
+    missing = [symbol for symbol in requested_symbols if symbol not in snapshots]
+    if fetch_limit is None:
+        return set(missing)
+    return set(missing[: max(0, int(fetch_limit))])
 
 
 def _write_json(path: str | Path, payload: Any) -> Path:

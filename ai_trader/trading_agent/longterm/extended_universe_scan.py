@@ -49,6 +49,7 @@ def run_python_first_pass_scan(
     )
     scored = enrich_ideas_with_quality_growth_scorecard(hydrated, as_of_date=as_of_date)
     ranked = _rank_scored_ideas(scored)
+    coverage = _fundamentals_coverage(scored)
     pass_count = _pass_count(
         len(ranked),
         top_percent=top_percent,
@@ -96,6 +97,7 @@ def run_python_first_pass_scan(
         "mode": "extended_universe_python_first_pass_scan",
         "input_count": len(ideas),
         "scanned_count": len(ranked),
+        **coverage,
         "passed_count": len(passed),
         "deferred_count": len(deferred),
         "top_percent": float(top_percent),
@@ -179,6 +181,24 @@ def _rank_scored_ideas(ideas: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
     for rank, row in enumerate(rows, start=1):
         ranked.append({**row, "rank": rank})
     return ranked
+
+
+def _fundamentals_coverage(ideas: list[Mapping[str, Any]]) -> dict[str, Any]:
+    total = len(ideas)
+    covered = []
+    missing = []
+    for idea in ideas:
+        symbol = str(idea.get("symbol") or "").upper()
+        if idea.get("fundamental_metrics"):
+            covered.append(symbol)
+        elif symbol:
+            missing.append(symbol)
+    return {
+        "fundamentals_coverage_count": len(covered),
+        "fundamentals_missing_count": len(missing),
+        "fundamentals_coverage_percent": round((len(covered) / total) * 100, 2) if total else 0.0,
+        "fundamentals_missing_symbols": missing,
+    }
 
 
 def _score(scorecard: Mapping[str, Any]) -> float:
