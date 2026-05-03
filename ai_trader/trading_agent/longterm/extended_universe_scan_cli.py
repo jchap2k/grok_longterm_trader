@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from longterm.extended_universe_scan import (
+    build_python_first_pass_markdown,
     fetch_yfinance_fundamental_metrics,
     run_python_first_pass_scan,
 )
@@ -41,6 +42,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--deferred-output", default="")
     parser.add_argument("--scanned-output", default="")
     parser.add_argument("--summary-output", default="")
+    parser.add_argument("--markdown-output", default="")
     return parser
 
 
@@ -115,6 +117,12 @@ def run_cli(args: argparse.Namespace, *, fetch_metrics=fetch_yfinance_fundamenta
         summary["deferred_output"] = str(deferred_path)
     if scanned_path:
         summary["scanned_output"] = str(scanned_path)
+    if args.markdown_output:
+        markdown_path = _write_text(
+            args.markdown_output,
+            build_python_first_pass_markdown(result.passed_ideas, result.deferred_ideas, summary),
+        )
+        summary["markdown_output"] = str(markdown_path)
     if args.summary_output:
         summary_path = _write_json(args.summary_output, summary)
         summary["summary_output"] = str(summary_path)
@@ -171,6 +179,13 @@ def _write_json(path: str | Path, payload: Any) -> Path:
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return output_path
+
+
+def _write_text(path: str | Path, payload: str) -> Path:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(payload.rstrip() + "\n", encoding="utf-8")
     return output_path
 
 

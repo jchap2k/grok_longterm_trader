@@ -153,7 +153,7 @@ every name while still keeping expensive enrichment focused on the best
 available candidates.
 
 ```powershell
-python scripts/longterm_extended_universe_scan.py --idea-batch path\to\extended_watchlist_ideas.json --provider yfinance --fundamentals-cache path\to\extended_fundamentals_cache.json --top-percent 10 --min-pass-count 10 --max-pass-count 300 --passed-output path\to\extended_watchlist.python_scan_passed.json --deferred-output path\to\extended_watchlist.python_scan_deferred.json --summary-output path\to\extended_watchlist.python_scan_summary.json
+python scripts/longterm_extended_universe_scan.py --idea-batch path\to\extended_watchlist_ideas.json --provider yfinance --fundamentals-cache path\to\extended_fundamentals_cache.json --top-percent 10 --min-pass-count 10 --max-pass-count 300 --passed-output path\to\extended_watchlist.python_scan_passed.json --deferred-output path\to\extended_watchlist.python_scan_deferred.json --summary-output path\to\extended_watchlist.python_scan_summary.json --markdown-output path\to\extended_watchlist.python_scan_report.md
 ```
 
 The first-pass scan cache is symbol-keyed and resumable. If a prior overnight
@@ -172,8 +172,13 @@ cache. Prefer the final enrichment pass after coverage is high enough for the
 universe slice being evaluated.
 
 ```powershell
-python scripts/longterm_extended_universe_scan.py --idea-batch path\to\extended_watchlist_ideas.json --provider yfinance --fundamentals-cache path\to\extended_fundamentals_cache.json --fetch-limit 100 --top-percent 10 --min-pass-count 10 --max-pass-count 300 --passed-output path\to\extended_watchlist.python_scan_passed.json --deferred-output path\to\extended_watchlist.python_scan_deferred.json --summary-output path\to\extended_watchlist.python_scan_summary.json
+python scripts/longterm_extended_universe_scan.py --idea-batch path\to\extended_watchlist_ideas.json --provider yfinance --fundamentals-cache path\to\extended_fundamentals_cache.json --fetch-limit 100 --top-percent 10 --min-pass-count 10 --max-pass-count 300 --passed-output path\to\extended_watchlist.python_scan_passed.json --deferred-output path\to\extended_watchlist.python_scan_deferred.json --summary-output path\to\extended_watchlist.python_scan_summary.json --markdown-output path\to\extended_watchlist.python_scan_report.md
 ```
+
+Use the markdown scan report as the quick human review artifact after overnight
+runs. It shows the scan totals, cache/fetch health, provider errors, skipped
+symbols, the top passed candidates, deferred names, and the next evidence
+enrichment command.
 
 Then run the evidence pipeline on the Python-scan survivors before committee
 research:

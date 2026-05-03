@@ -4,7 +4,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from longterm.extended_universe_scan import run_python_first_pass_scan
+from longterm.extended_universe_scan import (
+    build_python_first_pass_markdown,
+    run_python_first_pass_scan,
+)
 from longterm.extended_universe_scan_cli import build_parser, run_cli
 
 
@@ -158,6 +161,35 @@ def test_python_first_pass_scan_reports_fundamentals_coverage():
     assert result.summary["fundamentals_missing_symbols"] == ["MISSING1"]
 
 
+def test_python_first_pass_markdown_summarizes_coverage_and_candidates():
+    result = run_python_first_pass_scan(
+        [
+            {"symbol": "TOP1", "fundamental_metrics": _strong("TOP1")},
+            {"symbol": "MISSING1"},
+            {"symbol": "MID1", "fundamental_metrics": _okay("MID1")},
+        ],
+        top_percent=50,
+    )
+    summary = dict(result.summary)
+    summary["fundamentals_fetch_errors"] = [{"symbol": "MISSING1", "error": "provider timeout"}]
+    summary["fundamentals_fetch_skipped_symbols"] = ["LATER1"]
+
+    markdown = build_python_first_pass_markdown(
+        result.passed_ideas,
+        result.deferred_ideas,
+        summary,
+        title="Extended Universe First Pass",
+    )
+
+    assert "# Extended Universe First Pass" in markdown
+    assert "Coverage: 2/3 (66.67%)" in markdown
+    assert "| TOP1 |" in markdown
+    assert "| MISSING1 |" in markdown
+    assert "provider timeout" in markdown
+    assert "LATER1" in markdown
+    assert "longterm_evidence_enrichment_pipeline.py" in markdown
+
+
 def test_extended_universe_scan_cli_writes_pass_defer_and_summary(tmp_path, capsys):
     ideas_path = tmp_path / "ideas.json"
     snapshots_path = tmp_path / "fundamentals.json"
@@ -306,6 +338,51 @@ def test_extended_universe_scan_cli_can_fetch_only_next_missing_chunk(tmp_path, 
     assert printed["fundamentals_cache_fetches"] == 2
     assert printed["fundamentals_fetch_skipped_count"] == 1
     assert printed["fundamentals_fetch_skipped_symbols"] == ["WEAK2"]
+
+
+def test_extended_universe_scan_cli_writes_markdown_report(tmp_path, capsys):
+    ideas_path = tmp_path / "ideas.json"
+    snapshots_path = tmp_path / "fundamentals.json"
+    passed_output = tmp_path / "passed.json"
+    markdown_output = tmp_path / "scan.md"
+    ideas_path.write_text(
+        json.dumps(
+            [
+                {"symbol": "TOP1", "company_name": "Top One"},
+                {"symbol": "WEAK1", "company_name": "Weak One"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    snapshots_path.write_text(
+        json.dumps({"TOP1": _strong("TOP1"), "WEAK1": _weak("WEAK1")}),
+        encoding="utf-8",
+    )
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--idea-batch",
+                str(ideas_path),
+                "--snapshot-file",
+                str(snapshots_path),
+                "--top-percent",
+                "50",
+                "--passed-output",
+                str(passed_output),
+                "--markdown-output",
+                str(markdown_output),
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    markdown = markdown_output.read_text(encoding="utf-8")
+    assert code == 0
+    assert printed["markdown_output"] == str(markdown_output)
+    assert "# Extended Universe Python First Pass" in markdown
+    assert "| TOP1 |" in markdown
+    assert "| WEAK1 |" in markdown
 
 
 def test_extended_universe_scan_cli_records_fetch_errors_and_continues(tmp_path, capsys):

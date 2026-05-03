@@ -116,6 +116,53 @@ def run_python_first_pass_scan(
     )
 
 
+def build_python_first_pass_markdown(
+    passed_ideas: list[Mapping[str, Any]],
+    deferred_ideas: list[Mapping[str, Any]],
+    summary: Mapping[str, Any],
+    *,
+    title: str = "Extended Universe Python First Pass",
+    limit: int = 15,
+) -> str:
+    """Render a human-readable scan report for overnight operator review."""
+    lines = [
+        f"# {title}",
+        "",
+        "## Summary",
+        "",
+        f"- Scanned: {summary.get('scanned_count', 0)}",
+        f"- Passed to enrichment: {summary.get('passed_count', 0)}",
+        f"- Deferred: {summary.get('deferred_count', 0)}",
+        f"- Top-percent cutoff: {summary.get('top_percent', 'n/a')}%",
+        (
+            "- Coverage: "
+            f"{summary.get('fundamentals_coverage_count', 0)}/{summary.get('scanned_count', 0)} "
+            f"({summary.get('fundamentals_coverage_percent', 0.0)}%)"
+        ),
+        f"- Cache hits/fetches: {summary.get('fundamentals_cache_hits', 0)} / {summary.get('fundamentals_cache_fetches', 0)}",
+        "",
+    ]
+    fetch_errors = [dict(item) for item in summary.get("fundamentals_fetch_errors") or [] if isinstance(item, Mapping)]
+    skipped = [str(item) for item in summary.get("fundamentals_fetch_skipped_symbols") or [] if item]
+    missing = [str(item) for item in summary.get("fundamentals_missing_symbols") or [] if item]
+    if fetch_errors or skipped or missing:
+        lines.extend(["## Coverage Notes", ""])
+        if fetch_errors:
+            lines.append("Fetch errors:")
+            lines.extend(f"- `{item.get('symbol')}`: {item.get('error')}" for item in fetch_errors[:limit])
+        if skipped:
+            lines.append(f"Fetch-limited symbols still waiting: {', '.join(f'`{symbol}`' for symbol in skipped[:limit])}")
+        if missing:
+            lines.append(f"Missing fundamentals: {', '.join(f'`{symbol}`' for symbol in missing[:limit])}")
+        lines.append("")
+    lines.extend(["## Passed To Enrichment", ""])
+    lines.extend(_idea_table(passed_ideas[:limit]))
+    lines.extend(["", "## Deferred After Python Scan", ""])
+    lines.extend(_idea_table(deferred_ideas[:limit]))
+    lines.extend(["", "## Next Command", "", "```powershell", str(summary.get("next_enrichment_command") or ""), "```", ""])
+    return "\n".join(lines)
+
+
 def _attach_fundamentals(
     ideas: list[Mapping[str, Any]],
     *,
@@ -201,6 +248,41 @@ def _fundamentals_coverage(ideas: list[Mapping[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _idea_table(ideas: list[Mapping[str, Any]]) -> list[str]:
+    if not ideas:
+        return ["No rows."]
+    lines = [
+        "| Symbol | Rank | Score | Quality | Growth | Valuation | Safety | Decision | Reason |",
+        "|---|---:|---:|---:|---:|---:|---:|---|---|",
+    ]
+    for idea in ideas:
+        scorecard = idea.get("quality_growth_scorecard") or {}
+        scan = idea.get("python_first_pass_scan") or {}
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _cell(idea.get("symbol")),
+                    _cell(scan.get("rank")),
+                    _cell(scan.get("score")),
+                    _cell(scorecard.get("quality_score")),
+                    _cell(scorecard.get("growth_score")),
+                    _cell(scorecard.get("valuation_score")),
+                    _cell(scorecard.get("safety_score")),
+                    _cell(scan.get("decision")),
+                    _cell(scan.get("reason")),
+                ]
+            )
+            + " |"
+        )
+    return lines
+
+
+def _cell(value: Any) -> str:
+    text = "n/a" if value in (None, "") else str(value)
+    return text.replace("|", "\\|").replace("\n", " ").strip()
+
+
 def _score(scorecard: Mapping[str, Any]) -> float:
     try:
         return float(scorecard.get("superscore") or 0.0)
@@ -269,6 +351,7 @@ def _next_enrichment_command() -> str:
 
 __all__ = [
     "ExtendedUniverseScanResult",
+    "build_python_first_pass_markdown",
     "fetch_yfinance_fundamental_metrics",
     "run_python_first_pass_scan",
 ]
