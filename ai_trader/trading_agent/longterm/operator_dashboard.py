@@ -546,7 +546,7 @@ def _rankings_section(
             f"<td><a href=\"tickers/{escape(symbol)}.html\">{escape(symbol)}</a></td>"
             f"<td>{float(item['score']):g}</td>"
             f"<td>{escape(_actionability_label(str(item['actionability'])))}</td>"
-            f"<td>{escape(_short_text(str(item['why_not_buy']), 90))}</td>"
+            f"<td>{escape(_short_text(_humanize_reason(str(item['why_not_buy'])), 90))}</td>"
             f"<td>{escape(_money(item.get('trade_value')))}</td>"
             f"<td>{escape(_score_cell(item.get('quality')))}</td>"
             f"<td>{escape(_score_cell(item.get('growth')))}</td>"
@@ -610,6 +610,17 @@ def _why_not_buy(intent: Mapping[str, Any]) -> str:
     if _intent_type(intent) != "BUY":
         return str(intent.get("reason") or "Research-only candidate.")
     return str(intent.get("reason") or "Not cleared for BUY.")
+
+
+def _humanize_reason(value: str) -> str:
+    known = {
+        "missing_earnings_article": "Missing earnings article",
+        "confidence_below_actionable_threshold": "Confidence below actionable threshold",
+    }
+    parts = [part.strip() for part in str(value or "").split(";") if part.strip()]
+    if not parts:
+        return ""
+    return "; ".join(known.get(part, part.replace("_", " ").strip().capitalize()) for part in parts)
 
 
 def _review_score_for_symbol(*, intent: Mapping[str, Any], evidence: Mapping[str, Any]) -> tuple[float, str]:
@@ -1195,6 +1206,9 @@ def _html_shell(*, title: str, body: str) -> str:
     .rankings-table th, .rankings-table td {{
       font-size: 15px;
       vertical-align: top;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: normal;
     }}
     .rankings-table th:nth-child(1), .rankings-table td:nth-child(1) {{ width: 54px; }}
     .rankings-table th:nth-child(2), .rankings-table td:nth-child(2) {{ width: 82px; }}

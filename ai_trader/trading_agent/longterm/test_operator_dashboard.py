@@ -293,7 +293,9 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     assert "table-scroll-top" in site["index.html"]
     assert "initSyncedTableScrollers" in site["index.html"]
     assert "position: sticky" in site["index.html"]
+    assert "overflow-wrap: anywhere" in site["index.html"]
     assert "Watchlist / needs evidence" in site["index.html"]
+    assert "Missing earnings article" in site["index.html"]
     assert "Quality" in site["index.html"]
     assert "Growth" in site["index.html"]
     assert "Valuation" in site["index.html"]
@@ -301,7 +303,6 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     assert "Trade Value" in site["index.html"]
     assert site["index.html"].index('tickers/MSFT.html">MSFT</a>') < site["index.html"].index('tickers/NVDA.html">NVDA</a>')
     assert "Scorecard superscore" in site["index.html"]
-    assert "missing_earnings_article" in site["index.html"]
     assert "scroll-margin-top" in site["index.html"]
     assert '<td><a href="tickers/MSFT.html">MSFT</a></td>' in site["index.html"]
     assert "<th>Page</th>" not in site["index.html"]
