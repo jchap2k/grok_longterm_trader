@@ -423,7 +423,7 @@ def _site_index_html(
                 body="Runtime configuration, source toggles, and scheduler controls are intentionally not editable from this static dashboard yet.",
             )}
             {_reference_footer()}
-            <script>{_dashboard_search_script()}</script>
+            <script>{_dashboard_search_script()}{_synced_table_scroller_script()}</script>
           </main>
         </div>
         """,
@@ -563,6 +563,7 @@ def _rankings_section(
         "<h2>Ranked Stock List</h2>"
         "</div>"
         "<p>Stock Details View: stocks are sorted by evidence score, while Actionability explains whether the name is actually cleared for a BUY.</p>"
+        "<div class=\"table-scroll-top\" aria-hidden=\"true\"><div></div></div>"
         "<div class=\"table-scroll\"><table class=\"rankings-table\">"
         "<thead><tr><th>Rank</th><th>Symbol</th><th>Evidence Score</th><th>Actionability</th><th>Why Not Buy</th><th>Trade Value</th><th>Quality</th><th>Growth</th><th>Valuation</th><th>Safety</th><th>Context</th><th>Score Source</th></tr></thead>"
         f"<tbody>{''.join(body_rows)}</tbody>"
@@ -670,6 +671,28 @@ def _dashboard_search_script() -> str:
       card.hidden = Boolean(query) && !haystack.includes(query);
     });
   });
+})();
+"""
+
+
+def _synced_table_scroller_script() -> str:
+    return r"""
+(function initSyncedTableScrollers(){
+  const top = document.querySelector(".table-scroll-top");
+  const bottom = document.querySelector(".table-scroll");
+  const table = bottom ? bottom.querySelector("table") : null;
+  const spacer = top ? top.querySelector("div") : null;
+  if (!top || !bottom || !table || !spacer) return;
+  spacer.style.width = `${table.scrollWidth}px`;
+  let syncing = false;
+  const sync = (source, target) => {
+    if (syncing) return;
+    syncing = true;
+    target.scrollLeft = source.scrollLeft;
+    requestAnimationFrame(() => { syncing = false; });
+  };
+  top.addEventListener("scroll", () => sync(top, bottom), { passive: true });
+  bottom.addEventListener("scroll", () => sync(bottom, top), { passive: true });
 })();
 """
 
@@ -1151,9 +1174,18 @@ def _html_shell(*, title: str, body: str) -> str:
         var(--paper-2);
     }}
     .placeholder-panel p:last-child {{ max-width: 760px; color: var(--muted); }}
-    .table-scroll {{
+    .table-scroll-top, .table-scroll {{
       width: 100%;
       overflow-x: auto;
+    }}
+    .table-scroll-top {{
+      height: 18px;
+      margin-top: 18px;
+    }}
+    .table-scroll-top div {{
+      height: 1px;
+    }}
+    .table-scroll {{
       padding-bottom: 8px;
     }}
     .rankings-table {{
@@ -1176,6 +1208,16 @@ def _html_shell(*, title: str, body: str) -> str:
     .rankings-table th:nth-child(10), .rankings-table td:nth-child(10) {{ width: 78px; }}
     .rankings-table th:nth-child(11), .rankings-table td:nth-child(11) {{ width: 280px; }}
     .rankings-table th:nth-child(12), .rankings-table td:nth-child(12) {{ width: 120px; }}
+    .rankings-table th:nth-child(1), .rankings-table td:nth-child(1),
+    .rankings-table th:nth-child(2), .rankings-table td:nth-child(2) {{
+      position: sticky;
+      z-index: 2;
+      background: var(--paper-2);
+      box-shadow: 1px 0 0 var(--line);
+    }}
+    .rankings-table th:nth-child(1), .rankings-table td:nth-child(1) {{ left: 0; }}
+    .rankings-table th:nth-child(2), .rankings-table td:nth-child(2) {{ left: 54px; }}
+    .rankings-table thead th:nth-child(1), .rankings-table thead th:nth-child(2) {{ z-index: 3; }}
     .ticker-grid {{
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

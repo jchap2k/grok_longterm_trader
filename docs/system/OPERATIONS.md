@@ -806,7 +806,9 @@ scores/scorecards, including actionability, why-not-buy blockers, trade value,
 quality, growth, valuation, safety, context, and score source columns;
 the symbol text links directly to that ticker's tear sheet. Wide ranking tables
 are wrapped in a local horizontal scroller and use compact human-readable
-actionability labels so the page layout remains stable. Future Scorecards,
+actionability labels so the page layout remains stable. The wide rankings table
+also has a synced top scroller and sticky Rank/Symbol columns so row identity
+remains visible while scanning right-side details. Future Scorecards,
 Foundational Core, Hold / Review, Closed Positions, About, and Settings areas
 render placeholders when those artifacts are not populated yet. `My Stocks`
 lands on its own portfolio-holdings section, which currently renders an empty
