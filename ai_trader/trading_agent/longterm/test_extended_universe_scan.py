@@ -192,3 +192,50 @@ def test_extended_universe_scan_cli_writes_pass_defer_and_summary(tmp_path, caps
     assert summary["passed_output"] == str(passed_output)
     assert [idea["symbol"] for idea in passed] == ["TOP1", "MID1"]
     assert [idea["symbol"] for idea in deferred] == ["WEAK1"]
+
+
+def test_extended_universe_scan_cli_reuses_and_updates_provider_cache(tmp_path, capsys):
+    ideas_path = tmp_path / "ideas.json"
+    cache_path = tmp_path / "fundamentals_cache.json"
+    passed_output = tmp_path / "passed.json"
+    ideas_path.write_text(
+        json.dumps(
+            [
+                {"symbol": "TOP1", "company_name": "Top One"},
+                {"symbol": "MID1", "company_name": "Middle One"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    cache_path.write_text(json.dumps({"TOP1": _strong("TOP1")}), encoding="utf-8")
+    fetched = []
+
+    def fake_fetch(symbol: str) -> dict:
+        fetched.append(symbol)
+        return _okay(symbol)
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--idea-batch",
+                str(ideas_path),
+                "--provider",
+                "yfinance",
+                "--fundamentals-cache",
+                str(cache_path),
+                "--top-percent",
+                "100",
+                "--passed-output",
+                str(passed_output),
+            ]
+        ),
+        fetch_metrics=fake_fetch,
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert code == 0
+    assert fetched == ["MID1"]
+    assert sorted(cache) == ["MID1", "TOP1"]
+    assert printed["fundamentals_cache_hits"] == 1
+    assert printed["fundamentals_cache_fetches"] == 1

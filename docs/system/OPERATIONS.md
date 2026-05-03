@@ -153,8 +153,14 @@ every name while still keeping expensive enrichment focused on the best
 available candidates.
 
 ```powershell
-python scripts/longterm_extended_universe_scan.py --idea-batch path\to\extended_watchlist_ideas.json --provider yfinance --top-percent 10 --min-pass-count 10 --max-pass-count 300 --passed-output path\to\extended_watchlist.python_scan_passed.json --deferred-output path\to\extended_watchlist.python_scan_deferred.json --summary-output path\to\extended_watchlist.python_scan_summary.json
+python scripts/longterm_extended_universe_scan.py --idea-batch path\to\extended_watchlist_ideas.json --provider yfinance --fundamentals-cache path\to\extended_fundamentals_cache.json --top-percent 10 --min-pass-count 10 --max-pass-count 300 --passed-output path\to\extended_watchlist.python_scan_passed.json --deferred-output path\to\extended_watchlist.python_scan_deferred.json --summary-output path\to\extended_watchlist.python_scan_summary.json
 ```
+
+The first-pass scan cache is symbol-keyed and resumable. If a prior overnight
+run already fetched `MSFT`, a later run will reuse that cache row and only fetch
+missing symbols. The summary reports `fundamentals_cache_hits` and
+`fundamentals_cache_fetches` so the operator can tell whether a run is mostly
+reusing local data or still filling the cache.
 
 Then run the evidence pipeline on the Python-scan survivors before committee
 research:
