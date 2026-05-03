@@ -119,6 +119,7 @@ def run_cli(args: argparse.Namespace, *, fetch_metrics=fetch_yfinance_fundamenta
     summary["fundamentals_fetch_limit"] = args.fetch_limit
     summary["fundamentals_fetch_skipped_count"] = len(fetch_skipped)
     summary["fundamentals_fetch_skipped_symbols"] = fetch_skipped
+    summary.update(_remaining_fetch_work(summary, args.fetch_limit))
     summary["passed_output"] = str(passed_path)
     if deferred_path:
         summary["deferred_output"] = str(deferred_path)
@@ -180,6 +181,20 @@ def _allowed_fetch_symbols(
     if fetch_limit is None:
         return set(missing)
     return set(missing[: max(0, int(fetch_limit))])
+
+
+def _remaining_fetch_work(summary: Mapping[str, Any], fetch_limit: int | None) -> dict[str, Any]:
+    remaining = int(summary.get("fundamentals_missing_count") or 0)
+    if remaining <= 0:
+        runs = 0
+    elif fetch_limit is None or fetch_limit <= 0:
+        runs = None
+    else:
+        runs = (remaining + int(fetch_limit) - 1) // int(fetch_limit)
+    return {
+        "fundamentals_remaining_fetch_count": remaining,
+        "fundamentals_estimated_fetch_runs_remaining": runs,
+    }
 
 
 def _write_json(path: str | Path, payload: Any) -> Path:

@@ -186,6 +186,11 @@ readiness call. If fundamentals coverage is below
 `continue_fundamentals_cache_fill`; once coverage clears the threshold, it is
 `run_evidence_enrichment_on_passed`.
 
+The same report shows remaining cache-fill work. `Remaining fetches` is the
+number of scanned symbols still missing fundamentals; `estimated runs remaining`
+uses the current `--fetch-limit` to estimate how many more repeat runs are
+needed before that specific watchlist slice is fully covered.
+
 The preferred operator command combines source loading, watchlist export, cache
 fill, Python first-pass scan, and markdown reporting into one artifact folder:
 

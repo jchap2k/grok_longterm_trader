@@ -154,6 +154,11 @@ def build_python_first_pass_markdown(
             f"{summary.get('fundamentals_coverage_count', 0)}/{summary.get('scanned_count', 0)} "
             f"({summary.get('fundamentals_coverage_percent', 0.0)}%)"
         ),
+        (
+            "- Remaining fetches: "
+            f"{summary.get('fundamentals_remaining_fetch_count', summary.get('fundamentals_missing_count', 0))}; "
+            f"estimated runs remaining: {_runs_remaining_text(summary)}"
+        ),
         f"- Cache hits/fetches: {summary.get('fundamentals_cache_hits', 0)} / {summary.get('fundamentals_cache_fetches', 0)}",
         "",
     ]
@@ -291,6 +296,11 @@ def _enrichment_readiness(
 
 def _readiness_label(summary: Mapping[str, Any]) -> str:
     return "ready" if summary.get("ready_for_expensive_enrichment") else "not ready"
+
+
+def _runs_remaining_text(summary: Mapping[str, Any]) -> str:
+    value = summary.get("fundamentals_estimated_fetch_runs_remaining")
+    return "unknown" if value is None else str(value)
 
 
 def _idea_table(ideas: list[Mapping[str, Any]]) -> list[str]:

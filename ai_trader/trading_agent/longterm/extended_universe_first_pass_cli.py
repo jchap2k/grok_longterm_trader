@@ -83,6 +83,7 @@ def run_cli(args: argparse.Namespace, *, fetch_metrics=fetch_yfinance_fundamenta
     _write_json(artifacts["scanned"], scan.scanned_ideas)
     scan_summary = dict(scan.summary)
     scan_summary.update(cache_stats)
+    scan_summary.update(_remaining_fetch_work(scan_summary, args.fetch_limit))
     scan_summary["input"] = str(artifacts["ideas"])
     scan_summary["fundamentals_mode"] = "snapshot_file" if args.snapshot_file else args.provider
     scan_summary["passed_output"] = str(artifacts["passed"])
@@ -209,6 +210,20 @@ def _allowed_fetch_symbols(
     if fetch_limit is None:
         return set(missing)
     return set(missing[: max(0, int(fetch_limit))])
+
+
+def _remaining_fetch_work(summary: Mapping[str, Any], fetch_limit: int | None) -> dict[str, Any]:
+    remaining = int(summary.get("fundamentals_missing_count") or 0)
+    if remaining <= 0:
+        runs = 0
+    elif fetch_limit is None or fetch_limit <= 0:
+        runs = None
+    else:
+        runs = (remaining + int(fetch_limit) - 1) // int(fetch_limit)
+    return {
+        "fundamentals_remaining_fetch_count": remaining,
+        "fundamentals_estimated_fetch_runs_remaining": runs,
+    }
 
 
 def _parse_symbols(value: str) -> list[str]:

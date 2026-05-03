@@ -244,6 +244,7 @@ def test_python_first_pass_markdown_summarizes_coverage_and_candidates():
     assert "| MISSING1 |" in markdown
     assert "provider timeout" in markdown
     assert "LATER1" in markdown
+    assert "Remaining fetches" in markdown
     assert "longterm_evidence_enrichment_pipeline.py" in markdown
 
 
@@ -395,6 +396,49 @@ def test_extended_universe_scan_cli_can_fetch_only_next_missing_chunk(tmp_path, 
     assert printed["fundamentals_cache_fetches"] == 2
     assert printed["fundamentals_fetch_skipped_count"] == 1
     assert printed["fundamentals_fetch_skipped_symbols"] == ["WEAK2"]
+    assert printed["fundamentals_remaining_fetch_count"] == 1
+    assert printed["fundamentals_estimated_fetch_runs_remaining"] == 1
+
+
+def test_extended_universe_scan_cli_reports_zero_remaining_runs_without_fetch_limit(tmp_path, capsys):
+    ideas_path = tmp_path / "ideas.json"
+    cache_path = tmp_path / "fundamentals_cache.json"
+    passed_output = tmp_path / "passed.json"
+    ideas_path.write_text(
+        json.dumps(
+            [
+                {"symbol": "TOP1", "company_name": "Top One"},
+                {"symbol": "MID1", "company_name": "Middle One"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_fetch(symbol: str) -> dict:
+        return _strong(symbol)
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--idea-batch",
+                str(ideas_path),
+                "--provider",
+                "yfinance",
+                "--fundamentals-cache",
+                str(cache_path),
+                "--top-percent",
+                "50",
+                "--passed-output",
+                str(passed_output),
+            ]
+        ),
+        fetch_metrics=fake_fetch,
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert printed["fundamentals_remaining_fetch_count"] == 0
+    assert printed["fundamentals_estimated_fetch_runs_remaining"] == 0
 
 
 def test_extended_universe_scan_cli_writes_markdown_report(tmp_path, capsys):
