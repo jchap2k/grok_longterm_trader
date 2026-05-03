@@ -365,6 +365,7 @@ def _site_index_html(
             </section>
             {_rankings_section(symbols=symbols, action_plan=action_plan, evidence_by_symbol=evidence_by_symbol)}
             {_scorecards_section(symbols=symbols, evidence_by_symbol=evidence_by_symbol)}
+            {_evidence_gaps_section(symbols=symbols, action_plan=action_plan, evidence_by_symbol=evidence_by_symbol)}
             {_placeholder_panel(
                 section_id="foundational-core",
                 eyebrow="Foundational Core",
@@ -464,6 +465,7 @@ def _dashboard_rail() -> str:
         ("Rankings", "#rankings"),
         ("Coverage", "#coverage"),
         ("Scorecards", "#scorecards"),
+        ("Evidence Gaps", "#evidence-gaps"),
         ("Portfolio", "#portfolio"),
         ("Safety", "#safety"),
         ("Settings", "#settings"),
@@ -756,6 +758,145 @@ def _scorecards_section(
         "</div>"
         "</section>"
     )
+
+
+def _evidence_gaps_section(
+    *,
+    symbols: Iterable[str],
+    action_plan: Mapping[str, Any],
+    evidence_by_symbol: Mapping[str, Mapping[str, Any]],
+) -> str:
+    rows = []
+    for symbol in symbols:
+        intent = _intent_for_symbol(action_plan, symbol)
+        evidence = evidence_by_symbol.get(symbol, {})
+        gap_info = _evidence_gaps_for_symbol(intent=intent, evidence=evidence)
+        if not any(gap_info.values()):
+            continue
+        gaps = list(gap_info["missing"]) + list(gap_info["promotion"]) + list(gap_info["warnings"])
+        rows.append(
+            {
+                "symbol": symbol,
+                "gap_count": len(gaps),
+                "promotion": gap_info["promotion"],
+                "missing": gap_info["missing"],
+                "warnings": gap_info["warnings"],
+                "next_step": _evidence_gap_next_step(gap_info),
+            }
+        )
+    rows.sort(key=lambda item: (-int(item["gap_count"]), str(item["symbol"])))
+    if not rows:
+        return _placeholder_panel(
+            section_id="evidence-gaps",
+            eyebrow="Evidence Gaps",
+            title="Evidence Gaps Placeholder",
+            body="No evidence gaps were detected in the generated dashboard inputs.",
+        )
+    body_rows = []
+    for item in rows:
+        symbol = str(item["symbol"])
+        promotion = "; ".join(str(value) for value in item["promotion"]) or "none"
+        missing = "; ".join(str(value) for value in item["missing"]) or "none"
+        warnings = "; ".join(str(value) for value in item["warnings"]) or "none"
+        search_text = " ".join([symbol, promotion, missing, warnings, str(item["next_step"])]).lower()
+        body_rows.append(
+            f"<tr data-paginated-item data-search-text=\"{escape(search_text)}\">"
+            f"<td><a href=\"tickers/{escape(symbol)}.html\">{escape(symbol)}</a></td>"
+            f"<td>{int(item['gap_count'])}</td>"
+            f"<td>{escape(_short_text(promotion, 120))}</td>"
+            f"<td>{escape(_short_text(missing, 150))}</td>"
+            f"<td>{escape(_short_text(warnings, 150))}</td>"
+            f"<td>{escape(str(item['next_step']))}</td>"
+            "</tr>"
+        )
+    return (
+        "<section class=\"panel\" id=\"evidence-gaps\">"
+        "<div class=\"section-heading\">"
+        "<p class=\"eyebrow\">Evidence Gaps</p>"
+        "<h2>Research Follow-Up Queue</h2>"
+        "</div>"
+        "<p>Evidence gaps show what the next enrichment/research loop should fix before a symbol is trusted for stronger portfolio decisions.</p>"
+        "<div class=\"pagination-shell\" data-paginated-list data-page-size=\"25\" data-pagination-label=\"evidence gaps\">"
+        "<div class=\"table-scroll\"><table class=\"evidence-gaps-table\">"
+        "<thead><tr><th>Symbol</th><th>Gaps</th><th>Promotion Follow-Up</th><th>Missing Evidence</th><th>Warnings</th><th>Suggested Next Step</th></tr></thead>"
+        f"<tbody>{''.join(body_rows)}</tbody>"
+        "</table></div>"
+        f"{_pagination_controls()}"
+        "</div>"
+        "</section>"
+    )
+
+
+def _evidence_gaps_for_symbol(*, intent: Mapping[str, Any], evidence: Mapping[str, Any]) -> dict[str, list[str]]:
+    promotion = intent.get("promotion_review") if isinstance(intent.get("promotion_review"), Mapping) else {}
+    promotion_gaps = [
+        _humanize_reason(str(item))
+        for item in [*(promotion.get("followups") or []), *(promotion.get("blockers") or [])]
+        if str(item).strip()
+    ]
+    missing: list[str] = []
+    if not evidence:
+        missing.append("No evidence packet")
+    if not str(evidence.get("business_summary") or "").strip():
+        missing.append("Missing business summary")
+    if not isinstance(evidence.get("fundamental_metrics"), Mapping):
+        missing.append("Missing fundamentals")
+    if not isinstance(evidence.get("quality_growth_scorecard"), Mapping):
+        missing.append("Missing scorecard")
+    if not isinstance(evidence.get("latest_earnings"), Mapping):
+        missing.append("Missing latest earnings")
+    if not _article_evidence_present(evidence):
+        missing.append("Missing article evidence")
+    warnings = _evidence_warnings(evidence)
+    return {"promotion": promotion_gaps, "missing": missing, "warnings": warnings}
+
+
+def _article_evidence_present(evidence: Mapping[str, Any]) -> bool:
+    for key in ("article_evidence_summaries", "relevant_news"):
+        value = evidence.get(key)
+        if isinstance(value, list) and value:
+            return True
+    return False
+
+
+def _evidence_warnings(evidence: Mapping[str, Any]) -> list[str]:
+    warnings: list[str] = []
+    for key in ("warnings", "enrichment_warnings", "evidence_warnings"):
+        value = evidence.get(key)
+        if isinstance(value, list):
+            warnings.extend(str(item) for item in value if str(item).strip())
+        elif str(value or "").strip():
+            warnings.append(str(value))
+    for nested_key in ("quality_growth_scorecard", "latest_earnings", "fundamental_metrics"):
+        nested = evidence.get(nested_key)
+        if not isinstance(nested, Mapping):
+            continue
+        value = nested.get("warnings")
+        if isinstance(value, list):
+            warnings.extend(str(item) for item in value if str(item).strip())
+        elif str(value or "").strip():
+            warnings.append(str(value))
+    deduped: list[str] = []
+    for item in warnings:
+        if item not in deduped:
+            deduped.append(item)
+    return deduped
+
+
+def _evidence_gap_next_step(gap_info: Mapping[str, list[str]]) -> str:
+    missing = " ".join(gap_info.get("missing") or []).lower()
+    promotion = " ".join(gap_info.get("promotion") or []).lower()
+    if "earnings" in promotion or "article" in promotion:
+        return "Run news/earnings enrichment or capture company-page evidence."
+    if "promotion" in promotion or promotion:
+        return "Resolve promotion follow-up before paper planning."
+    if "fundamentals" in missing or "scorecard" in missing:
+        return "Run fundamentals and scorecard enrichment."
+    if "earnings" in missing or "article" in missing:
+        return "Run news/earnings enrichment or capture company-page evidence."
+    if "business summary" in missing:
+        return "Add company summary before committee research."
+    return "Review enrichment warnings."
 
 
 def _action_plan_symbols(action_plan: Mapping[str, Any], fallback_symbols: Iterable[str]) -> list[str]:
@@ -1740,6 +1881,23 @@ def _html_shell(*, title: str, body: str) -> str:
       box-shadow: 1px 0 0 var(--line);
     }}
     .scorecards-table thead th:nth-child(1) {{ z-index: 3; }}
+    .evidence-gaps-table {{
+      min-width: 1080px;
+      table-layout: fixed;
+    }}
+    .evidence-gaps-table th, .evidence-gaps-table td {{
+      font-size: 15px;
+      vertical-align: top;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: normal;
+    }}
+    .evidence-gaps-table th:nth-child(1), .evidence-gaps-table td:nth-child(1) {{ width: 105px; }}
+    .evidence-gaps-table th:nth-child(2), .evidence-gaps-table td:nth-child(2) {{ width: 72px; }}
+    .evidence-gaps-table th:nth-child(3), .evidence-gaps-table td:nth-child(3),
+    .evidence-gaps-table th:nth-child(4), .evidence-gaps-table td:nth-child(4),
+    .evidence-gaps-table th:nth-child(5), .evidence-gaps-table td:nth-child(5) {{ width: 230px; }}
+    .evidence-gaps-table th:nth-child(6), .evidence-gaps-table td:nth-child(6) {{ width: 210px; }}
     .ticker-grid {{
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
