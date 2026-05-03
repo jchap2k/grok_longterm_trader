@@ -780,12 +780,24 @@ Build a compact dashboard from saved artifacts:
 python scripts/longterm_operator_dashboard.py --action-plan path\to\account_action_plan.json --market-regime path\to\market_regime.json --operator-status path\to\operator_status_bundle.json --report-output path\to\operator_dashboard.json --html-output path\to\operator_dashboard.html --json
 ```
 
+Build a static dashboard site with ticker detail pages:
+
+```powershell
+python scripts/longterm_operator_dashboard.py --dashboard-file path\to\operator_dashboard.json --action-plan path\to\account_action_plan.json --evidence-file path\to\evidence_ready_ideas.json --site-output-dir path\to\operator_dashboard_site --fetch-price-history --json
+```
+
 The dashboard is a static read-only view for humans and the future autonomous
 operator surface. It summarizes paper-ready stock BUY candidates, idle/defensive
 parking guidance, current market regime, and a machine-readable
 `agent_advisory` state such as `ready_for_supervised_paper_review`,
 `parking_only_review`, `blocked_preflight`, or `research_more`. It does not
-submit or authorize orders.
+submit or authorize orders. The static site uses an original premium research
+dashboard style inspired by the layout concepts at `https://www.fool.com/premium`
+and ticker tear sheets like
+`https://www.fool.com/premium/company/NASDAQ/AAPL/financials/summary`, without
+copying Fool branding. Ticker pages place a generated price chart first, then
+show thesis, promotion state, scorecard, financial sections, earnings context,
+article evidence, and safety notes.
 
 Filter the full account action plan to the narrow Stage 6B submit-candidate
 plan before running paper-submit preflights:

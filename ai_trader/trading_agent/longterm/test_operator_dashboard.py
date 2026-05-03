@@ -4,7 +4,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from longterm.operator_dashboard import build_operator_dashboard, build_operator_dashboard_html
+from longterm.operator_dashboard import (
+    build_operator_dashboard,
+    build_operator_dashboard_html,
+    build_operator_dashboard_site,
+)
 from longterm.operator_dashboard_cli import build_parser, run_cli
 
 
@@ -136,3 +140,163 @@ def test_operator_dashboard_cli_writes_json_and_html(tmp_path, capsys):
     assert printed["paper_submit_candidates"] == ["MSFT"]
     assert saved["agent_state"] == "ready_to_reveal_submit_command"
     assert "Long-Term Trader Dashboard" in html_output.read_text(encoding="utf-8")
+
+
+def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
+    action_plan = {
+        "intents": [
+            {
+                "intent_type": "BUY",
+                "symbol": "MSFT",
+                "allowed": True,
+                "trade_value": 1700,
+                "reason": "Cash is sufficient.",
+                "promotion_review": {
+                    "promotion_decision": "ACTIONABLE_BUY",
+                    "confidence": 75,
+                    "suggested_size_pct": 5,
+                    "valuation_fit_score": 72,
+                },
+            },
+            {
+                "intent_type": "REVIEW",
+                "symbol": "NVDA",
+                "allowed": True,
+                "trade_value": 0,
+                "reason": "Missing earnings article.",
+                "promotion_review": {"promotion_decision": "WATCHLIST_PENDING_EVIDENCE"},
+            },
+        ]
+    }
+    dashboard = build_operator_dashboard(
+        action_plan=action_plan,
+        market_regime={"risk_regime": "normal", "vix_level": 17},
+        operator_status={"agent_next_step": {"state": "ready_to_reveal_submit_command"}},
+    )
+    site = build_operator_dashboard_site(
+        dashboard=dashboard,
+        action_plan=action_plan,
+        evidence_items=[
+            {
+                "symbol": "MSFT",
+                "business_summary": "Microsoft is a cloud and productivity platform.",
+                "quality_growth_scorecard": {
+                    "superscore": 86,
+                    "analysis": {"quality": 91, "growth": 84, "valuation": 61, "safety": 78},
+                },
+                "fundamental_metrics": {
+                    "revenue_growth_cagr": {"3_yr_revenue_growth": "15.2%"},
+                    "valuation_ttm": {"price_earnings": "33.0x"},
+                    "profitability_ttm": {"gross_margin": "69.0%"},
+                    "financials_ttm": {"revenue": "$280.0B"},
+                },
+                "latest_earnings": {
+                    "quarter": "Q3 FY2026",
+                    "summary": "Cloud demand and AI attach rates supported growth.",
+                    "key_takeaways": ["Azure growth remained durable."],
+                },
+                "article_evidence_summaries": [
+                    {"title": "Microsoft expands AI cloud capacity", "summary": "Capex supports cloud demand.", "url": "https://example.com/msft"}
+                ],
+            }
+        ],
+        price_history_by_symbol={
+            "MSFT": [{"date": "2026-01-01", "close": 100}, {"date": "2026-01-02", "close": 112}],
+            "NVDA": [{"date": "2026-01-01", "close": 90}, {"date": "2026-01-02", "close": 95}],
+        },
+    )
+
+    assert "index.html" in site
+    assert "tickers/MSFT.html" in site
+    assert "tickers/NVDA.html" in site
+    assert 'href="tickers/MSFT.html"' in site["index.html"]
+    assert "Motley-Fool-style research surface" in site["index.html"]
+    assert "https://www.fool.com/premium" in site["index.html"]
+    assert "https://www.fool.com/premium/company/NASDAQ/AAPL/financials/summary" in site["tickers/MSFT.html"]
+    assert "<svg" in site["tickers/MSFT.html"]
+    assert "price-chart" in site["tickers/MSFT.html"]
+    assert "Q3 FY2026" in site["tickers/MSFT.html"]
+    assert "3-Yr Revenue Growth" in site["tickers/MSFT.html"]
+    assert "Microsoft is a cloud and productivity platform." in site["tickers/MSFT.html"]
+    assert "Missing earnings article." in site["tickers/NVDA.html"]
+
+
+def test_operator_dashboard_cli_writes_static_site(tmp_path, capsys):
+    action_plan = tmp_path / "action_plan.json"
+    dashboard = tmp_path / "dashboard.json"
+    evidence = tmp_path / "evidence.json"
+    prices = tmp_path / "prices.json"
+    site_dir = tmp_path / "site"
+    action_plan.write_text(
+        json.dumps({"intents": [{"intent_type": "BUY", "symbol": "MA", "allowed": True, "trade_value": 1000}]}),
+        encoding="utf-8",
+    )
+    dashboard.write_text(
+        json.dumps({"agent_advisory": {"state": "ready_for_supervised_paper_review"}, "paper_submit_candidates": ["MA"]}),
+        encoding="utf-8",
+    )
+    evidence.write_text(json.dumps([{"symbol": "MA", "business_summary": "Payments network."}]), encoding="utf-8")
+    prices.write_text(json.dumps({"MA": [{"date": "2026-01-01", "close": 10}, {"date": "2026-01-02", "close": 12}]}), encoding="utf-8")
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--dashboard-file",
+                str(dashboard),
+                "--action-plan",
+                str(action_plan),
+                "--evidence-file",
+                str(evidence),
+                "--price-history-file",
+                str(prices),
+                "--site-output-dir",
+                str(site_dir),
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert printed["site_output_dir"] == str(site_dir)
+    assert (site_dir / "index.html").exists()
+    assert (site_dir / "tickers" / "MA.html").exists()
+    assert "Payments network." in (site_dir / "tickers" / "MA.html").read_text(encoding="utf-8")
+
+
+def test_operator_dashboard_cli_can_fetch_price_history_for_site(tmp_path, capsys):
+    action_plan = tmp_path / "action_plan.json"
+    dashboard = tmp_path / "dashboard.json"
+    site_dir = tmp_path / "site"
+    action_plan.write_text(
+        json.dumps({"intents": [{"intent_type": "BUY", "symbol": "MSFT", "allowed": True, "trade_value": 1000}]}),
+        encoding="utf-8",
+    )
+    dashboard.write_text(json.dumps({"paper_submit_candidates": ["MSFT"]}), encoding="utf-8")
+
+    def fetcher(symbol, period):
+        assert symbol == "MSFT"
+        assert period == "1y"
+        return [{"date": "2026-01-01", "close": 100}, {"date": "2026-01-02", "close": 110}]
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--dashboard-file",
+                str(dashboard),
+                "--action-plan",
+                str(action_plan),
+                "--site-output-dir",
+                str(site_dir),
+                "--fetch-price-history",
+                "--json",
+            ]
+        ),
+        price_history_fetcher=fetcher,
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    ticker_html = (site_dir / "tickers" / "MSFT.html").read_text(encoding="utf-8")
+    assert code == 0
+    assert printed["site_output_dir"] == str(site_dir)
+    assert "<svg" in ticker_html
