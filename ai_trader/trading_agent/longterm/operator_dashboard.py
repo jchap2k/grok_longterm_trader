@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from html import escape
 from typing import Any, Iterable, Mapping
 
@@ -473,6 +474,65 @@ def _html_shell(*, title: str, body: str) -> str:
     .ticker-hero {{ display: grid; grid-template-columns: 1fr minmax(220px, 320px); gap: 24px; align-items: end; }}
     .top-nav {{ display: flex; justify-content: space-between; padding: 16px 4px; color: var(--muted); }}
     .price-chart svg {{ width: 100%; height: auto; display: block; }}
+    .chart-workbench {{ position: relative; }}
+    .chart-toolbar {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 16px;
+    }}
+    .chart-toolbar button {{
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,250,240,.9);
+      color: var(--muted);
+      cursor: pointer;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 800;
+      padding: 8px 13px;
+      transition: transform .15s ease, background .15s ease, color .15s ease;
+    }}
+    .chart-toolbar button:hover, .chart-toolbar button.is-active {{
+      background: var(--accent);
+      color: #fffaf0;
+      transform: translateY(-1px);
+    }}
+    .chart-stage {{
+      position: relative;
+      border: 1px solid rgba(214,197,168,.72);
+      border-radius: 22px;
+      background: linear-gradient(180deg, rgba(255,250,240,.72), rgba(235,223,198,.42));
+      overflow: hidden;
+    }}
+    .chart-tooltip {{
+      position: absolute;
+      top: 18px;
+      left: 18px;
+      z-index: 2;
+      min-width: 148px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(29,36,31,.92);
+      color: #fffaf0;
+      box-shadow: 0 16px 32px rgba(29,36,31,.18);
+      font-size: 13px;
+      opacity: 0;
+      transform: translateY(4px);
+      pointer-events: none;
+      transition: opacity .12s ease, transform .12s ease;
+    }}
+    .chart-tooltip.is-visible {{ opacity: 1; transform: translateY(0); }}
+    .chart-tooltip strong {{ display: block; font-size: 16px; margin-bottom: 3px; }}
+    .chart-caption {{
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 10px;
+    }}
     .two-column {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 22px; }}
     .score-list, .data-table, .article-list {{ margin: 16px 0 0; padding: 0; list-style: none; }}
     .score-list li, .article-list li {{ padding: 12px 0; border-top: 1px solid var(--line); }}
@@ -511,28 +571,51 @@ def _html_shell(*, title: str, body: str) -> str:
 
 
 def _price_chart_svg(history: list[Mapping[str, Any]]) -> str:
-    points = []
+    points: list[dict[str, Any]] = []
     for item in history:
         try:
             close = float(item.get("close"))
         except (TypeError, ValueError):
             continue
-        points.append(close)
+        points.append({"date": str(item.get("date") or ""), "close": close})
     if len(points) < 2:
         return "<div class=\"empty-chart\">Price history unavailable for this generated page.</div>"
+    data = json.dumps(points, sort_keys=True).replace("</", "<\\/")
+    return (
+        "<div class=\"chart-workbench\" data-active-range=\"MAX\">"
+        "<div class=\"chart-toolbar\" aria-label=\"Chart range controls\">"
+        "<button type=\"button\" data-range=\"1M\">1M</button>"
+        "<button type=\"button\" data-range=\"3M\">3M</button>"
+        "<button type=\"button\" data-range=\"6M\">6M</button>"
+        "<button type=\"button\" data-range=\"1Y\">1Y</button>"
+        "<button type=\"button\" data-range=\"MAX\" class=\"is-active\">MAX</button>"
+        "</div>"
+        "<div class=\"chart-stage\">"
+        f"{_static_price_chart_svg(points)}"
+        "<div class=\"chart-tooltip\" role=\"status\" aria-live=\"polite\"></div>"
+        "</div>"
+        "<div class=\"chart-caption\"><span>Hover the line for date and close.</span><span>Use range chips to zoom.</span></div>"
+        f"<script type=\"application/json\" class=\"chart-data\">{data}</script>"
+        f"<script>{_interactive_chart_script()}</script>"
+        "</div>"
+    )
+
+
+def _static_price_chart_svg(points: list[Mapping[str, Any]]) -> str:
+    closes = [float(item.get("close") or 0) for item in points]
     width, height, pad = 820, 260, 26
-    low, high = min(points), max(points)
+    low, high = min(closes), max(closes)
     spread = high - low or 1.0
     coords = []
-    for index, value in enumerate(points):
-        x = pad + (index / max(1, len(points) - 1)) * (width - pad * 2)
+    for index, value in enumerate(closes):
+        x = pad + (index / max(1, len(closes) - 1)) * (width - pad * 2)
         y = height - pad - ((value - low) / spread) * (height - pad * 2)
         coords.append(f"{x:.1f},{y:.1f}")
-    first, last = points[0], points[-1]
+    first, last = closes[0], closes[-1]
     change = ((last - first) / first) * 100 if first else 0.0
     color = "#0f6b56" if change >= 0 else "#7f2f25"
     return (
-        f"<svg viewBox=\"0 0 {width} {height}\" role=\"img\" aria-label=\"Price chart\">"
+        f"<svg class=\"interactive-chart\" viewBox=\"0 0 {width} {height}\" role=\"img\" aria-label=\"Interactive price chart\">"
         "<defs><linearGradient id=\"chartFill\" x1=\"0\" x2=\"0\" y1=\"0\" y2=\"1\">"
         f"<stop offset=\"0\" stop-color=\"{color}\" stop-opacity=\"0.22\"/>"
         f"<stop offset=\"1\" stop-color=\"{color}\" stop-opacity=\"0.02\"/>"
@@ -542,6 +625,104 @@ def _price_chart_svg(history: list[Mapping[str, Any]]) -> str:
         f"<text x=\"{pad}\" y=\"34\" fill=\"#6d6658\" font-size=\"16\">Last: {last:.2f} | Change: {change:+.1f}%</text>"
         "</svg>"
     )
+
+
+def _interactive_chart_script() -> str:
+    return r"""
+(function initInteractiveCharts(){
+  if (window.__longtermInteractiveChartsReady) return;
+  window.__longtermInteractiveChartsReady = true;
+  const width = 820, height = 260, pad = 26;
+  const ranges = { "1M": 22, "3M": 66, "6M": 132, "1Y": 252, "MAX": Infinity };
+  const money = new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+
+  function visiblePoints(points, range) {
+    const take = ranges[range] || Infinity;
+    return take === Infinity ? points.slice() : points.slice(Math.max(0, points.length - take));
+  }
+
+  function toCoords(points) {
+    const closes = points.map(point => Number(point.close)).filter(Number.isFinite);
+    const low = Math.min(...closes);
+    const high = Math.max(...closes);
+    const spread = high - low || 1;
+    return points.map((point, index) => {
+      const x = pad + (index / Math.max(1, points.length - 1)) * (width - pad * 2);
+      const y = height - pad - ((Number(point.close) - low) / spread) * (height - pad * 2);
+      return { ...point, x, y };
+    });
+  }
+
+  function draw(workbench, points, range) {
+    const svg = workbench.querySelector("svg.interactive-chart");
+    const tooltip = workbench.querySelector(".chart-tooltip");
+    const subset = visiblePoints(points, range);
+    if (!svg || subset.length < 2) return;
+    const coords = toCoords(subset);
+    const first = Number(subset[0].close);
+    const last = Number(subset[subset.length - 1].close);
+    const change = first ? ((last - first) / first) * 100 : 0;
+    const color = change >= 0 ? "#0f6b56" : "#7f2f25";
+    const polyline = coords.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+    const area = `M ${pad},${height - pad} L ${coords.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" L ")} L ${width - pad},${height - pad} Z`;
+    svg.innerHTML = `
+      <defs><linearGradient id="chartFillLive" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity="0.24"/><stop offset="1" stop-color="${color}" stop-opacity="0.03"/></linearGradient></defs>
+      <path d="${area}" fill="url(#chartFillLive)"></path>
+      <line class="chart-crosshair" x1="${coords[coords.length - 1].x}" x2="${coords[coords.length - 1].x}" y1="${pad}" y2="${height - pad}" stroke="#6d6658" stroke-width="1.5" stroke-dasharray="5 7" opacity="0"></line>
+      <polyline points="${polyline}" fill="none" stroke="${color}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></polyline>
+      <circle class="chart-focus" cx="${coords[coords.length - 1].x}" cy="${coords[coords.length - 1].y}" r="6" fill="${color}" stroke="#fffaf0" stroke-width="3" opacity="0"></circle>
+      <rect class="chart-hit-area" x="0" y="0" width="${width}" height="${height}" fill="transparent"></rect>
+      <text x="${pad}" y="34" fill="#6d6658" font-size="16">Last: ${last.toFixed(2)} | Change: ${change.toFixed(1)}%</text>
+    `;
+    const focus = svg.querySelector(".chart-focus");
+    const crosshair = svg.querySelector(".chart-crosshair");
+    const hit = svg.querySelector(".chart-hit-area");
+    function show(event) {
+      const box = svg.getBoundingClientRect();
+      const x = ((event.clientX - box.left) / box.width) * width;
+      const nearest = coords.reduce((best, point) => Math.abs(point.x - x) < Math.abs(best.x - x) ? point : best, coords[0]);
+      if (!nearest || !focus || !crosshair || !tooltip) return;
+      focus.setAttribute("cx", nearest.x);
+      focus.setAttribute("cy", nearest.y);
+      focus.setAttribute("opacity", "1");
+      crosshair.setAttribute("x1", nearest.x);
+      crosshair.setAttribute("x2", nearest.x);
+      crosshair.setAttribute("opacity", ".72");
+      tooltip.innerHTML = `<strong>${money.format(Number(nearest.close))}</strong><span>${nearest.date || "date pending"}</span>`;
+      tooltip.style.left = `${Math.min(Math.max(14, (nearest.x / width) * box.width - 74), box.width - 170)}px`;
+      tooltip.classList.add("is-visible");
+    }
+    function hide() {
+      if (focus) focus.setAttribute("opacity", "0");
+      if (crosshair) crosshair.setAttribute("opacity", "0");
+      if (tooltip) tooltip.classList.remove("is-visible");
+    }
+    if (hit) {
+      hit.addEventListener("mousemove", show);
+      hit.addEventListener("mouseleave", hide);
+      hit.addEventListener("touchstart", event => show(event.touches[0]), { passive: true });
+      hit.addEventListener("touchmove", event => show(event.touches[0]), { passive: true });
+    }
+  }
+
+  function boot() {
+    document.querySelectorAll(".chart-workbench").forEach(workbench => {
+      const data = workbench.querySelector(".chart-data");
+      const points = JSON.parse(data ? data.textContent : "[]");
+      workbench.querySelectorAll("[data-range]").forEach(button => {
+        button.addEventListener("click", () => {
+          const range = button.getAttribute("data-range") || "MAX";
+          workbench.querySelectorAll("[data-range]").forEach(other => other.classList.toggle("is-active", other === button));
+          draw(workbench, points, range);
+        });
+      });
+      draw(workbench, points, workbench.getAttribute("data-active-range") || "MAX");
+    });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+})();
+"""
 
 
 def _metric_tile(label: str, value: Any) -> str:
