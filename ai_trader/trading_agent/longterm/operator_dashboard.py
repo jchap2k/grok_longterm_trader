@@ -196,6 +196,22 @@ def _agent_advisory(
     }
 
 
+def _advisory_display_label(state: Any) -> str:
+    value = str(state or "unknown").strip()
+    labels = {
+        "ready_for_supervised_paper_review": "Paper Review Ready",
+        "blocked_preflight": "Preflight Blocked",
+        "collect_preflight_artifacts": "Collect Preflight",
+        "parking_only_review": "Parking Review",
+        "research_more": "Research More",
+        "ready_to_reveal_submit_command": "Paper Review Ready",
+        "submit_command_revealed_review_required": "Review Required",
+    }
+    if value in labels:
+        return labels[value]
+    return value.replace("_", " ").replace("-", " ").title() if value else "Unknown"
+
+
 def _intent_type(item: Mapping[str, Any]) -> str:
     return str(item.get("intent_type") or "").upper()
 
@@ -255,6 +271,7 @@ def _site_index_html(
     buy_intents = [item for item in intents if _intent_type(item) == "BUY"]
     parking_intents = [item for item in intents if _intent_type(item) in PARKING_INTENTS]
     review_intents = [item for item in intents if _intent_type(item) not in {"BUY", *PARKING_INTENTS}]
+    advisory_label = _advisory_display_label(advisory.get("state"))
     cards = []
     for symbol in symbols:
         intent = _intent_for_symbol(action_plan, symbol)
@@ -289,11 +306,11 @@ def _site_index_html(
           <main class="dashboard-main">
             {_dashboard_topbar(dashboard=dashboard, regime=regime, buy_intents=buy_intents)}
             <section class="hero" id="dashboard-overview">
-              <p class="eyebrow">Motley-Fool-style research surface</p>
+              <p class="eyebrow">Autonomous Research Surface</p>
               <h1>Long-Term Trader Dashboard</h1>
               <p class="lede">{escape(str(advisory.get("message") or "Review research, parking, and paper-readiness artifacts."))}</p>
               <div class="hero-grid">
-                <div><span>Advisory</span><strong>{escape(str(advisory.get("state") or "unknown"))}</strong></div>
+                <div><span>Advisory</span><strong>{escape(advisory_label)}</strong></div>
                 <div><span>Market Regime</span><strong>{escape(str(regime.get("risk_regime") or "unknown"))}</strong></div>
                 <div><span>Paper Candidates</span><strong>{int(dashboard.get("buy_intent_count") or 0)}</strong></div>
                 <div><span>Parking</span><strong>{", ".join(escape(str(item)) for item in dashboard.get("parking_symbols") or []) or "none"}</strong></div>
@@ -332,7 +349,7 @@ def _site_index_html(
                 <h2>Agent State And Market Posture</h2>
               </div>
               <div class="command-grid">
-                {_status_tile("Agent", advisory.get("state") or "unknown", advisory.get("message") or "")}
+                {_status_tile("Agent", advisory_label, advisory.get("message") or "")}
                 {_status_tile("Order submission", "disabled", "Read-only dashboard. Stage 6B still requires explicit supervised confirmation.")}
                 {_status_tile("Regime", regime.get("risk_regime") or "unknown", regime.get("reason") or "")}
                 {_status_tile("VIX / 10Y", f"{regime.get('vix_level') if regime.get('vix_level') is not None else 'unknown'} / {regime.get('ten_year_yield_trend') or 'unknown'}", "Used for parking posture, not automatic trading.")}
@@ -431,7 +448,8 @@ def _site_index_html(
                 body="Runtime configuration, source toggles, and scheduler controls are intentionally not editable from this static dashboard yet.",
             )}
             {_reference_footer()}
-            <script>{_dashboard_search_script()}{_paginated_lists_script()}{_synced_table_scroller_script()}</script>
+            {_agent_chat_placeholder()}
+            <script>{_dashboard_search_script()}{_paginated_lists_script()}{_synced_table_scroller_script()}{_agent_chat_placeholder_script()}</script>
           </main>
         </div>
         """,
@@ -481,8 +499,21 @@ def _logo_data_uri() -> str:
         except OSError:
             svg = ""
         if svg:
+            svg = svg.replace('viewBox="0 0 320 220"', 'viewBox="0 42 320 178"')
             # The source logo uses dark navy for the bull; lighten it for the dark rail.
             svg = svg.replace("#0F2A5E", "#CFEFFF")
+            svg = svg.replace("paint-order: stroke fill; stroke: #CFEFFF; stroke-width: 1.6px;", "")
+            svg = svg.replace("paint-order: stroke fill; stroke: #CFEFFF; stroke-width: 1.2px;", "")
+            # The source text sits close to the bull hooves; lower it in the rail variant.
+            svg = svg.replace('y="172"', 'y="194"').replace('y="195"', 'y="220"')
+            svg = svg.replace('font-size="19.8"', 'font-size="31.5"')
+            svg = svg.replace('letter-spacing="4.8px"', 'letter-spacing="2.4px"')
+            svg = svg.replace('letter-spacing="3.9px"', 'letter-spacing="1.8px"')
+            svg = svg.replace("system-ui, Arial Black, sans-serif", "Bahnschrift, Aptos Display, Arial Narrow, Arial, sans-serif")
+            svg = svg.replace('fill="#10B981" text-anchor="middle"', 'fill="#F8FAE8" text-anchor="middle"')
+            svg = svg.replace("LONG TERM", "Long-Term")
+            svg = svg.replace("TRADER AGENT", "TRADING AGENT")
+            svg = svg.replace("TRADING AGENT", "Trading Agent")
             encoded = base64.b64encode(svg.encode("utf-8")).decode("ascii")
         if encoded:
             return f"data:image/svg+xml;base64,{encoded}"
@@ -1054,6 +1085,62 @@ def _synced_table_scroller_script() -> str:
 """
 
 
+def _agent_chat_placeholder() -> str:
+    return """
+      <aside class="agent-chat" aria-label="Agent chat placeholder">
+        <button type="button" class="agent-chat-bubble" aria-controls="agent-chat-panel" aria-expanded="false">
+          <span class="agent-chat-pulse"></span>
+          <strong>Agent Desk</strong>
+          <small>Questions &amp; commands</small>
+        </button>
+        <section class="agent-chat-panel" id="agent-chat-panel" hidden>
+          <div class="agent-chat-head">
+            <div>
+              <p class="eyebrow">Agent Desk</p>
+              <h2>Ask Or Draft A Command</h2>
+            </div>
+            <button type="button" class="agent-chat-close" aria-label="Close agent chat">Close</button>
+          </div>
+          <p class="agent-chat-note">Placeholder only. Future versions can send questions or supervised commands into the active long-term agent context after authentication, audit logging, and safety gates.</p>
+          <div class="agent-chat-prompts" aria-label="Example prompts">
+            <button type="button">Why is MSFT a buy?</button>
+            <button type="button">Compare MA vs AMZN</button>
+            <button type="button">Draft sell review for TSLA</button>
+            <button type="button">Explain parking choice</button>
+          </div>
+          <label class="agent-chat-compose">
+            <span>Message</span>
+            <textarea rows="4" placeholder="Example: Ask the agent why MA cleared paper review..." disabled></textarea>
+          </label>
+          <button type="button" class="agent-chat-send" disabled>Send disabled until agent chat is wired</button>
+        </section>
+      </aside>
+    """
+
+
+def _agent_chat_placeholder_script() -> str:
+    return r"""
+(function initAgentChatPlaceholder(){
+  const chat = document.querySelector(".agent-chat");
+  if (!chat) return;
+  const bubble = chat.querySelector(".agent-chat-bubble");
+  const panel = chat.querySelector(".agent-chat-panel");
+  const close = chat.querySelector(".agent-chat-close");
+  if (!bubble || !panel) return;
+  const setOpen = (open) => {
+    panel.hidden = !open;
+    bubble.setAttribute("aria-expanded", open ? "true" : "false");
+    chat.classList.toggle("is-open", open);
+  };
+  bubble.addEventListener("click", () => setOpen(panel.hidden));
+  if (close) close.addEventListener("click", () => setOpen(false));
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") setOpen(false);
+  });
+})();
+"""
+
+
 def _status_tile(label: str, value: Any, detail: Any = "") -> str:
     return (
         "<div class=\"status-tile\">"
@@ -1137,7 +1224,7 @@ def _ticker_page_html(
           {_earnings_panel(earnings)}
         </section>
         <section class="panel">
-          <div class="section-heading"><p class="eyebrow">Financials</p><h2>Fool-like Metrics</h2></div>
+          <div class="section-heading"><p class="eyebrow">Financials</p><h2>Financial Metrics</h2></div>
           {_fundamental_sections(fundamentals)}
         </section>
         <section class="panel">
@@ -1209,14 +1296,17 @@ def _html_shell(*, title: str, body: str) -> str:
       box-shadow: inset -1px 0 rgba(255,255,255,.06);
     }}
     .rail-brand {{
-      padding: 0 0 26px;
+      padding: 0 0 18px;
       border-bottom: 1px solid rgba(255,255,255,.12);
     }}
     .rail-logo {{
       display: block;
-      width: min(168px, 100%);
-      height: auto;
-      margin: 0 0 15px;
+      width: 100%;
+      max-width: 208px;
+      height: 92px;
+      object-fit: contain;
+      object-position: center center;
+      margin: 0 auto;
       background: transparent;
       border-radius: 0;
       box-shadow: none;
@@ -1441,7 +1531,9 @@ def _html_shell(*, title: str, body: str) -> str:
     .hero-grid strong, .metric-tile strong, .verdict-card strong {{
       display: block;
       margin-top: 8px;
-      font-size: 24px;
+      font-size: clamp(20px, 2vw, 24px);
+      line-height: 1.08;
+      overflow-wrap: anywhere;
     }}
     .panel {{
       padding: 30px;
@@ -1753,6 +1845,116 @@ def _html_shell(*, title: str, body: str) -> str:
       font-size: 13px;
     }}
     .reference-footer a {{ color: var(--accent); font-weight: 800; }}
+    .agent-chat {{
+      position: fixed;
+      right: 26px;
+      bottom: 24px;
+      z-index: 20;
+      display: grid;
+      justify-items: end;
+      gap: 12px;
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    }}
+    .agent-chat-bubble {{
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 2px 11px;
+      align-items: center;
+      min-width: 190px;
+      padding: 13px 16px;
+      border: 1px solid rgba(207,239,255,.34);
+      border-radius: 999px;
+      color: #fffaf0;
+      background:
+        radial-gradient(circle at 18% 14%, rgba(23,211,176,.34), transparent 42%),
+        linear-gradient(135deg, #122052, #0b153d 62%, #142b61);
+      box-shadow: 0 18px 50px rgba(15,21,54,.32);
+      cursor: pointer;
+      text-align: left;
+      transition: transform .18s ease, box-shadow .18s ease;
+    }}
+    .agent-chat-bubble:hover, .agent-chat.is-open .agent-chat-bubble {{
+      transform: translateY(-3px);
+      box-shadow: 0 22px 64px rgba(15,21,54,.42);
+    }}
+    .agent-chat-pulse {{
+      grid-row: span 2;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #18d7b2, #cfefff);
+      box-shadow: 0 0 0 8px rgba(24,215,178,.11);
+    }}
+    .agent-chat-bubble strong {{ display: block; font-size: 17px; letter-spacing: -.02em; }}
+    .agent-chat-bubble small {{ color: rgba(255,250,240,.68); font-weight: 800; }}
+    .agent-chat-panel {{
+      width: min(380px, calc(100vw - 32px));
+      padding: 20px;
+      border: 1px solid rgba(214,197,168,.9);
+      border-radius: 24px;
+      background: rgba(255,250,240,.96);
+      box-shadow: 0 26px 80px rgba(29,36,31,.22);
+    }}
+    .agent-chat-head {{
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: start;
+    }}
+    .agent-chat-head h2 {{ font-size: 27px; }}
+    .agent-chat-close, .agent-chat-send, .agent-chat-prompts button {{
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(244,237,223,.86);
+      color: var(--ink);
+      font: inherit;
+      font-weight: 900;
+      cursor: pointer;
+    }}
+    .agent-chat-close {{ padding: 8px 11px; font-size: 13px; }}
+    .agent-chat-note {{
+      color: var(--muted);
+      line-height: 1.4;
+      margin: 14px 0;
+    }}
+    .agent-chat-prompts {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }}
+    .agent-chat-prompts button {{
+      padding: 8px 11px;
+      color: var(--accent);
+      font-size: 13px;
+    }}
+    .agent-chat-compose span {{
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      font-weight: 900;
+      margin-bottom: 7px;
+    }}
+    .agent-chat-compose textarea {{
+      width: 100%;
+      resize: vertical;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      color: var(--ink);
+      background: rgba(244,237,223,.62);
+      font: inherit;
+      line-height: 1.35;
+    }}
+    .agent-chat-send {{
+      width: 100%;
+      margin-top: 12px;
+      padding: 12px 14px;
+      color: rgba(29,36,31,.54);
+      cursor: not-allowed;
+    }}
     @media (max-width: 760px) {{
       .dashboard-shell {{ display: block; }}
       .dashboard-rail {{ position: static; min-height: auto; }}
@@ -1764,6 +1966,8 @@ def _html_shell(*, title: str, body: str) -> str:
       .intent-row {{ grid-template-columns: 1fr; }}
       .intent-row p {{ grid-column: auto; }}
       h1 {{ font-size: 48px; }}
+      .agent-chat {{ right: 16px; bottom: 16px; }}
+      .agent-chat-bubble {{ min-width: 162px; }}
     }}
   </style>
 </head>

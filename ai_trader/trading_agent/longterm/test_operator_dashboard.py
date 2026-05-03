@@ -81,8 +81,20 @@ def test_operator_dashboard_svg_logo_uses_rail_contrast_variant():
     data_uri = _logo_data_uri()
     assert data_uri.startswith("data:image/svg+xml;base64,")
     svg = base64.b64decode(data_uri.split(",", 1)[1]).decode("utf-8")
+    assert 'viewBox="0 42 320 178"' in svg
     assert "#0F2A5E" not in svg
     assert "#CFEFFF" in svg
+    assert 'y="194"' in svg
+    assert 'y="220"' in svg
+    assert 'font-size="31.5"' in svg
+    assert 'fill="#F8FAE8"' in svg
+    assert 'font-family="Bahnschrift, Aptos Display, Arial Narrow, Arial, sans-serif"' in svg
+    assert "paint-order: stroke fill" not in svg
+    assert "Long-Term" in svg
+    assert "Trading Agent" in svg
+    assert "LONG TERM" not in svg
+    assert "TRADING AGENT" not in svg
+    assert "TRADER AGENT" not in svg
 
 
 def test_operator_dashboard_advisory_distinguishes_parking_only_from_blocked():
@@ -258,12 +270,27 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     assert "tickers/MSFT.html" in site
     assert "tickers/NVDA.html" in site
     assert 'href="tickers/MSFT.html"' in site["index.html"]
-    assert "Motley-Fool-style research surface" in site["index.html"]
+    assert "Autonomous Research Surface" in site["index.html"]
+    assert "Motley-Fool-style research surface" not in site["index.html"]
+    assert "Paper Review Ready" in site["index.html"]
+    assert "Agent Desk" in site["index.html"]
+    assert "Ask Or Draft A Command" in site["index.html"]
+    assert "Send disabled until agent chat is wired" in site["index.html"]
+    assert "initAgentChatPlaceholder" in site["index.html"]
+    assert "agent-chat-bubble" in site["index.html"]
+    assert "aria-expanded=\"false\"" in site["index.html"]
+    assert "Future versions can send questions or supervised commands into the active long-term agent context" in site["index.html"]
+    assert "Why is MSFT a buy?" in site["index.html"]
     assert "dashboard-shell" in site["index.html"]
     assert "dashboard-rail" in site["index.html"]
     assert "Long-Term Trader Agent logo" in site["index.html"]
     assert "data:image/svg+xml;base64," in site["index.html"]
     assert "Autonomous long-term research" not in site["index.html"]
+    assert "height: 92px" in site["index.html"]
+    assert "max-width: 208px" in site["index.html"]
+    assert "margin: 0 auto" in site["index.html"]
+    assert "object-position: center center" in site["index.html"]
+    assert "object-fit: contain" in site["index.html"]
     assert 'href="#dashboard-overview"' in site["index.html"]
     assert 'href="#paper-candidates"' in site["index.html"]
     assert 'href="#research-board"' in site["index.html"]
@@ -340,6 +367,8 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     assert "initSyncedTableScrollers" in site["index.html"]
     assert "position: sticky" in site["index.html"]
     assert "overflow-wrap: anywhere" in site["index.html"]
+    assert "Financial Metrics" in site["tickers/MSFT.html"]
+    assert "Fool-like Metrics" not in site["tickers/MSFT.html"]
     assert "Watchlist / needs evidence" in site["index.html"]
     assert "Missing earnings article" in site["index.html"]
     assert "Quality" in site["index.html"]
