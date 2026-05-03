@@ -813,7 +813,9 @@ humanized and allowed to wrap inside cells. Future Scorecards,
 Foundational Core, Hold / Review, Closed Positions, About, and Settings areas
 render placeholders when those artifacts are not populated yet. `My Stocks`
 lands on its own portfolio-holdings section, which currently renders an empty
-holdings table until a portfolio holdings artifact is supplied. Anchor targets
+holdings table until a portfolio holdings artifact is supplied. The intended
+portfolio table contract includes symbol, shares, original purchase total cost,
+current total value, percent gain/loss, and status. Anchor targets
 use scroll margins so navigation lands at the section title rather than in the
 body text. The search box filters the research-board ticker cards locally.
 Ticker pages place a generated price chart first, then show thesis, promotion

@@ -662,8 +662,8 @@ def _holdings_placeholder_table() -> str:
         "<div class=\"holdings-table-wrap\">"
         "<h3>Current Portfolio Holdings</h3>"
         "<table class=\"holdings-table\">"
-        "<thead><tr><th>Symbol</th><th>Shares</th><th>Market Value</th><th>Status</th></tr></thead>"
-        "<tbody><tr><td colspan=\"4\">No current portfolio holdings were supplied for this generated dashboard.</td></tr></tbody>"
+        "<thead><tr><th>Symbol</th><th>Shares</th><th>Original Purchase Total Cost</th><th>Current Total Value</th><th>% Gain</th><th>Status</th></tr></thead>"
+        "<tbody><tr><td colspan=\"6\">No current portfolio holdings were supplied for this generated dashboard.</td></tr></tbody>"
         "</table>"
         "</div>"
     )
