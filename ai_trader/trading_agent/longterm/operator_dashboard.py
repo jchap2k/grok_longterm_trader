@@ -241,6 +241,10 @@ def _site_index_html(
 ) -> str:
     regime = dashboard.get("market_regime") or {}
     advisory = dashboard.get("agent_advisory") or {}
+    intents = [dict(item) for item in action_plan.get("intents") or [] if isinstance(item, Mapping)]
+    buy_intents = [item for item in intents if _intent_type(item) == "BUY"]
+    parking_intents = [item for item in intents if _intent_type(item) in PARKING_INTENTS]
+    review_intents = [item for item in intents if _intent_type(item) not in {"BUY", *PARKING_INTENTS}]
     cards = []
     for symbol in symbols:
         intent = _intent_for_symbol(action_plan, symbol)
@@ -272,10 +276,62 @@ def _site_index_html(
             <div><span>Parking</span><strong>{", ".join(escape(str(item)) for item in dashboard.get("parking_symbols") or []) or "none"}</strong></div>
           </div>
         </section>
+        <section class="panel command-center">
+          <div class="section-heading">
+            <p class="eyebrow">Command Center</p>
+            <h2>Agent State And Market Posture</h2>
+          </div>
+          <div class="command-grid">
+            {_status_tile("Agent", advisory.get("state") or "unknown", advisory.get("message") or "")}
+            {_status_tile("Order submission", "disabled", "Read-only dashboard. Stage 6B still requires explicit supervised confirmation.")}
+            {_status_tile("Regime", regime.get("risk_regime") or "unknown", regime.get("reason") or "")}
+            {_status_tile("VIX / 10Y", f"{regime.get('vix_level') if regime.get('vix_level') is not None else 'unknown'} / {regime.get('ten_year_yield_trend') or 'unknown'}", "Used for parking posture, not automatic trading.")}
+          </div>
+        </section>
+        <section class="panel">
+          <div class="section-heading">
+            <p class="eyebrow">Paper-Ready Candidates</p>
+            <h2>Simple BUYs Cleared For Review</h2>
+          </div>
+          {_intent_rows(buy_intents, empty_label="No paper-ready BUY candidates.")}
+        </section>
+        <section class="panel two-column">
+          <div>
+            <div class="section-heading">
+              <p class="eyebrow">Capital Deployment / Parking</p>
+              <h2>Idle Cash Posture</h2>
+            </div>
+            {_intent_rows(parking_intents, empty_label="No parking intent generated.")}
+          </div>
+          <div>
+            <div class="section-heading">
+              <p class="eyebrow">Portfolio Snapshot</p>
+              <h2>Exposure Surface</h2>
+            </div>
+            <p>Portfolio details are sourced from the current action-plan and operator artifacts. Protected/core holdings remain outside Stage 6B paper submission.</p>
+            <ul class="summary-list">
+              <li><strong>{len(buy_intents)}</strong><span>paper-review BUY intents</span></li>
+              <li><strong>{len(parking_intents)}</strong><span>parking intents</span></li>
+              <li><strong>{len(review_intents)}</strong><span>review / follow-up intents</span></li>
+            </ul>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="section-heading">
+            <p class="eyebrow">Safety &amp; Preflight</p>
+            <h2>Paper Boundary Guardrails</h2>
+          </div>
+          <div class="safety-grid">
+            {_safety_chip("Broker submit", "off")}
+            {_safety_chip("Allowed V1 order type", "simple BUY only")}
+            {_safety_chip("Parking submit", "excluded")}
+            {_safety_chip("Rebalance submit", "hard-blocked")}
+          </div>
+        </section>
         <section class="panel">
           <div class="section-heading">
             <p class="eyebrow">Research Board</p>
-            <h2>Current Candidates and Parking</h2>
+            <h2>All Ticker Tear Sheets</h2>
           </div>
           <div class="ticker-grid">{''.join(cards)}</div>
         </section>
@@ -285,6 +341,45 @@ def _site_index_html(
         {_reference_footer()}
         """,
     )
+
+
+def _status_tile(label: str, value: Any, detail: Any = "") -> str:
+    return (
+        "<div class=\"status-tile\">"
+        f"<span>{escape(str(label))}</span>"
+        f"<strong>{escape(_short_text(str(value), 72))}</strong>"
+        f"<small>{escape(_short_text(str(detail or ''), 150))}</small>"
+        "</div>"
+    )
+
+
+def _intent_rows(intents: list[Mapping[str, Any]], *, empty_label: str) -> str:
+    if not intents:
+        return f"<p>{escape(empty_label)}</p>"
+    rows = []
+    for item in intents[:8]:
+        promotion = item.get("promotion_review") if isinstance(item.get("promotion_review"), Mapping) else {}
+        decision = str(promotion.get("promotion_decision") or item.get("order_intent") or item.get("intent_type") or "")
+        rows.append(
+            "<a class=\"intent-row\" href=\"tickers/{symbol}.html\">"
+            "<strong>{symbol}</strong>"
+            "<span>{intent}</span>"
+            "<em>{decision}</em>"
+            "<small>{value}</small>"
+            "<p>{reason}</p>"
+            "</a>".format(
+                symbol=escape(_symbol(item)),
+                intent=escape(_intent_type(item)),
+                decision=escape(_short_text(decision, 48)),
+                value=escape(_money(item.get("trade_value") or item.get("target_value") or 0)),
+                reason=escape(_short_text(str(item.get("reason") or ""), 150)),
+            )
+        )
+    return f"<div class=\"intent-list\">{''.join(rows)}</div>"
+
+
+def _safety_chip(label: str, value: str) -> str:
+    return f"<div class=\"safety-chip\"><span>{escape(label)}</span><strong>{escape(value)}</strong></div>"
 
 
 def _ticker_page_html(
@@ -451,6 +546,87 @@ def _html_shell(*, title: str, body: str) -> str:
       background: rgba(255,250,240,.74);
       box-shadow: 0 14px 35px rgba(69, 47, 20, 0.08);
     }}
+    .command-grid, .safety-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 14px;
+      margin-top: 20px;
+    }}
+    .status-tile, .safety-chip {{
+      min-height: 132px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: linear-gradient(145deg, rgba(255,250,240,.95), rgba(237,224,198,.62));
+    }}
+    .status-tile span, .safety-chip span {{
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      font-weight: 800;
+    }}
+    .status-tile strong, .safety-chip strong {{
+      display: block;
+      margin-top: 9px;
+      font-size: 23px;
+      letter-spacing: -.03em;
+    }}
+    .status-tile small {{
+      display: block;
+      margin-top: 10px;
+      color: var(--muted);
+      line-height: 1.35;
+    }}
+    .intent-list {{
+      display: grid;
+      gap: 12px;
+      margin-top: 18px;
+    }}
+    .intent-row {{
+      display: grid;
+      grid-template-columns: 100px 120px minmax(160px, 1fr) 100px;
+      gap: 12px;
+      align-items: start;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(244,237,223,.72);
+      color: inherit;
+      text-decoration: none;
+    }}
+    .intent-row strong {{ font-size: 26px; letter-spacing: -.04em; }}
+    .intent-row span, .intent-row small {{
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      font-weight: 800;
+    }}
+    .intent-row em {{ color: var(--accent); font-style: normal; font-weight: 800; }}
+    .intent-row p {{
+      grid-column: 1 / -1;
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.35;
+    }}
+    .summary-list {{
+      display: grid;
+      gap: 12px;
+      padding: 0;
+      margin: 18px 0 0;
+      list-style: none;
+    }}
+    .summary-list li {{
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      padding: 12px 0;
+      border-top: 1px solid var(--line);
+    }}
+    .summary-list strong {{ font-size: 34px; color: var(--accent); }}
+    .summary-list span {{ color: var(--muted); }}
     .ticker-grid {{
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -559,6 +735,8 @@ def _html_shell(*, title: str, body: str) -> str:
     @media (max-width: 760px) {{
       .hero, .ticker-hero, .panel {{ padding: 24px; }}
       .ticker-hero {{ grid-template-columns: 1fr; }}
+      .intent-row {{ grid-template-columns: 1fr; }}
+      .intent-row p {{ grid-column: auto; }}
       h1 {{ font-size: 48px; }}
     }}
   </style>

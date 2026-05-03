@@ -166,6 +166,13 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
                 "reason": "Missing earnings article.",
                 "promotion_review": {"promotion_decision": "WATCHLIST_PENDING_EVIDENCE"},
             },
+            {
+                "intent_type": "PARK_IDLE_CASH",
+                "symbol": "SPY",
+                "allowed": True,
+                "trade_value": 30940,
+                "reason": "Normal regime parking.",
+            },
         ]
     }
     dashboard = build_operator_dashboard(
@@ -211,6 +218,15 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     assert "tickers/NVDA.html" in site
     assert 'href="tickers/MSFT.html"' in site["index.html"]
     assert "Motley-Fool-style research surface" in site["index.html"]
+    assert "Command Center" in site["index.html"]
+    assert "Paper-Ready Candidates" in site["index.html"]
+    assert "Capital Deployment / Parking" in site["index.html"]
+    assert "Portfolio Snapshot" in site["index.html"]
+    assert "Safety &amp; Preflight" in site["index.html"]
+    assert "Research Board" in site["index.html"]
+    assert "Order submission" in site["index.html"]
+    assert "ACTIONABLE_BUY" in site["index.html"]
+    assert "Normal regime parking." in site["index.html"]
     assert "https://www.fool.com/premium" in site["index.html"]
     assert "https://www.fool.com/premium/company/NASDAQ/AAPL/financials/summary" in site["tickers/MSFT.html"]
     assert "<svg" in site["tickers/MSFT.html"]

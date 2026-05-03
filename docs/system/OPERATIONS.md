@@ -795,11 +795,13 @@ submit or authorize orders. The static site uses an original premium research
 dashboard style inspired by the layout concepts at `https://www.fool.com/premium`
 and ticker tear sheets like
 `https://www.fool.com/premium/company/NASDAQ/AAPL/financials/summary`, without
-copying Fool branding. Ticker pages place a generated price chart first, then
-show thesis, promotion state, scorecard, financial sections, earnings context,
-article evidence, and safety notes. The chart is a static-file interactive
-widget: it includes range controls, hover/crosshair close values, and no external
-JavaScript dependency.
+copying Fool branding. The index page is a command cockpit with sections for
+agent state, paper-ready candidates, capital parking, portfolio/exposure summary,
+safety/preflight guardrails, and the research board. Ticker pages place a
+generated price chart first, then show thesis, promotion state, scorecard,
+financial sections, earnings context, article evidence, and safety notes. The
+chart is a static-file interactive widget: it includes range controls,
+hover/crosshair close values, and no external JavaScript dependency.
 
 Validate and open an already-generated static dashboard site:
 
