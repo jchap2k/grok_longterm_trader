@@ -263,7 +263,7 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     assert "dashboard-rail" in site["index.html"]
     assert "Long-Term Trader Agent logo" in site["index.html"]
     assert "data:image/svg+xml;base64," in site["index.html"]
-    assert "Autonomous long-term research" in site["index.html"]
+    assert "Autonomous long-term research" not in site["index.html"]
     assert 'href="#dashboard-overview"' in site["index.html"]
     assert 'href="#paper-candidates"' in site["index.html"]
     assert 'href="#research-board"' in site["index.html"]

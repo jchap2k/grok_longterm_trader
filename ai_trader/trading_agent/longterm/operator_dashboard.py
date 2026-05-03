@@ -454,7 +454,7 @@ def _dashboard_rail() -> str:
     logo = _brand_logo_html()
     return (
         "<aside class=\"dashboard-rail\">"
-        f"<div class=\"rail-brand\">{logo}<small>Autonomous long-term research</small></div>"
+        f"<div class=\"rail-brand\">{logo}</div>"
         f"<nav>{links}</nav>"
         "</aside>"
     )
