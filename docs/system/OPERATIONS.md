@@ -116,6 +116,18 @@ ETFs, test issues, warrants, rights, units, preferred shares, notes, blank-check
 companies, and SPAC/acquisition-company rows before they can consume enrichment
 calls.
 
+One-cycle and scheduler runs can also load a remote discovery source directly:
+
+```powershell
+python scripts/run_longterm_cycle.py --discovery-source-url https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt --discovery-source nasdaq_listed --journal-db path\to\journal.db
+python scripts/run_longterm_scheduler.py --run-once --discovery-source-url https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt --discovery-source nasdaq_listed --journal-db path\to\journal.db --quiet
+```
+
+Use those direct cycle/scheduler URL inputs sparingly. For large listing sources,
+the safer normal workflow is still: fetch discovery watchlist ideas, enrich a
+capped subset with fundamentals/news/earnings/scorecards, then feed the
+evidence-ready idea batch into the research cycle.
+
 Optionally enrich those source rows from a local JSON/CSV metrics cache before
 scoring:
 

@@ -1061,6 +1061,46 @@ def test_orchestration_cli_loads_discovery_source_file(tmp_path, capsys):
     assert cycle_calls[0]["discovery_candidates"][0]["source"] == "sp500"
 
 
+def test_orchestration_cli_loads_discovery_source_url(tmp_path, monkeypatch, capsys):
+    import longterm.orchestration_cli as orchestration_cli
+
+    profile_path = tmp_path / "profile.json"
+    profile_path.write_text(
+        '{"account_strategy_mode":"roth_ira","tradable_capital":35000,"protected_symbols":["FXAIX"],"benchmark_symbol":"FXAIX","defensive_parking_symbol":"SPY"}',
+        encoding="utf-8",
+    )
+    cycle_calls = []
+
+    def fake_url_loader(url, *, source):
+        assert url == "https://example.test/nasdaqlisted.txt"
+        assert source == "nasdaq_listed"
+        return [{"symbol": "AAPL", "company_name": "Apple", "source": source}]
+
+    def fake_cycle(**kwargs):
+        cycle_calls.append(kwargs)
+        return {"status": "completed", "total_idea_count": 0}
+
+    monkeypatch.setattr(orchestration_cli, "load_candidate_source_url", fake_url_loader)
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--discovery-source-url",
+            "https://example.test/nasdaqlisted.txt",
+            "--discovery-source",
+            "nasdaq_listed",
+            "--profile-config",
+            str(profile_path),
+            "--quiet",
+        ]
+    )
+
+    exit_code = run_cli(args, cycle_func=fake_cycle)
+
+    assert exit_code == 0
+    assert cycle_calls[0]["discovery_candidates"][0]["symbol"] == "AAPL"
+    assert cycle_calls[0]["discovery_candidates"][0]["source"] == "nasdaq_listed"
+
+
 def test_orchestration_cli_loads_discovery_enrichment_file(tmp_path, capsys):
     source_path = tmp_path / "sp500.csv"
     enrichment_path = tmp_path / "fundamentals.json"

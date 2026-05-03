@@ -136,6 +136,30 @@ def test_build_cycle_kwargs_loads_discovery_source_file(tmp_path):
     assert kwargs["discovery_candidates"][0]["source"] == "sp500"
 
 
+def test_build_cycle_kwargs_loads_discovery_source_url(tmp_path, monkeypatch):
+    import longterm.scheduler as scheduler
+
+    profile_path = tmp_path / "profile.json"
+    _write_profile(profile_path)
+
+    def fake_url_loader(url, *, source):
+        assert url == "https://example.test/otherlisted.txt"
+        assert source == "nyse_amex_listed"
+        return [{"symbol": "MA", "company_name": "Mastercard", "source": source}]
+
+    monkeypatch.setattr(scheduler, "load_candidate_source_url", fake_url_loader)
+    inputs = LongTermSchedulerInputs(
+        profile_config=profile_path,
+        discovery_source_url="https://example.test/otherlisted.txt",
+        discovery_source="nyse_amex_listed",
+    )
+
+    kwargs = build_cycle_kwargs(inputs)
+
+    assert kwargs["discovery_candidates"][0]["symbol"] == "MA"
+    assert kwargs["discovery_candidates"][0]["source"] == "nyse_amex_listed"
+
+
 def test_build_cycle_kwargs_loads_discovery_enrichment_file(tmp_path):
     profile_path = tmp_path / "profile.json"
     _write_profile(profile_path)
@@ -447,6 +471,43 @@ def test_scheduler_cli_forwards_discovery_source_file(tmp_path, capsys):
     assert exit_code == 0
     assert inputs.discovery_source_file == source_path
     assert inputs.discovery_source == "sp500"
+    assert config.max_runs == 1
+
+
+def test_scheduler_cli_forwards_discovery_source_url(tmp_path, capsys):
+    profile_path = tmp_path / "profile.json"
+    _write_profile(profile_path)
+    scheduler_calls = []
+
+    def fake_scheduler(*, inputs, config):
+        scheduler_calls.append((inputs, config))
+        return {
+            "status": "completed",
+            "run_count": 1,
+            "success_count": 1,
+            "error_count": 0,
+            "runs": [],
+        }
+
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--profile-config",
+            str(profile_path),
+            "--discovery-source-url",
+            "https://example.test/nasdaqlisted.txt",
+            "--discovery-source",
+            "nasdaq_listed",
+            "--run-once",
+        ]
+    )
+
+    exit_code = run_cli(args, scheduler_func=fake_scheduler)
+
+    inputs, config = scheduler_calls[0]
+    assert exit_code == 0
+    assert inputs.discovery_source_url == "https://example.test/nasdaqlisted.txt"
+    assert inputs.discovery_source == "nasdaq_listed"
     assert config.max_runs == 1
 
 

@@ -15,7 +15,7 @@ from longterm.market_regime_snapshot import fetch_yfinance_history, build_market
 from longterm.motley_fool_settings import load_motley_fool_capture_settings
 from longterm.orchestration import run_longterm_cycle
 from longterm.orchestration_cli import _load_manual_ideas
-from longterm.discovery_sources import load_candidate_source_file
+from longterm.discovery_sources import load_candidate_source_file, load_candidate_source_url
 from longterm.portfolio_state import PortfolioState
 from portfolio.portfolio_profile import PortfolioProfile
 
@@ -27,6 +27,7 @@ class LongTermSchedulerInputs:
     idea_batch: str | Path | None = None
     discovery_candidates: str | Path | None = None
     discovery_source_file: str | Path | None = None
+    discovery_source_url: str = ""
     discovery_source: str = ""
     discovery_enrichment_file: str | Path | None = None
     discovery_enrichment_source: str = "local_enrichment"
@@ -100,6 +101,7 @@ def build_cycle_kwargs(
     discovery_candidates = _load_discovery_candidates(
         inputs.discovery_candidates,
         source_file=inputs.discovery_source_file,
+        source_url=inputs.discovery_source_url,
         source=inputs.discovery_source,
         enrichment_file=inputs.discovery_enrichment_file,
         enrichment_source=inputs.discovery_enrichment_source,
@@ -154,16 +156,22 @@ def _load_discovery_candidates(
     path: str | Path | None,
     *,
     source_file: str | Path | None = None,
+    source_url: str = "",
     source: str = "",
     enrichment_file: str | Path | None = None,
     enrichment_source: str = "local_enrichment",
 ) -> list[dict[str, Any]]:
-    if path and source_file:
-        raise ValueError("Use either discovery_candidates or discovery_source_file, not both.")
+    source_count = sum(1 for value in (path, source_file, source_url) if value)
+    if source_count > 1:
+        raise ValueError("Use only one of discovery_candidates, discovery_source_file, or discovery_source_url.")
     if source_file:
         if not source:
             raise ValueError("discovery_source is required when using discovery_source_file.")
         candidates = load_candidate_source_file(source_file, source=source)
+    elif source_url:
+        if not source:
+            raise ValueError("discovery_source is required when using discovery_source_url.")
+        candidates = load_candidate_source_url(source_url, source=source)
     elif path:
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
         if not isinstance(payload, list):

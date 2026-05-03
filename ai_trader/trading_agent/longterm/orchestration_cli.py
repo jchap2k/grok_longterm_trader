@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from longterm.discovery_enrichment import apply_discovery_enrichment, load_discovery_enrichment_file
-from longterm.discovery_sources import load_candidate_source_file
+from longterm.discovery_sources import load_candidate_source_file, load_candidate_source_url
 from longterm.idle_cash_policy import load_market_regime_snapshot
 from longterm.motley_fool_settings import load_motley_fool_capture_settings
 from longterm.orchestration import run_longterm_cycle
@@ -27,6 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--idea-batch", default="")
     parser.add_argument("--discovery-candidates", default="")
     parser.add_argument("--discovery-source-file", default="")
+    parser.add_argument("--discovery-source-url", default="")
     parser.add_argument("--discovery-source", default="")
     parser.add_argument("--discovery-enrichment-file", default="")
     parser.add_argument("--discovery-enrichment-source", default="local_enrichment")
@@ -54,6 +55,7 @@ def run_cli(
     discovery_candidates = _load_discovery_candidates(
         args.discovery_candidates,
         source_file=args.discovery_source_file,
+        source_url=args.discovery_source_url,
         source=args.discovery_source,
         enrichment_file=args.discovery_enrichment_file,
         enrichment_source=args.discovery_enrichment_source,
@@ -117,16 +119,22 @@ def _load_discovery_candidates(
     path: str,
     *,
     source_file: str = "",
+    source_url: str = "",
     source: str = "",
     enrichment_file: str = "",
     enrichment_source: str = "local_enrichment",
 ) -> list[dict[str, Any]]:
-    if path and source_file:
-        raise ValueError("Use either --discovery-candidates or --discovery-source-file, not both.")
+    source_count = sum(1 for value in (path, source_file, source_url) if value)
+    if source_count > 1:
+        raise ValueError("Use only one of --discovery-candidates, --discovery-source-file, or --discovery-source-url.")
     if source_file:
         if not source:
             raise ValueError("--discovery-source is required when using --discovery-source-file.")
         candidates = load_candidate_source_file(source_file, source=source)
+    elif source_url:
+        if not source:
+            raise ValueError("--discovery-source is required when using --discovery-source-url.")
+        candidates = load_candidate_source_url(source_url, source=source)
     elif path:
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
         if not isinstance(payload, list):

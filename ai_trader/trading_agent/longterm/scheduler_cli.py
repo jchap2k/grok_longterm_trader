@@ -21,6 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--idea-batch", default="")
     parser.add_argument("--discovery-candidates", default="")
     parser.add_argument("--discovery-source-file", default="")
+    parser.add_argument("--discovery-source-url", default="")
     parser.add_argument("--discovery-source", default="")
     parser.add_argument("--discovery-enrichment-file", default="")
     parser.add_argument("--discovery-enrichment-source", default="local_enrichment")
@@ -56,6 +57,7 @@ def run_cli(
         idea_batch=Path(args.idea_batch) if args.idea_batch else None,
         discovery_candidates=Path(args.discovery_candidates) if args.discovery_candidates else None,
         discovery_source_file=Path(args.discovery_source_file) if args.discovery_source_file else None,
+        discovery_source_url=args.discovery_source_url,
         discovery_source=args.discovery_source,
         discovery_enrichment_file=Path(args.discovery_enrichment_file) if args.discovery_enrichment_file else None,
         discovery_enrichment_source=args.discovery_enrichment_source,
