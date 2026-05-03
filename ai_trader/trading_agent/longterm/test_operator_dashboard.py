@@ -214,6 +214,8 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
                 "business_summary": "Nvidia is an accelerated computing platform.",
                 "quality_growth_scorecard": {
                     "superscore": 73,
+                    "investing_type": "Aggressive Growth",
+                    "estimated_drawdown_band": "-40% to -60%",
                     "analysis": {"quality": 80, "growth": 88, "valuation": 42, "safety": 58},
                 },
             }
@@ -307,7 +309,12 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     assert '<td><a href="tickers/MSFT.html">MSFT</a></td>' in site["index.html"]
     assert "<th>Page</th>" not in site["index.html"]
     assert ">Open</a>" not in site["index.html"]
-    assert "Scorecards Placeholder" in site["index.html"]
+    assert "Universe Scorecards" in site["index.html"]
+    assert "Superscore" in site["index.html"]
+    assert "Investing Type" in site["index.html"]
+    assert "Max Drawdown" in site["index.html"]
+    assert "Aggressive Growth" in site["index.html"]
+    assert "Scorecards Placeholder" not in site["index.html"]
     assert "Foundational Core Placeholder" in site["index.html"]
     assert "Hold / Review Placeholder" in site["index.html"]
     assert "No closed positions are available in this generated dashboard yet." in site["index.html"]

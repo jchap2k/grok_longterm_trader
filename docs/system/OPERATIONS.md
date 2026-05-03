@@ -809,9 +809,12 @@ are wrapped in a local horizontal scroller and use compact human-readable
 actionability labels so the page layout remains stable. The wide rankings table
 also has a synced top scroller and sticky Rank/Symbol columns so row identity
 remains visible while scanning right-side details. Long blocker tokens are
-humanized and allowed to wrap inside cells. Future Scorecards,
-Foundational Core, Hold / Review, Closed Positions, About, and Settings areas
-render placeholders when those artifacts are not populated yet. `My Stocks`
+humanized and allowed to wrap inside cells. Scorecards renders a universe-wide
+table from evidence scorecards, with superscore, quality, growth, valuation,
+safety, market buzz, investing type, drawdown band, and top score reasons
+linked back to ticker tear sheets. Future Foundational Core, Hold / Review,
+Closed Positions, About, and Settings areas render placeholders when those
+artifacts are not populated yet. `My Stocks`
 lands on its own portfolio-holdings section, which currently renders an empty
 holdings table until a portfolio holdings artifact is supplied. The intended
 portfolio table contract includes symbol, shares, original purchase total cost,

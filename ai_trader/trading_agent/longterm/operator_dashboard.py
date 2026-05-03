@@ -337,12 +337,7 @@ def _site_index_html(
               <p>Coverage rows are generated from the current action plan, evidence files, and enrichment artifacts. Future versions can split this into analyst updates, latest news, and thesis-monitor notes.</p>
             </section>
             {_rankings_section(symbols=symbols, action_plan=action_plan, evidence_by_symbol=evidence_by_symbol)}
-            {_placeholder_panel(
-                section_id="scorecards",
-                eyebrow="Scorecards",
-                title="Scorecards Placeholder",
-                body="Ticker scorecards are available on each tear sheet. This section is reserved for a portfolio-wide scorecard table.",
-            )}
+            {_scorecards_section(symbols=symbols, evidence_by_symbol=evidence_by_symbol)}
             {_placeholder_panel(
                 section_id="foundational-core",
                 eyebrow="Foundational Core",
@@ -572,6 +567,97 @@ def _rankings_section(
     )
 
 
+def _scorecards_section(
+    *,
+    symbols: Iterable[str],
+    evidence_by_symbol: Mapping[str, Mapping[str, Any]],
+) -> str:
+    rows = []
+    for symbol in symbols:
+        evidence = evidence_by_symbol.get(symbol, {})
+        scorecard = evidence.get("quality_growth_scorecard") if isinstance(evidence.get("quality_growth_scorecard"), Mapping) else {}
+        analysis = scorecard.get("analysis") if isinstance(scorecard.get("analysis"), Mapping) else {}
+        superscore = _number(scorecard.get("superscore"))
+        has_metric = superscore > 0 or bool(analysis) or any(
+            _number(scorecard.get(key)) > 0
+            for key in ("quality_score", "growth_score", "valuation_score", "safety_score", "market_attention_score")
+        )
+        if not has_metric:
+            continue
+        rows.append(
+            {
+                "symbol": symbol,
+                "superscore": superscore,
+                "quality": _scorecard_metric(scorecard, analysis, "quality_score", "quality"),
+                "growth": _scorecard_metric(scorecard, analysis, "growth_score", "growth"),
+                "valuation": _scorecard_metric(scorecard, analysis, "valuation_score", "valuation"),
+                "safety": _scorecard_metric(scorecard, analysis, "safety_score", "safety"),
+                "market": _scorecard_metric(
+                    scorecard,
+                    analysis,
+                    "market_attention_score",
+                    "market_buzz_score",
+                    "market_attention",
+                    "market_buzz",
+                ),
+                "investing_type": scorecard.get("investing_type") or "n/a",
+                "max_drawdown": scorecard.get("estimated_drawdown_band") or scorecard.get("est_max_drawdown") or "n/a",
+                "reasons": [str(item) for item in scorecard.get("score_reasons") or [] if str(item)],
+            }
+        )
+    rows.sort(key=lambda item: (-float(item["superscore"]), str(item["symbol"])))
+    if not rows:
+        return _placeholder_panel(
+            section_id="scorecards",
+            eyebrow="Scorecards",
+            title="Scorecards Placeholder",
+            body="Ticker scorecards are available on each tear sheet. This section is reserved for a portfolio-wide scorecard table.",
+        )
+    body_rows = []
+    for item in rows:
+        symbol = str(item["symbol"])
+        top_reasons = "; ".join(item["reasons"][:3]) if item["reasons"] else "n/a"
+        body_rows.append(
+            "<tr>"
+            f"<td><a href=\"tickers/{escape(symbol)}.html\">{escape(symbol)}</a></td>"
+            f"<td>{escape(_score_cell(item.get('superscore')))}</td>"
+            f"<td>{escape(_score_cell(item.get('quality')))}</td>"
+            f"<td>{escape(_score_cell(item.get('growth')))}</td>"
+            f"<td>{escape(_score_cell(item.get('valuation')))}</td>"
+            f"<td>{escape(_score_cell(item.get('safety')))}</td>"
+            f"<td>{escape(_score_cell(item.get('market')))}</td>"
+            f"<td>{escape(_short_text(str(item['investing_type']), 44))}</td>"
+            f"<td>{escape(_short_text(str(item['max_drawdown']), 44))}</td>"
+            f"<td>{escape(_short_text(top_reasons, 150))}</td>"
+            "</tr>"
+        )
+    return (
+        "<section class=\"panel\" id=\"scorecards\">"
+        "<div class=\"section-heading\">"
+        "<p class=\"eyebrow\">Scorecards</p>"
+        "<h2>Universe Scorecards</h2>"
+        "</div>"
+        "<p>Scorecards condense deterministic quality, growth, valuation, safety, and attention signals before deeper agent research makes final portfolio decisions.</p>"
+        "<div class=\"table-scroll-top\" aria-hidden=\"true\"><div></div></div>"
+        "<div class=\"table-scroll\"><table class=\"scorecards-table\">"
+        "<thead><tr><th>Symbol</th><th>Superscore</th><th>Quality</th><th>Growth</th><th>Valuation</th><th>Safety</th><th>Market Buzz</th><th>Investing Type</th><th>Max Drawdown</th><th>Top Reasons</th></tr></thead>"
+        f"<tbody>{''.join(body_rows)}</tbody>"
+        "</table></div>"
+        "</section>"
+    )
+
+
+def _scorecard_metric(scorecard: Mapping[str, Any], analysis: Mapping[str, Any], *keys: str) -> Any:
+    for key in keys:
+        value = scorecard.get(key)
+        if _number(value) > 0:
+            return value
+        value = analysis.get(key)
+        if _number(value) > 0:
+            return value
+    return None
+
+
 def _actionability_label(value: str) -> str:
     labels = {
         "ACTIONABLE_BUY": "Actionable buy",
@@ -689,21 +775,22 @@ def _dashboard_search_script() -> str:
 def _synced_table_scroller_script() -> str:
     return r"""
 (function initSyncedTableScrollers(){
-  const top = document.querySelector(".table-scroll-top");
-  const bottom = document.querySelector(".table-scroll");
-  const table = bottom ? bottom.querySelector("table") : null;
-  const spacer = top ? top.querySelector("div") : null;
-  if (!top || !bottom || !table || !spacer) return;
-  spacer.style.width = `${table.scrollWidth}px`;
-  let syncing = false;
-  const sync = (source, target) => {
-    if (syncing) return;
-    syncing = true;
-    target.scrollLeft = source.scrollLeft;
-    requestAnimationFrame(() => { syncing = false; });
-  };
-  top.addEventListener("scroll", () => sync(top, bottom), { passive: true });
-  bottom.addEventListener("scroll", () => sync(bottom, top), { passive: true });
+  document.querySelectorAll(".table-scroll-top").forEach((top) => {
+    const bottom = top.nextElementSibling;
+    const table = bottom ? bottom.querySelector("table") : null;
+    const spacer = top.querySelector("div");
+    if (!bottom || !bottom.classList.contains("table-scroll") || !table || !spacer) return;
+    spacer.style.width = `${table.scrollWidth}px`;
+    let syncing = false;
+    const sync = (source, target) => {
+      if (syncing) return;
+      syncing = true;
+      target.scrollLeft = source.scrollLeft;
+      requestAnimationFrame(() => { syncing = false; });
+    };
+    top.addEventListener("scroll", () => sync(top, bottom), { passive: true });
+    bottom.addEventListener("scroll", () => sync(bottom, top), { passive: true });
+  });
 })();
 """
 
@@ -1232,6 +1319,35 @@ def _html_shell(*, title: str, body: str) -> str:
     .rankings-table th:nth-child(1), .rankings-table td:nth-child(1) {{ left: 0; }}
     .rankings-table th:nth-child(2), .rankings-table td:nth-child(2) {{ left: 54px; }}
     .rankings-table thead th:nth-child(1), .rankings-table thead th:nth-child(2) {{ z-index: 3; }}
+    .scorecards-table {{
+      min-width: 1020px;
+      table-layout: fixed;
+    }}
+    .scorecards-table th, .scorecards-table td {{
+      font-size: 15px;
+      vertical-align: top;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: normal;
+    }}
+    .scorecards-table th:nth-child(1), .scorecards-table td:nth-child(1) {{ width: 96px; }}
+    .scorecards-table th:nth-child(2), .scorecards-table td:nth-child(2),
+    .scorecards-table th:nth-child(3), .scorecards-table td:nth-child(3),
+    .scorecards-table th:nth-child(4), .scorecards-table td:nth-child(4),
+    .scorecards-table th:nth-child(5), .scorecards-table td:nth-child(5),
+    .scorecards-table th:nth-child(6), .scorecards-table td:nth-child(6),
+    .scorecards-table th:nth-child(7), .scorecards-table td:nth-child(7) {{ width: 90px; }}
+    .scorecards-table th:nth-child(8), .scorecards-table td:nth-child(8) {{ width: 150px; }}
+    .scorecards-table th:nth-child(9), .scorecards-table td:nth-child(9) {{ width: 130px; }}
+    .scorecards-table th:nth-child(10), .scorecards-table td:nth-child(10) {{ width: 250px; }}
+    .scorecards-table th:nth-child(1), .scorecards-table td:nth-child(1) {{
+      position: sticky;
+      left: 0;
+      z-index: 2;
+      background: var(--paper-2);
+      box-shadow: 1px 0 0 var(--line);
+    }}
+    .scorecards-table thead th:nth-child(1) {{ z-index: 3; }}
     .ticker-grid {{
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
