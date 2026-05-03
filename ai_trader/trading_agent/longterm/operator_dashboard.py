@@ -504,8 +504,10 @@ def _rankings_section(
     evidence_by_symbol: Mapping[str, Mapping[str, Any]],
 ) -> str:
     rows = []
-    for symbol in symbols:
+    for symbol in _action_plan_symbols(action_plan, symbols):
         intent = _intent_for_symbol(action_plan, symbol)
+        if not intent or _intent_type(intent) in PARKING_INTENTS:
+            continue
         evidence = evidence_by_symbol.get(symbol, {})
         score, score_source = _review_score_for_symbol(intent=intent, evidence=evidence)
         if score <= 0:
@@ -517,6 +519,7 @@ def _rankings_section(
                 "symbol": symbol,
                 "score": score,
                 "score_source": score_source,
+                "sort_priority": _actionability_sort_priority(_actionability_for_intent(intent)),
                 "actionability": _actionability_for_intent(intent),
                 "why_not_buy": _why_not_buy(intent),
                 "trade_value": intent.get("trade_value") or intent.get("target_value") or 0,
@@ -527,13 +530,13 @@ def _rankings_section(
                 "reason": str(intent.get("reason") or evidence.get("business_summary") or ""),
             }
         )
-    rows.sort(key=lambda item: (-float(item["score"]), str(item["symbol"])))
+    rows.sort(key=lambda item: (int(item["sort_priority"]), -float(item["score"]), str(item["symbol"])))
     if not rows:
         return _placeholder_panel(
             section_id="rankings",
             eyebrow="Rankings",
             title="Rankings Placeholder",
-            body="Ranked stock lists will appear here once review scores or scorecards are supplied.",
+            body="Ranked action-plan stocks will appear here once promotion-review scores are supplied.",
         )
     body_rows = []
     for index, item in enumerate(rows, start=1):
@@ -560,11 +563,11 @@ def _rankings_section(
         "<p class=\"eyebrow\">Rankings</p>"
         "<h2>Ranked Stock List</h2>"
         "</div>"
-        "<p>Stock Details View: stocks are sorted by evidence score, while Actionability explains whether the name is actually cleared for a BUY.</p>"
+        "<p>Operator Action View: stocks are sorted by promotion/actionability state first, then review confidence. Scorecards below remain the broad evidence matrix.</p>"
         "<div class=\"pagination-shell\" data-paginated-list data-page-size=\"25\" data-pagination-label=\"ranked stocks\">"
         "<div class=\"table-scroll-top\" aria-hidden=\"true\"><div></div></div>"
         "<div class=\"table-scroll\"><table class=\"rankings-table\">"
-        "<thead><tr><th>Rank</th><th>Symbol</th><th>Evidence Score</th><th>Actionability</th><th>Why Not Buy</th><th>Trade Value</th><th>Quality</th><th>Growth</th><th>Valuation</th><th>Safety</th><th>Context</th><th>Score Source</th></tr></thead>"
+        "<thead><tr><th>Rank</th><th>Symbol</th><th>Operator Score</th><th>Actionability</th><th>Why Not Buy</th><th>Trade Value</th><th>Quality</th><th>Growth</th><th>Valuation</th><th>Safety</th><th>Context</th><th>Score Source</th></tr></thead>"
         f"<tbody>{''.join(body_rows)}</tbody>"
         "</table></div>"
         f"{_pagination_controls()}"
@@ -656,6 +659,27 @@ def _scorecards_section(
     )
 
 
+def _action_plan_symbols(action_plan: Mapping[str, Any], fallback_symbols: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for item in action_plan.get("intents") or []:
+        if not isinstance(item, Mapping):
+            continue
+        symbol = _symbol(item)
+        if not symbol or symbol in seen:
+            continue
+        seen.add(symbol)
+        ordered.append(symbol)
+    if ordered:
+        return ordered
+    for symbol in fallback_symbols:
+        normalized = str(symbol).upper()
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            ordered.append(normalized)
+    return ordered
+
+
 def _scorecard_metric(scorecard: Mapping[str, Any], analysis: Mapping[str, Any], *keys: str) -> Any:
     for key in keys:
         value = scorecard.get(key)
@@ -676,6 +700,17 @@ def _actionability_label(value: str) -> str:
         "RESEARCH_ONLY": "Research only",
     }
     return labels.get(value, value.replace("_", " ").title())
+
+
+def _actionability_sort_priority(value: str) -> int:
+    priority = {
+        "ACTIONABLE_BUY": 0,
+        "WATCHLIST_PENDING_CONFIRMATION": 1,
+        "WATCHLIST_PENDING_EVIDENCE": 2,
+        "PARKING_GUIDANCE": 3,
+        "RESEARCH_ONLY": 4,
+    }
+    return priority.get(value, 9)
 
 
 def _actionability_for_intent(intent: Mapping[str, Any]) -> str:
@@ -722,10 +757,12 @@ def _review_score_for_symbol(*, intent: Mapping[str, Any], evidence: Mapping[str
     scorecard = evidence.get("quality_growth_scorecard") if isinstance(evidence.get("quality_growth_scorecard"), Mapping) else {}
     promotion = intent.get("promotion_review") if isinstance(intent.get("promotion_review"), Mapping) else {}
     candidates = [
-        (scorecard.get("superscore"), "Scorecard superscore"),
         (promotion.get("confidence"), "Promotion confidence"),
+        (promotion.get("portfolio_fit_score"), "Portfolio fit"),
         (promotion.get("valuation_fit_score"), "Valuation fit"),
+        (promotion.get("evidence_score"), "Promotion evidence score"),
         (promotion.get("quality_score"), "Promotion quality score"),
+        (scorecard.get("superscore"), "Scorecard superscore"),
     ]
     for value, label in candidates:
         score = _number(value)

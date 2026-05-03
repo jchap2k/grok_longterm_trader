@@ -801,12 +801,14 @@ for agent state, overview highlights, paper-ready candidates, capital parking,
 portfolio/exposure summary, safety/preflight guardrails, and the research board.
 The shell links navigate to real in-page sections. The left rail includes an
 explicit `All Tear Sheets` link for the research-board/ticker-page grid.
-Rankings renders a sorted stock-details table from available evidence
-scores/scorecards, including actionability, why-not-buy blockers, trade value,
-quality, growth, valuation, safety, context, and score source columns;
-the symbol text links directly to that ticker's tear sheet. Wide ranking tables
-are wrapped in a local horizontal scroller and use compact human-readable
-actionability labels so the page layout remains stable. The wide rankings table
+Rankings renders an operator action table from account-action-plan stock
+intents, not the full evidence universe. It prioritizes actionable/pending
+promotion-review state and then review confidence, with actionability,
+why-not-buy blockers, trade value, quality, growth, valuation, safety, context,
+and score source columns; the symbol text links directly to that ticker's tear
+sheet. Wide ranking tables are wrapped in a local horizontal scroller and use
+compact human-readable actionability labels so the page layout remains stable.
+The wide rankings table
 also has a synced top scroller and sticky Rank/Symbol columns so row identity
 remains visible while scanning right-side details. Long blocker tokens are
 humanized and allowed to wrap inside cells. Scorecards renders a universe-wide
