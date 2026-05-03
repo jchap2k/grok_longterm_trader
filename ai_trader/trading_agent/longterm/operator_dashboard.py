@@ -136,6 +136,50 @@ def build_operator_dashboard_site(
     return pages
 
 
+def build_operator_dashboard_evidence_gap_summary(
+    *,
+    dashboard: Mapping[str, Any] | None = None,
+    action_plan: Mapping[str, Any] | None = None,
+    portfolio_state: Mapping[str, Any] | None = None,
+    evidence_items: Iterable[Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Build structured research follow-up data from the same inputs as the site."""
+    dashboard = dashboard or {}
+    action_plan = action_plan or {}
+    evidence_by_symbol = {
+        _symbol(item): dict(item)
+        for item in (evidence_items or [])
+        if isinstance(item, Mapping) and _symbol(item)
+    }
+    symbols = _ordered_site_symbols(dashboard, action_plan, evidence_by_symbol, portfolio_state or {})
+    items = []
+    for symbol in symbols:
+        intent = _intent_for_symbol(action_plan, symbol)
+        evidence = evidence_by_symbol.get(symbol, {})
+        gap_info = _evidence_gaps_for_symbol(intent=intent, evidence=evidence)
+        gap_count = sum(len(gap_info[key]) for key in ("promotion", "missing", "warnings"))
+        if gap_count <= 0:
+            continue
+        items.append(
+            {
+                "symbol": symbol,
+                "gap_count": gap_count,
+                "promotion_followups": list(gap_info["promotion"]),
+                "missing_evidence": list(gap_info["missing"]),
+                "warnings": list(gap_info["warnings"]),
+                "suggested_next_step": _evidence_gap_next_step(gap_info),
+            }
+        )
+    items.sort(key=lambda item: (-int(item["gap_count"]), str(item["symbol"])))
+    return {
+        "schema_version": 1,
+        "mode": "operator_dashboard_evidence_gaps",
+        "gap_count": len(items),
+        "symbols_with_gaps": [str(item["symbol"]) for item in items],
+        "items": items,
+    }
+
+
 def _table_lines(items: list[Mapping[str, Any]]) -> list[str]:
     lines = ["| Intent | Symbol | Value | Allowed | Reason |", "|---|---|---:|---|---|"]
     if not items:
@@ -2435,6 +2479,7 @@ def _number(value: Any) -> float:
 
 __all__ = [
     "build_operator_dashboard",
+    "build_operator_dashboard_evidence_gap_summary",
     "build_operator_dashboard_html",
     "build_operator_dashboard_markdown",
     "build_operator_dashboard_site",

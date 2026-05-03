@@ -10,6 +10,7 @@ from typing import Any
 from longterm.market_regime_snapshot import fetch_yfinance_history
 from longterm.operator_dashboard import (
     build_operator_dashboard,
+    build_operator_dashboard_evidence_gap_summary,
     build_operator_dashboard_html,
     build_operator_dashboard_markdown,
     build_operator_dashboard_site,
@@ -83,6 +84,12 @@ def run_cli(args: argparse.Namespace, *, price_history_fetcher=fetch_yfinance_hi
             "site_output_dir": str(site_dir),
             "site_page_count": len(pages),
             "site_pages": sorted(pages),
+            "evidence_gap_summary": build_operator_dashboard_evidence_gap_summary(
+                dashboard=dashboard,
+                action_plan=action_plan,
+                portfolio_state=portfolio_state,
+                evidence_items=evidence_items,
+            ),
         }
     if args.json:
         print(json.dumps({**dashboard, **site_summary}, indent=2, sort_keys=True))

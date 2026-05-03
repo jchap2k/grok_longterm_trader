@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from longterm.operator_dashboard import (
     _logo_data_uri,
     build_operator_dashboard,
+    build_operator_dashboard_evidence_gap_summary,
     build_operator_dashboard_html,
     build_operator_dashboard_site,
 )
@@ -440,6 +441,44 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     assert "Missing earnings article." in site["tickers/NVDA.html"]
 
 
+def test_operator_dashboard_evidence_gap_summary_is_structured():
+    summary = build_operator_dashboard_evidence_gap_summary(
+        dashboard={"paper_submit_candidates": ["MSFT"]},
+        action_plan={
+            "intents": [
+                {
+                    "intent_type": "REVIEW",
+                    "symbol": "NVDA",
+                    "promotion_review": {
+                        "promotion_decision": "WATCHLIST_PENDING_EVIDENCE",
+                        "followups": ["missing_earnings_article"],
+                    },
+                }
+            ]
+        },
+        evidence_items=[
+            {
+                "symbol": "MSFT",
+                "business_summary": "Complete enough.",
+                "fundamental_metrics": {"financials_ttm": {"revenue": "$1"}},
+                "quality_growth_scorecard": {"superscore": 80},
+                "latest_earnings": {"summary": "ok"},
+                "article_evidence_summaries": [{"title": "source"}],
+            },
+            {"symbol": "NVDA", "business_summary": "Accelerated computing platform."},
+        ],
+    )
+
+    assert summary["mode"] == "operator_dashboard_evidence_gaps"
+    assert summary["gap_count"] == 1
+    assert summary["symbols_with_gaps"] == ["NVDA"]
+    item = summary["items"][0]
+    assert item["symbol"] == "NVDA"
+    assert "Missing earnings article" in item["promotion_followups"]
+    assert "Missing fundamentals" in item["missing_evidence"]
+    assert item["suggested_next_step"] == "Run news/earnings enrichment or capture company-page evidence."
+
+
 def test_operator_dashboard_cli_writes_static_site(tmp_path, capsys):
     action_plan = tmp_path / "action_plan.json"
     dashboard = tmp_path / "dashboard.json"
@@ -497,6 +536,8 @@ def test_operator_dashboard_cli_writes_static_site(tmp_path, capsys):
     printed = json.loads(capsys.readouterr().out)
     assert code == 0
     assert printed["site_output_dir"] == str(site_dir)
+    assert printed["evidence_gap_summary"]["gap_count"] == 1
+    assert printed["evidence_gap_summary"]["symbols_with_gaps"] == ["MA"]
     assert (site_dir / "index.html").exists()
     assert (site_dir / "tickers" / "MA.html").exists()
     assert "Payments network." in (site_dir / "tickers" / "MA.html").read_text(encoding="utf-8")
