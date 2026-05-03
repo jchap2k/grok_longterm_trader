@@ -186,6 +186,24 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     site = build_operator_dashboard_site(
         dashboard=dashboard,
         action_plan=action_plan,
+        portfolio_state={
+            "cash": 2500,
+            "protected_symbols": ["FXAIX"],
+            "holdings": [
+                {
+                    "symbol": "FXAIX",
+                    "quantity": 100,
+                    "original_purchase_total_cost": 30000,
+                    "market_value": 34000,
+                },
+                {
+                    "symbol": "MSFT",
+                    "quantity": 4,
+                    "avg_entry_price": 325,
+                    "market_value": 1700,
+                },
+            ],
+        },
         evidence_items=[
             {
                 "symbol": "MSFT",
@@ -338,7 +356,15 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     assert "Original Purchase Total Cost" in site["index.html"]
     assert "Current Total Value" in site["index.html"]
     assert "% Gain" in site["index.html"]
-    assert "No current portfolio holdings were supplied for this generated dashboard." in site["index.html"]
+    assert "FXAIX" in site["index.html"]
+    assert "Protected / core" in site["index.html"]
+    assert "$30,000.00" in site["index.html"]
+    assert "$34,000.00" in site["index.html"]
+    assert "+13.33%" in site["index.html"]
+    assert "MSFT" in site["index.html"]
+    assert "$1,300.00" in site["index.html"]
+    assert "+30.77%" in site["index.html"]
+    assert "No current portfolio holdings were supplied for this generated dashboard." not in site["index.html"]
     assert "Safety &amp; Preflight" in site["index.html"]
     assert "Research Board" in site["index.html"]
     assert "Order submission" in site["index.html"]
@@ -364,6 +390,7 @@ def test_operator_dashboard_cli_writes_static_site(tmp_path, capsys):
     dashboard = tmp_path / "dashboard.json"
     evidence = tmp_path / "evidence.json"
     prices = tmp_path / "prices.json"
+    portfolio_path = tmp_path / "portfolio.json"
     site_dir = tmp_path / "site"
     action_plan.write_text(
         json.dumps({"intents": [{"intent_type": "BUY", "symbol": "MA", "allowed": True, "trade_value": 1000}]}),
@@ -375,6 +402,22 @@ def test_operator_dashboard_cli_writes_static_site(tmp_path, capsys):
     )
     evidence.write_text(json.dumps([{"symbol": "MA", "business_summary": "Payments network."}]), encoding="utf-8")
     prices.write_text(json.dumps({"MA": [{"date": "2026-01-01", "close": 10}, {"date": "2026-01-02", "close": 12}]}), encoding="utf-8")
+    portfolio_path.write_text(
+        json.dumps(
+            {
+                "cash": 1000,
+                "holdings": [
+                    {
+                        "symbol": "MA",
+                        "quantity": 2,
+                        "avg_entry_price": 400,
+                        "market_value": 991,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
 
     code = run_cli(
         build_parser().parse_args(
@@ -385,6 +428,8 @@ def test_operator_dashboard_cli_writes_static_site(tmp_path, capsys):
                 str(action_plan),
                 "--evidence-file",
                 str(evidence),
+                "--portfolio-state",
+                str(portfolio_path),
                 "--price-history-file",
                 str(prices),
                 "--site-output-dir",
@@ -400,20 +445,28 @@ def test_operator_dashboard_cli_writes_static_site(tmp_path, capsys):
     assert (site_dir / "index.html").exists()
     assert (site_dir / "tickers" / "MA.html").exists()
     assert "Payments network." in (site_dir / "tickers" / "MA.html").read_text(encoding="utf-8")
+    index_html = (site_dir / "index.html").read_text(encoding="utf-8")
+    assert "$800.00" in index_html
+    assert "+23.88%" in index_html
 
 
 def test_operator_dashboard_cli_can_fetch_price_history_for_site(tmp_path, capsys):
     action_plan = tmp_path / "action_plan.json"
     dashboard = tmp_path / "dashboard.json"
+    portfolio_path = tmp_path / "portfolio.json"
     site_dir = tmp_path / "site"
     action_plan.write_text(
         json.dumps({"intents": [{"intent_type": "BUY", "symbol": "MSFT", "allowed": True, "trade_value": 1000}]}),
         encoding="utf-8",
     )
     dashboard.write_text(json.dumps({"paper_submit_candidates": ["MSFT"]}), encoding="utf-8")
+    portfolio_path.write_text(
+        json.dumps({"cash": 1000, "holdings": [{"symbol": "FXAIX", "quantity": 100, "market_value": 34000}]}),
+        encoding="utf-8",
+    )
 
     def fetcher(symbol, period):
-        assert symbol == "MSFT"
+        assert symbol in {"MSFT", "FXAIX"}
         assert period == "1y"
         return [{"date": "2026-01-01", "close": 100}, {"date": "2026-01-02", "close": 110}]
 
@@ -424,6 +477,8 @@ def test_operator_dashboard_cli_can_fetch_price_history_for_site(tmp_path, capsy
                 str(dashboard),
                 "--action-plan",
                 str(action_plan),
+                "--portfolio-state",
+                str(portfolio_path),
                 "--site-output-dir",
                 str(site_dir),
                 "--fetch-price-history",
@@ -435,6 +490,8 @@ def test_operator_dashboard_cli_can_fetch_price_history_for_site(tmp_path, capsy
 
     printed = json.loads(capsys.readouterr().out)
     ticker_html = (site_dir / "tickers" / "MSFT.html").read_text(encoding="utf-8")
+    protected_html = (site_dir / "tickers" / "FXAIX.html").read_text(encoding="utf-8")
     assert code == 0
     assert printed["site_output_dir"] == str(site_dir)
     assert "<svg" in ticker_html
+    assert "<svg" in protected_html

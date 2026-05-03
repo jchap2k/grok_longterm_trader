@@ -783,7 +783,7 @@ python scripts/longterm_operator_dashboard.py --action-plan path\to\account_acti
 Build a static dashboard site with ticker detail pages:
 
 ```powershell
-python scripts/longterm_operator_dashboard.py --dashboard-file path\to\operator_dashboard.json --action-plan path\to\account_action_plan.json --evidence-file path\to\evidence_ready_ideas.json --site-output-dir path\to\operator_dashboard_site --fetch-price-history --json
+python scripts/longterm_operator_dashboard.py --dashboard-file path\to\operator_dashboard.json --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --evidence-file path\to\evidence_ready_ideas.json --site-output-dir path\to\operator_dashboard_site --fetch-price-history --json
 ```
 
 The dashboard is a static read-only view for humans and the future autonomous
@@ -817,10 +817,13 @@ safety, market buzz, investing type, drawdown band, and top score reasons
 linked back to ticker tear sheets. Future Foundational Core, Hold / Review,
 Closed Positions, About, and Settings areas render placeholders when those
 artifacts are not populated yet. `My Stocks`
-lands on its own portfolio-holdings section, which currently renders an empty
-holdings table until a portfolio holdings artifact is supplied. The intended
-portfolio table contract includes symbol, shares, original purchase total cost,
-current total value, percent gain/loss, and status. Anchor targets
+lands on its own portfolio-holdings section. If `--portfolio-state` is supplied,
+the generated site renders current holdings with symbol, shares, original
+purchase total cost, current total value, percent gain/loss, and status. If the
+snapshot only provides quantity, market value, and average entry price, the
+dashboard derives original purchase total cost from quantity times average entry
+price. Without a portfolio snapshot, the section stays as an empty ready-to-fill
+table. Anchor targets
 use scroll margins so navigation lands at the section title rather than in the
 body text. The search box filters the research-board ticker cards locally.
 Research-board cards, Rankings rows, and Scorecard rows use static client-side

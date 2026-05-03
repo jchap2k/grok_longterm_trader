@@ -21,6 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--action-plan", default="")
     parser.add_argument("--dashboard-file", default="")
     parser.add_argument("--evidence-file", default="")
+    parser.add_argument("--portfolio-state", default="")
     parser.add_argument("--price-history-file", default="")
     parser.add_argument("--fetch-price-history", action="store_true")
     parser.add_argument("--price-history-period", default="1y")
@@ -45,11 +46,13 @@ def run_cli(args: argparse.Namespace, *, price_history_fetcher=fetch_yfinance_hi
         )
     )
     evidence_items = _load_json_list(args.evidence_file) if args.evidence_file else []
+    portfolio_state = _load_json(args.portfolio_state) if args.portfolio_state else {}
     price_history = _load_json(args.price_history_file) if args.price_history_file else {}
     if args.fetch_price_history:
         price_history = _fetch_site_price_history(
             dashboard=dashboard,
             action_plan=action_plan,
+            portfolio_state=portfolio_state,
             period=args.price_history_period,
             fetcher=price_history_fetcher,
             existing=price_history,
@@ -68,6 +71,7 @@ def run_cli(args: argparse.Namespace, *, price_history_fetcher=fetch_yfinance_hi
         pages = build_operator_dashboard_site(
             dashboard=dashboard,
             action_plan=action_plan,
+            portfolio_state=portfolio_state,
             evidence_items=evidence_items,
             price_history_by_symbol=price_history,
         )
@@ -114,6 +118,7 @@ def _fetch_site_price_history(
     *,
     dashboard: dict[str, Any],
     action_plan: dict[str, Any],
+    portfolio_state: dict[str, Any],
     period: str,
     fetcher,
     existing: dict[str, Any],
@@ -127,6 +132,9 @@ def _fetch_site_price_history(
     for intent in action_plan.get("intents") or []:
         if isinstance(intent, dict):
             _append_symbol(symbols, intent.get("symbol"))
+    for holding in portfolio_state.get("holdings") or []:
+        if isinstance(holding, dict):
+            _append_symbol(symbols, holding.get("symbol"))
     for symbol in symbols:
         if symbol not in price_history:
             price_history[symbol] = fetcher(symbol, period)

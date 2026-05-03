@@ -95,6 +95,7 @@ def build_operator_dashboard_site(
     *,
     dashboard: Mapping[str, Any],
     action_plan: Mapping[str, Any] | None = None,
+    portfolio_state: Mapping[str, Any] | None = None,
     evidence_items: Iterable[Mapping[str, Any]] | None = None,
     price_history_by_symbol: Mapping[str, Any] | None = None,
 ) -> dict[str, str]:
@@ -106,11 +107,13 @@ def build_operator_dashboard_site(
         if isinstance(item, Mapping) and _symbol(item)
     }
     price_history_by_symbol = price_history_by_symbol or {}
-    symbols = _ordered_site_symbols(dashboard, action_plan, evidence_by_symbol)
+    portfolio_state = portfolio_state or {}
+    symbols = _ordered_site_symbols(dashboard, action_plan, evidence_by_symbol, portfolio_state)
     pages: dict[str, str] = {
         "index.html": _site_index_html(
             dashboard=dashboard,
             action_plan=action_plan,
+            portfolio_state=portfolio_state,
             symbols=symbols,
             evidence_by_symbol=evidence_by_symbol,
         )
@@ -206,6 +209,7 @@ def _ordered_site_symbols(
     dashboard: Mapping[str, Any],
     action_plan: Mapping[str, Any],
     evidence_by_symbol: Mapping[str, Mapping[str, Any]],
+    portfolio_state: Mapping[str, Any] | None = None,
 ) -> list[str]:
     ordered: list[str] = []
     for key in ("paper_submit_candidates", "parking_symbols"):
@@ -214,6 +218,8 @@ def _ordered_site_symbols(
     for intent in action_plan.get("intents") or []:
         if isinstance(intent, Mapping):
             _append_unique_symbol(ordered, _symbol(intent))
+    for holding in _portfolio_holdings(portfolio_state or {}):
+        _append_unique_symbol(ordered, _holding_symbol(holding))
     for symbol in evidence_by_symbol:
         _append_unique_symbol(ordered, symbol)
     return ordered
@@ -236,6 +242,7 @@ def _site_index_html(
     *,
     dashboard: Mapping[str, Any],
     action_plan: Mapping[str, Any],
+    portfolio_state: Mapping[str, Any],
     symbols: list[str],
     evidence_by_symbol: Mapping[str, Mapping[str, Any]],
 ) -> str:
@@ -381,7 +388,7 @@ def _site_index_html(
                 <li><strong>{len(parking_intents)}</strong><span>parking intents</span></li>
                 <li><strong>{len(review_intents)}</strong><span>review / follow-up intents</span></li>
               </ul>
-              {_holdings_placeholder_table()}
+              {_holdings_table(portfolio_state)}
             </section>
             <section class="panel" id="safety">
               <div class="section-heading">
@@ -789,16 +796,94 @@ def _latest_recommendation_html(buy_intents: list[Mapping[str, Any]]) -> str:
     )
 
 
-def _holdings_placeholder_table() -> str:
+def _holdings_table(portfolio_state: Mapping[str, Any] | None) -> str:
+    holdings = _portfolio_holdings(portfolio_state or {})
+    protected = {
+        str(symbol).upper()
+        for symbol in _mapping_get(portfolio_state or {}, "protected_symbols", default=[]) or []
+    }
+    if not holdings:
+        return (
+            "<div class=\"holdings-table-wrap\">"
+            "<h3>Current Portfolio Holdings</h3>"
+            "<table class=\"holdings-table\">"
+            "<thead><tr><th>Symbol</th><th>Shares</th><th>Original Purchase Total Cost</th><th>Current Total Value</th><th>% Gain</th><th>Status</th></tr></thead>"
+            "<tbody><tr><td colspan=\"6\">No current portfolio holdings were supplied for this generated dashboard.</td></tr></tbody>"
+            "</table>"
+            "</div>"
+        )
+    rows = []
+    for holding in sorted(holdings, key=lambda item: _holding_symbol(item)):
+        symbol = _holding_symbol(holding)
+        quantity = _holding_number(holding, "quantity", "shares")
+        current_value = _holding_number(holding, "market_value", "current_total_value", "current_value")
+        cost = _holding_total_cost(holding, quantity=quantity)
+        status = str(_mapping_get(holding, "status", default="") or "").strip()
+        if not status:
+            status = "Protected / core" if symbol in protected else "Active holding"
+        rows.append(
+            "<tr>"
+            f"<td><a href=\"tickers/{escape(symbol)}.html\">{escape(symbol)}</a></td>"
+            f"<td>{escape(_shares(quantity))}</td>"
+            f"<td>{escape(_money_cents(cost))}</td>"
+            f"<td>{escape(_money_cents(current_value))}</td>"
+            f"<td>{escape(_gain_percent(current_value, cost))}</td>"
+            f"<td>{escape(status)}</td>"
+            "</tr>"
+        )
     return (
         "<div class=\"holdings-table-wrap\">"
         "<h3>Current Portfolio Holdings</h3>"
         "<table class=\"holdings-table\">"
         "<thead><tr><th>Symbol</th><th>Shares</th><th>Original Purchase Total Cost</th><th>Current Total Value</th><th>% Gain</th><th>Status</th></tr></thead>"
-        "<tbody><tr><td colspan=\"6\">No current portfolio holdings were supplied for this generated dashboard.</td></tr></tbody>"
+        f"<tbody>{''.join(rows)}</tbody>"
         "</table>"
         "</div>"
     )
+
+
+def _portfolio_holdings(portfolio_state: Mapping[str, Any] | None) -> list[Mapping[str, Any]]:
+    raw_holdings = _mapping_get(portfolio_state or {}, "holdings", default=[]) or []
+    if not isinstance(raw_holdings, Iterable) or isinstance(raw_holdings, (str, bytes)):
+        return []
+    holdings = []
+    for item in raw_holdings:
+        if isinstance(item, Mapping) and _holding_symbol(item):
+            holdings.append(item)
+    return holdings
+
+
+def _holding_symbol(holding: Mapping[str, Any]) -> str:
+    return str(_mapping_get(holding, "symbol", default="") or "").upper().strip()
+
+
+def _holding_number(holding: Mapping[str, Any], *keys: str) -> float:
+    for key in keys:
+        value = _mapping_get(holding, key, default=None)
+        if value not in (None, ""):
+            return _number(value)
+    return 0.0
+
+
+def _holding_total_cost(holding: Mapping[str, Any], *, quantity: float) -> float:
+    explicit = _holding_number(
+        holding,
+        "original_purchase_total_cost",
+        "purchase_total_cost",
+        "total_cost",
+        "cost_basis_total",
+        "cost_basis",
+    )
+    if explicit > 0:
+        return explicit
+    avg_entry = _holding_number(holding, "avg_entry_price", "average_entry_price", "purchase_price")
+    return round(quantity * avg_entry, 2) if quantity > 0 and avg_entry > 0 else 0.0
+
+
+def _mapping_get(value: Any, key: str, *, default: Any = None) -> Any:
+    if isinstance(value, Mapping):
+        return value.get(key, default)
+    return getattr(value, key, default)
 
 
 def _pagination_controls() -> str:
@@ -1876,6 +1961,28 @@ def _money(value: Any) -> str:
     except (TypeError, ValueError):
         amount = 0.0
     return f"${amount:,.0f}" if amount else "$0"
+
+
+def _money_cents(value: Any) -> str:
+    try:
+        amount = float(value or 0)
+    except (TypeError, ValueError):
+        amount = 0.0
+    return f"${amount:,.2f}" if amount else "$0.00"
+
+
+def _shares(value: Any) -> str:
+    amount = _number(value)
+    if amount <= 0:
+        return "0"
+    return f"{amount:,.6f}".rstrip("0").rstrip(".")
+
+
+def _gain_percent(current_value: float, cost: float) -> str:
+    if cost <= 0:
+        return "n/a"
+    gain = ((float(current_value or 0.0) - cost) / cost) * 100.0
+    return f"{gain:+.2f}%"
 
 
 def _percentish(value: Any) -> str:
