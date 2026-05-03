@@ -799,6 +799,17 @@ copying Fool branding. Ticker pages place a generated price chart first, then
 show thesis, promotion state, scorecard, financial sections, earnings context,
 article evidence, and safety notes.
 
+Validate and open an already-generated static dashboard site:
+
+```powershell
+python scripts/longterm_operator_dashboard_preview.py --site-dir path\to\operator_dashboard_site --open --json
+```
+
+The preview helper checks for `index.html` and ticker pages, prints a local
+`file:///.../index.html` URL, optionally opens it in the default browser, and can
+write a JSON preview report with `--report-output`. It is local preview only and
+does not call a broker or mutate artifacts.
+
 Build a Monday launch packet that combines the dashboard, filtered Stage 6B
 candidate plan, Monday operator check, optional workflow-smoke whole-share
 preview, and runbook state into one no-submit review artifact:
