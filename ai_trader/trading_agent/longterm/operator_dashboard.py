@@ -548,8 +548,17 @@ def _rankings_section(
     body_rows = []
     for index, item in enumerate(rows, start=1):
         symbol = str(item["symbol"])
+        search_text = " ".join(
+            [
+                symbol,
+                str(item["actionability"]),
+                str(item["why_not_buy"]),
+                str(item["reason"]),
+                str(item["score_source"]),
+            ]
+        ).lower()
         body_rows.append(
-            "<tr data-paginated-item>"
+            f"<tr data-paginated-item data-search-text=\"{escape(search_text)}\">"
             f"<td>{index}</td>"
             f"<td><a href=\"tickers/{escape(symbol)}.html\">{escape(symbol)}</a></td>"
             f"<td>{float(item['score']):g}</td>"
@@ -633,8 +642,22 @@ def _scorecards_section(
     for item in rows:
         symbol = str(item["symbol"])
         top_reasons = "; ".join(item["reasons"][:3]) if item["reasons"] else "n/a"
+        search_text = " ".join(
+            [
+                symbol,
+                str(item["superscore"]),
+                str(item["quality"]),
+                str(item["growth"]),
+                str(item["valuation"]),
+                str(item["safety"]),
+                str(item["market"]),
+                str(item["investing_type"]),
+                str(item["max_drawdown"]),
+                top_reasons,
+            ]
+        ).lower()
         body_rows.append(
-            "<tr data-paginated-item>"
+            f"<tr data-paginated-item data-search-text=\"{escape(search_text)}\">"
             f"<td><a href=\"tickers/{escape(symbol)}.html\">{escape(symbol)}</a></td>"
             f"<td>{escape(_score_cell(item.get('superscore')))}</td>"
             f"<td>{escape(_score_cell(item.get('quality')))}</td>"
@@ -900,13 +923,13 @@ def _dashboard_search_script() -> str:
     return r"""
 (function initDashboardSearch(){
   const input = document.querySelector(".dashboard-search");
-  const cards = Array.from(document.querySelectorAll(".ticker-card[data-search-text]"));
-  if (!input || !cards.length) return;
+  const searchable = Array.from(document.querySelectorAll("[data-search-text]"));
+  if (!input || !searchable.length) return;
   input.addEventListener("input", () => {
     const query = input.value.trim().toLowerCase();
-    cards.forEach(card => {
-      const haystack = card.getAttribute("data-search-text") || "";
-      card.dataset.searchHidden = Boolean(query) && !haystack.includes(query) ? "true" : "false";
+    searchable.forEach(item => {
+      const haystack = item.getAttribute("data-search-text") || "";
+      item.dataset.searchHidden = Boolean(query) && !haystack.includes(query) ? "true" : "false";
     });
     if (window.refreshPaginatedLists) {
       window.refreshPaginatedLists({ resetPage: true });

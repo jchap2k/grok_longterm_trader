@@ -825,7 +825,8 @@ dashboard derives original purchase total cost from quantity times average entry
 price. Without a portfolio snapshot, the section stays as an empty ready-to-fill
 table. Anchor targets
 use scroll margins so navigation lands at the section title rather than in the
-body text. The search box filters the research-board ticker cards locally.
+body text. The search box filters the research-board ticker cards plus Rankings
+and Scorecard rows locally, and resets pagination after each search.
 Research-board cards, Rankings rows, and Scorecard rows use static client-side
 pagination hooks (`data-paginated-list` / `data-paginated-item`) so the same
 site shape can scale from dozens of names to a much larger universe before a
