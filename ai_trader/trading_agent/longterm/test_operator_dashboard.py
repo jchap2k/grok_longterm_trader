@@ -164,7 +164,10 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
                 "allowed": True,
                 "trade_value": 0,
                 "reason": "Missing earnings article.",
-                "promotion_review": {"promotion_decision": "WATCHLIST_PENDING_EVIDENCE"},
+                "promotion_review": {
+                    "promotion_decision": "WATCHLIST_PENDING_EVIDENCE",
+                    "followups": ["missing_earnings_article"],
+                },
             },
             {
                 "intent_type": "PARK_IDLE_CASH",
@@ -281,16 +284,23 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     assert 'id="about"' in site["index.html"]
     assert 'id="settings"' in site["index.html"]
     assert "Ranked Stock List" in site["index.html"]
-    assert "Review Score" in site["index.html"]
+    assert "Evidence Score" in site["index.html"]
+    assert "Actionability" in site["index.html"]
+    assert "Why Not Buy" in site["index.html"]
     assert "Stock Details View" in site["index.html"]
     assert "Quality" in site["index.html"]
     assert "Growth" in site["index.html"]
     assert "Valuation" in site["index.html"]
     assert "Safety" in site["index.html"]
     assert "Trade Value" in site["index.html"]
-    assert site["index.html"].index("<td>MSFT</td>") < site["index.html"].index("<td>NVDA</td>")
+    assert site["index.html"].index('tickers/MSFT.html">MSFT</a>') < site["index.html"].index('tickers/NVDA.html">NVDA</a>')
     assert "Scorecard superscore" in site["index.html"]
+    assert "WATCHLIST_PENDING_EVIDENCE" in site["index.html"]
+    assert "missing_earnings_article" in site["index.html"]
     assert "scroll-margin-top" in site["index.html"]
+    assert '<td><a href="tickers/MSFT.html">MSFT</a></td>' in site["index.html"]
+    assert "<th>Page</th>" not in site["index.html"]
+    assert ">Open</a>" not in site["index.html"]
     assert "Scorecards Placeholder" in site["index.html"]
     assert "Foundational Core Placeholder" in site["index.html"]
     assert "Hold / Review Placeholder" in site["index.html"]

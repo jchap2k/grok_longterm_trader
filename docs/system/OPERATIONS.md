@@ -801,9 +801,10 @@ for agent state, overview highlights, paper-ready candidates, capital parking,
 portfolio/exposure summary, safety/preflight guardrails, and the research board.
 The shell links navigate to real in-page sections. The left rail includes an
 explicit `All Tear Sheets` link for the research-board/ticker-page grid.
-Rankings renders a sorted stock-details table from available review
-scores/scorecards, including intent, trade value, quality, growth, valuation,
-safety, context, and score source columns. Future Scorecards,
+Rankings renders a sorted stock-details table from available evidence
+scores/scorecards, including intent, actionability, why-not-buy blockers, trade
+value, quality, growth, valuation, safety, context, and score source columns;
+the symbol text links directly to that ticker's tear sheet. Future Scorecards,
 Foundational Core, Hold / Review, Closed Positions, About, and Settings areas
 render placeholders when those artifacts are not populated yet. `My Stocks`
 lands on its own portfolio-holdings section, which currently renders an empty

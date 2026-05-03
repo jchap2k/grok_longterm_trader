@@ -520,6 +520,8 @@ def _rankings_section(
                 "score": score,
                 "score_source": score_source,
                 "intent": _intent_type(intent) or "RESEARCH",
+                "actionability": _actionability_for_intent(intent),
+                "why_not_buy": _why_not_buy(intent),
                 "trade_value": intent.get("trade_value") or intent.get("target_value") or 0,
                 "quality": analysis.get("quality"),
                 "growth": analysis.get("growth"),
@@ -542,9 +544,11 @@ def _rankings_section(
         body_rows.append(
             "<tr>"
             f"<td>{index}</td>"
-            f"<td>{escape(symbol)}</td>"
+            f"<td><a href=\"tickers/{escape(symbol)}.html\">{escape(symbol)}</a></td>"
             f"<td>{float(item['score']):g}</td>"
             f"<td>{escape(str(item['intent']))}</td>"
+            f"<td>{escape(str(item['actionability']))}</td>"
+            f"<td>{escape(_short_text(str(item['why_not_buy']), 90))}</td>"
             f"<td>{escape(_money(item.get('trade_value')))}</td>"
             f"<td>{escape(_score_cell(item.get('quality')))}</td>"
             f"<td>{escape(_score_cell(item.get('growth')))}</td>"
@@ -552,7 +556,6 @@ def _rankings_section(
             f"<td>{escape(_score_cell(item.get('safety')))}</td>"
             f"<td>{escape(_short_text(str(item['reason']), 110))}</td>"
             f"<td>{escape(str(item['score_source']))}</td>"
-            f"<td><a href=\"tickers/{escape(symbol)}.html\">Open</a></td>"
             "</tr>"
         )
     return (
@@ -561,13 +564,42 @@ def _rankings_section(
         "<p class=\"eyebrow\">Rankings</p>"
         "<h2>Ranked Stock List</h2>"
         "</div>"
-        "<p>Stock Details View: stocks are sorted by the strongest available review score from generated evidence and promotion review metadata.</p>"
+        "<p>Stock Details View: stocks are sorted by evidence score, while Actionability explains whether the name is actually cleared for a BUY.</p>"
         "<table class=\"rankings-table\">"
-        "<thead><tr><th>Rank</th><th>Symbol</th><th>Review Score</th><th>Intent</th><th>Trade Value</th><th>Quality</th><th>Growth</th><th>Valuation</th><th>Safety</th><th>Context</th><th>Score Source</th><th>Page</th></tr></thead>"
+        "<thead><tr><th>Rank</th><th>Symbol</th><th>Evidence Score</th><th>Intent</th><th>Actionability</th><th>Why Not Buy</th><th>Trade Value</th><th>Quality</th><th>Growth</th><th>Valuation</th><th>Safety</th><th>Context</th><th>Score Source</th></tr></thead>"
         f"<tbody>{''.join(body_rows)}</tbody>"
         "</table>"
         "</section>"
     )
+
+
+def _actionability_for_intent(intent: Mapping[str, Any]) -> str:
+    promotion = intent.get("promotion_review") if isinstance(intent.get("promotion_review"), Mapping) else {}
+    decision = str(promotion.get("promotion_decision") or "").strip()
+    if decision:
+        return decision
+    if _intent_type(intent) in PAPER_EXECUTABLE_INTENTS and bool(intent.get("allowed")):
+        return "ACTIONABLE_BUY"
+    if _intent_type(intent) in PARKING_INTENTS:
+        return "PARKING_GUIDANCE"
+    return "RESEARCH_ONLY"
+
+
+def _why_not_buy(intent: Mapping[str, Any]) -> str:
+    promotion = intent.get("promotion_review") if isinstance(intent.get("promotion_review"), Mapping) else {}
+    followups = [str(item) for item in promotion.get("followups") or [] if str(item)]
+    blockers = [str(item) for item in promotion.get("blockers") or [] if str(item)]
+    reasons = followups + blockers
+    decision = str(promotion.get("promotion_decision") or "")
+    if _intent_type(intent) == "BUY" and decision == "ACTIONABLE_BUY" and not reasons:
+        return "Cleared for staged BUY review."
+    if reasons:
+        return "; ".join(reasons)
+    if _intent_type(intent) in PARKING_INTENTS:
+        return "Parking guidance, not a stock BUY candidate."
+    if _intent_type(intent) != "BUY":
+        return str(intent.get("reason") or "Research-only candidate.")
+    return str(intent.get("reason") or "Not cleared for BUY.")
 
 
 def _review_score_for_symbol(*, intent: Mapping[str, Any], evidence: Mapping[str, Any]) -> tuple[float, str]:
