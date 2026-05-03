@@ -42,8 +42,6 @@ def build_paper_monday_check(
         blockers.append("paper_smoke_readiness_not_ready")
     if not bool(check_payload.get("ready_for_supervised_submit")):
         blockers.append("runbook_check_not_ready")
-    if submit_revealed:
-        blockers.append("submit_command_revealed")
     if account_cleanliness and not bool(account_cleanliness.get("clean")):
         blockers.append("paper_account_not_clean")
     if not action_plan_hash:
@@ -81,6 +79,7 @@ def build_paper_monday_check(
         "runbook_check_ready": bool(check_payload.get("ready_for_supervised_submit")),
         "action_plan_hash_present": bool(action_plan_hash),
         "submit_command_revealed": submit_revealed,
+        "manual_submit_review_required": submit_revealed,
         "account_clean": bool(account_cleanliness.get("clean")) if account_cleanliness else None,
         "leftover_position_count": int(account_cleanliness.get("position_count") or 0),
         "leftover_symbols": list(account_cleanliness.get("unexpected_symbols") or []),
@@ -111,6 +110,7 @@ def build_paper_monday_check_markdown(payload: Mapping[str, Any]) -> str:
         f"- Runbook check ready: {'yes' if payload.get('runbook_check_ready') else 'no'}",
         f"- Action-plan hash present: {'yes' if payload.get('action_plan_hash_present') else 'no'}",
         f"- Submit command revealed: {'yes' if payload.get('submit_command_revealed') else 'no'}",
+        f"- Manual submit review required: {'yes' if payload.get('manual_submit_review_required') else 'no'}",
         f"- Account clean: {_yes_no_unknown(payload.get('account_clean'))}",
         f"- Leftover symbols: {', '.join(payload.get('leftover_symbols') or []) or 'none'}",
         "",

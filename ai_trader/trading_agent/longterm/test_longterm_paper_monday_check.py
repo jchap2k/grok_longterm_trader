@@ -117,7 +117,47 @@ def test_paper_monday_check_blocks_old_or_promotion_blocked_artifacts(tmp_path):
     assert result["workflow_promotion_blocked_count"] == 1
 
 
-def test_paper_monday_check_blocks_on_revealed_submit_and_leftover_position(tmp_path):
+def test_paper_monday_check_marks_revealed_submit_for_manual_review_without_blocking(tmp_path):
+    runbook = _write_json(
+        tmp_path / "runbook.json",
+        {
+            "steps": [
+                {
+                    "step_id": "supervised_submit",
+                    "command": "python scripts/longterm_paper_execution.py --submit-paper-orders",
+                    "requires_explicit_reveal": False,
+                }
+            ]
+        },
+    )
+    workflow = _write_json(tmp_path / "workflow.json", {"schema_version": 2, "ready_for_supervised_submit": True})
+    readiness = _write_json(
+        tmp_path / "readiness.json",
+        {
+            "schema_version": 2,
+            "ready_for_supervised_smoke": True,
+            "account_cleanliness": {"clean": True, "position_count": 0, "unexpected_symbols": []},
+        },
+    )
+    runbook_check = _write_json(
+        tmp_path / "runbook_check.json",
+        {"schema_version": 2, "ready_for_supervised_submit": True, "action_plan_hash": "abc123"},
+    )
+
+    result = build_paper_monday_check(
+        runbook=runbook,
+        workflow_smoke=workflow,
+        paper_smoke_readiness=readiness,
+        runbook_check=runbook_check,
+    )
+
+    assert result["ready_for_review"] is True
+    assert result["submit_command_revealed"] is True
+    assert result["manual_submit_review_required"] is True
+    assert "submit_command_revealed" not in result["blockers"]
+
+
+def test_paper_monday_check_blocks_on_leftover_position_even_if_submit_revealed(tmp_path):
     runbook = _write_json(
         tmp_path / "runbook.json",
         {
@@ -141,7 +181,7 @@ def test_paper_monday_check_blocks_on_revealed_submit_and_leftover_position(tmp_
     )
     runbook_check = _write_json(
         tmp_path / "runbook_check.json",
-        {"schema_version": 2, "ready_for_supervised_submit": True},
+        {"schema_version": 2, "ready_for_supervised_submit": True, "action_plan_hash": "abc123"},
     )
 
     result = build_paper_monday_check(
@@ -151,7 +191,6 @@ def test_paper_monday_check_blocks_on_revealed_submit_and_leftover_position(tmp_
         runbook_check=runbook_check,
     )
 
-    assert "submit_command_revealed" in result["blockers"]
     assert "paper_account_not_clean" in result["blockers"]
     assert result["leftover_symbols"] == ["NVDA"]
 

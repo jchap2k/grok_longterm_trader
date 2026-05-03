@@ -249,12 +249,29 @@ def test_operator_status_bundle_adds_agent_next_step_rollup(tmp_path):
             "status_counts": {"status_refresh_error": 1},
         },
     )
+    revealed_bundle = build_operator_status_bundle(
+        journal,
+        monday_operator_check={
+            "ready_for_review": True,
+            "blocker_count": 0,
+            "blockers": [],
+            "submit_command_revealed": True,
+            "manual_submit_review_required": True,
+        },
+        status_refresh={
+            "submitted_order_count": 0,
+            "error_count": 0,
+            "status_counts": {},
+        },
+    )
 
     assert ready_bundle["agent_next_step"]["state"] == "ready_to_reveal_submit_command"
     assert ready_bundle["agent_next_step"]["order_submission_enabled"] is False
     assert blocked_bundle["agent_next_step"]["state"] == "blocked_preflight"
     assert "paper_account_not_clean" in blocked_bundle["agent_next_step"]["blockers"]
     assert status_error_bundle["agent_next_step"]["state"] == "review_status_errors"
+    assert revealed_bundle["agent_next_step"]["state"] == "submit_command_revealed_review_required"
+    assert revealed_bundle["agent_next_step"]["order_submission_enabled"] is False
     markdown = build_operator_status_markdown(ready_bundle)
     assert "## Agent Next Step" in markdown
     assert "- State: `ready_to_reveal_submit_command`" in markdown

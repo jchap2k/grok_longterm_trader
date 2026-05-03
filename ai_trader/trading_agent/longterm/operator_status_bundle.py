@@ -117,12 +117,12 @@ def _agent_next_step(
     elif submitted_orders:
         state = "monitor_submitted_orders"
         message = "Review submitted paper order status and complete cleanup before the next smoke."
-    elif monday_summary.get("ready_for_review") and not monday_summary.get("submit_command_revealed"):
-        state = "ready_to_reveal_submit_command"
-        message = "Saved preflight artifacts are reviewable; reveal submit command only for supervised paper BUY testing."
     elif monday_summary.get("submit_command_revealed"):
         state = "submit_command_revealed_review_required"
         message = "Submit command is visible; confirm artifacts are still current before any supervised paper submit."
+    elif monday_summary.get("ready_for_review") and not monday_summary.get("submit_command_revealed"):
+        state = "ready_to_reveal_submit_command"
+        message = "Saved preflight artifacts are reviewable; reveal submit command only for supervised paper BUY testing."
     else:
         state = "collect_preflight_artifacts"
         message = "Generate workflow smoke, smoke readiness, runbook check, and Monday operator check artifacts."
@@ -321,6 +321,7 @@ def _monday_operator_check_summary(payload: Mapping[str, Any] | None) -> dict[st
         "workflow_promotion_blocked_count": int(payload.get("workflow_promotion_blocked_count") or 0),
         "paper_smoke_promotion_blocked_count": int(payload.get("paper_smoke_promotion_blocked_count") or 0),
         "submit_command_revealed": bool(payload.get("submit_command_revealed")),
+        "manual_submit_review_required": bool(payload.get("manual_submit_review_required")),
         "account_clean": payload.get("account_clean"),
         "status_refresh_error_count": int(payload.get("status_refresh_error_count") or 0),
     }
@@ -344,6 +345,7 @@ def _monday_operator_check_markdown_lines(summary: Mapping[str, Any]) -> list[st
         f"- Workflow promotion blocked: {int(summary.get('workflow_promotion_blocked_count') or 0)}",
         f"- Paper smoke promotion blocked: {int(summary.get('paper_smoke_promotion_blocked_count') or 0)}",
         f"- Submit command revealed: {_yes_no(summary.get('submit_command_revealed'))}",
+        f"- Manual submit review required: {_yes_no(summary.get('manual_submit_review_required'))}",
         f"- Account clean: {_yes_no_unknown(summary.get('account_clean'))}",
         f"- Status refresh errors: {int(summary.get('status_refresh_error_count') or 0)}",
         "",
