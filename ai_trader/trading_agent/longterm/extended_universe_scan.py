@@ -128,7 +128,9 @@ def _attach_fundamentals(
         for idea in ideas:
             symbol = str(idea.get("symbol") or "").upper()
             if symbol and symbol not in snapshots:
-                snapshots[symbol] = dict(fetch_metrics(symbol))
+                fetched = dict(fetch_metrics(symbol))
+                if fetched:
+                    snapshots[symbol] = fetched
     if not snapshots:
         return [dict(idea) for idea in ideas]
     if _all_normalized_fundamental_metrics(snapshots):

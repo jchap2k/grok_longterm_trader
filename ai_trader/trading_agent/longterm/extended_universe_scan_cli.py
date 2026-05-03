@@ -45,6 +45,7 @@ def run_cli(args: argparse.Namespace, *, fetch_metrics=fetch_yfinance_fundamenta
     snapshots = _load_symbol_keyed_json(args.snapshot_file) if args.snapshot_file else None
     cache_hits = 0
     cache_fetches = 0
+    fetch_errors: list[dict[str, str]] = []
     if args.provider and args.fundamentals_cache:
         snapshots = _load_optional_symbol_cache(args.fundamentals_cache)
         requested_symbols = _requested_symbols(ideas[: args.limit] if args.limit is not None else ideas)
@@ -54,8 +55,14 @@ def run_cli(args: argparse.Namespace, *, fetch_metrics=fetch_yfinance_fundamenta
             nonlocal cache_fetches
             normalized = symbol.upper()
             if normalized not in snapshots:
-                snapshots[normalized] = dict(fetch_metrics(normalized))
-                cache_fetches += 1
+                try:
+                    fetched = dict(fetch_metrics(normalized))
+                except Exception as exc:  # pragma: no cover - exact provider failures vary
+                    fetch_errors.append({"symbol": normalized, "error": str(exc)})
+                    return {}
+                if fetched:
+                    snapshots[normalized] = fetched
+                    cache_fetches += 1
             return snapshots[normalized]
 
         fetch_for_scan = cached_fetch
@@ -83,6 +90,8 @@ def run_cli(args: argparse.Namespace, *, fetch_metrics=fetch_yfinance_fundamenta
         summary["fundamentals_cache"] = str(Path(args.fundamentals_cache))
     summary["fundamentals_cache_hits"] = cache_hits
     summary["fundamentals_cache_fetches"] = cache_fetches
+    summary["fundamentals_fetch_error_count"] = len(fetch_errors)
+    summary["fundamentals_fetch_errors"] = fetch_errors
     summary["passed_output"] = str(passed_path)
     if deferred_path:
         summary["deferred_output"] = str(deferred_path)

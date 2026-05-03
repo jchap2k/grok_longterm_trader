@@ -239,3 +239,54 @@ def test_extended_universe_scan_cli_reuses_and_updates_provider_cache(tmp_path, 
     assert sorted(cache) == ["MID1", "TOP1"]
     assert printed["fundamentals_cache_hits"] == 1
     assert printed["fundamentals_cache_fetches"] == 1
+
+
+def test_extended_universe_scan_cli_records_fetch_errors_and_continues(tmp_path, capsys):
+    ideas_path = tmp_path / "ideas.json"
+    cache_path = tmp_path / "fundamentals_cache.json"
+    passed_output = tmp_path / "passed.json"
+    deferred_output = tmp_path / "deferred.json"
+    ideas_path.write_text(
+        json.dumps(
+            [
+                {"symbol": "TOP1", "company_name": "Top One"},
+                {"symbol": "BAD1", "company_name": "Bad One"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_fetch(symbol: str) -> dict:
+        if symbol == "BAD1":
+            raise RuntimeError("provider timeout")
+        return _strong(symbol)
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--idea-batch",
+                str(ideas_path),
+                "--provider",
+                "yfinance",
+                "--fundamentals-cache",
+                str(cache_path),
+                "--top-percent",
+                "50",
+                "--passed-output",
+                str(passed_output),
+                "--deferred-output",
+                str(deferred_output),
+            ]
+        ),
+        fetch_metrics=fake_fetch,
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    deferred = json.loads(deferred_output.read_text(encoding="utf-8"))
+    cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert code == 0
+    assert printed["fundamentals_cache_fetches"] == 1
+    assert printed["fundamentals_fetch_error_count"] == 1
+    assert printed["fundamentals_fetch_errors"][0]["symbol"] == "BAD1"
+    assert sorted(cache) == ["TOP1"]
+    assert deferred[0]["symbol"] == "BAD1"

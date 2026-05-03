@@ -160,7 +160,9 @@ The first-pass scan cache is symbol-keyed and resumable. If a prior overnight
 run already fetched `MSFT`, a later run will reuse that cache row and only fetch
 missing symbols. The summary reports `fundamentals_cache_hits` and
 `fundamentals_cache_fetches` so the operator can tell whether a run is mostly
-reusing local data or still filling the cache.
+reusing local data or still filling the cache. Individual provider failures are
+reported as `fundamentals_fetch_errors`; those symbols remain in the scanned
+set with missing-metric warnings instead of aborting the whole batch.
 
 Then run the evidence pipeline on the Python-scan survivors before committee
 research:
