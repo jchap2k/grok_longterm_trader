@@ -953,6 +953,18 @@ park leftover active-sleeve cash instead of leaving it idle:
 python scripts/run_longterm_cycle.py --idea-batch path\to\ideas.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --market-regime-file path\to\market_regime.json
 ```
 
+Generate that file from live market inputs with the snapshot helper:
+
+```powershell
+python scripts/longterm_market_regime_snapshot.py --provider yfinance --output path\to\market_regime.json
+```
+
+The generated snapshot uses VIX, SPY versus its 200-day moving average, and the
+10-year Treasury yield trend. VIX alone does not trigger long-duration Treasury
+parking. A chaotic equity selloff with falling yields can allow a capped TLT
+hedge, while inflation/rate-shock volatility defaults defensive parking toward
+SGOV/cash-like exposure.
+
 Example `market_regime.json`:
 
 ```json
