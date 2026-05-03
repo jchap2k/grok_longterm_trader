@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from longterm.discovery import DiscoveryCandidate, DiscoveryEngine
 from longterm.discovery_cli import build_parser, run_cli
 from longterm.discovery_enrichment import apply_discovery_enrichment, load_discovery_enrichment_file
-from longterm.discovery_sources import load_candidate_source_file
+from longterm.discovery_sources import load_candidate_source_file, load_candidate_source_text
 
 
 def test_discovery_merges_duplicate_symbols_and_preserves_provenance():
@@ -82,6 +82,18 @@ def test_discovery_separates_research_watchlist_and_rejected_candidates():
     assert [candidate.symbol for candidate in result.watchlist] == ["MID"]
     assert [candidate.symbol for candidate in result.rejected] == ["PENY"]
     assert "tiny market cap" in result.rejected[0].decision_reason.lower()
+
+
+def test_broad_listing_sources_become_enrichment_watchlist_not_rejected():
+    result = DiscoveryEngine().build_queue(
+        [{"symbol": "AAPL", "company_name": "Apple", "source": "nasdaq_listed"}],
+        research_limit=5,
+    )
+
+    assert result.research_queue == []
+    assert [candidate.symbol for candidate in result.watchlist] == ["AAPL"]
+    assert result.watchlist[0].decision_reason == "Interesting but not strong enough for immediate research."
+    assert result.rejected == []
 
 
 def test_discovery_to_research_ideas_maps_to_research_packet_fields():
@@ -167,6 +179,7 @@ def test_discovery_candidate_can_be_created_directly_for_manual_watchlist():
 def test_discovery_cli_outputs_buckets_and_research_idea_batch(tmp_path, capsys):
     candidates_path = tmp_path / "candidates.json"
     ideas_path = tmp_path / "research_ideas.json"
+    watchlist_ideas_path = tmp_path / "watchlist_ideas.json"
     candidates_path.write_text(
         json.dumps(
             [
@@ -180,7 +193,12 @@ def test_discovery_cli_outputs_buckets_and_research_idea_batch(tmp_path, capsys)
                     "gross_margin_pct": 68,
                     "market_cap": 3_000_000_000_000,
                     "category_leader": True,
-                }
+                },
+                {
+                    "symbol": "AAPL",
+                    "company_name": "Apple",
+                    "source": "nasdaq_listed",
+                },
             ]
         ),
         encoding="utf-8",
@@ -192,6 +210,10 @@ def test_discovery_cli_outputs_buckets_and_research_idea_batch(tmp_path, capsys)
             str(candidates_path),
             "--research-ideas-output",
             str(ideas_path),
+            "--watchlist-ideas-output",
+            str(watchlist_ideas_path),
+            "--watchlist-limit",
+            "1",
         ]
     )
 
@@ -204,6 +226,9 @@ def test_discovery_cli_outputs_buckets_and_research_idea_batch(tmp_path, capsys)
     assert payload["research_queue"][0]["decision"] == "research_ready"
     assert ideas[0]["symbol"] == "MSFT"
     assert ideas[0]["idea_source"] == "discovery_sp500"
+    watchlist_ideas = json.loads(watchlist_ideas_path.read_text(encoding="utf-8"))
+    assert watchlist_ideas[0]["symbol"] == "AAPL"
+    assert watchlist_ideas[0]["idea_source"] == "discovery_nasdaq_listed"
 
 
 def test_discovery_cli_loads_local_source_file(tmp_path, capsys):
@@ -405,3 +430,77 @@ def test_load_nasdaq_trader_pipe_listing_candidates(tmp_path):
             "notes": ["Market Category: Q."],
         }
     ]
+
+
+def test_listing_loader_excludes_non_operating_security_types(tmp_path):
+    path = tmp_path / "nasdaqlisted.txt"
+    path.write_text(
+        "Symbol|Security Name|Market Category|ETF|Test Issue|Financial Status|Round Lot Size|File Creation Time\n"
+        "GOOD|Good Software Inc. Common Stock|Q|N|N|N|100|20260430\n"
+        "SPAC|Blank Check Acquisition Corp. Class A|Q|N|N|N|100|20260430\n"
+        "WRNT|Good Software Inc. Warrant|Q|N|N|N|100|20260430\n"
+        "UNIT|Good Software Inc. Unit|Q|N|N|N|100|20260430\n"
+        "PREF|Good Software Inc. Preferred Stock|Q|N|N|N|100|20260430\n",
+        encoding="utf-8",
+    )
+
+    candidates = load_candidate_source_file(path, source="nasdaq_listed")
+
+    assert [candidate["symbol"] for candidate in candidates] == ["GOOD"]
+
+
+def test_load_remote_source_text_uses_same_normalization():
+    text = (
+        "Symbol|Security Name|Market Category|ETF|Test Issue|Financial Status|Round Lot Size|File Creation Time\n"
+        "AAPL|Apple Inc.|Q|N|N|N|100|20260430\n"
+    )
+
+    candidates = load_candidate_source_text(text, source="nasdaq_listed")
+
+    assert candidates == [
+        {
+            "symbol": "AAPL",
+            "company_name": "Apple Inc.",
+            "source": "nasdaq_listed",
+            "notes": ["Market Category: Q."],
+        }
+    ]
+
+
+def test_discovery_cli_loads_remote_source_url(monkeypatch, capsys):
+    import longterm.discovery_cli as discovery_cli
+
+    def fake_url_loader(url, *, source):
+        assert url == "https://example.test/nasdaqlisted.txt"
+        assert source == "nasdaq_listed"
+        return [
+            {
+                "symbol": "MSFT",
+                "company_name": "Microsoft",
+                "source": source,
+                "source_score": 90,
+                "market_cap": 3_000_000_000_000,
+                "revenue_growth_1y_pct": 15,
+                "earnings_growth_1y_pct": 25,
+                "return_on_capital_pct": 25,
+                "gross_margin_pct": 70,
+                "category_leader": True,
+            }
+        ]
+
+    monkeypatch.setattr(discovery_cli, "load_candidate_source_url", fake_url_loader)
+    args = build_parser().parse_args(
+        [
+            "--source-url",
+            "https://example.test/nasdaqlisted.txt",
+            "--source",
+            "nasdaq_listed",
+        ]
+    )
+
+    exit_code = run_cli(args)
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["research_queue"][0]["symbol"] == "MSFT"
+    assert payload["research_queue"][0]["source"] == "nasdaq_listed"

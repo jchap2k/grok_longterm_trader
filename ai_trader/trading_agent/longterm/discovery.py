@@ -20,6 +20,8 @@ SOURCE_BOOSTS = {
     "russell1000": 8.0,
     "russell3000": 6.0,
     "nasdaq100": 8.0,
+    "nasdaq_listed": 5.0,
+    "nyse_amex_listed": 5.0,
     "qqq": 8.0,
     "etf_holdings": 5.0,
     "quality_growth_screen": 6.0,

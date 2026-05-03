@@ -96,6 +96,26 @@ python scripts/run_longterm_discovery.py --source-file path\to\qqq_holdings.csv 
 python scripts/run_longterm_discovery.py --source-file path\to\nasdaqlisted.txt --source nasdaq_listed
 ```
 
+Run discovery directly from a remote universe source URL when a hand-downloaded
+file is not needed. This is the starting point for wider non-Fool universe
+coverage:
+
+```powershell
+python scripts/run_longterm_discovery.py --source-url https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt --source nasdaq_listed --watchlist-ideas-output path\to\nasdaq_watchlist_ideas.json --watchlist-limit 100
+python scripts/run_longterm_discovery.py --source-url https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt --source nyse_amex_listed --watchlist-ideas-output path\to\otherlisted_watchlist_ideas.json --watchlist-limit 100
+```
+
+The remote source loader only turns public listing/holding files into candidate
+rows. It does not enrich, research, rank, or trade those names. After the
+watchlist idea output is written, pass it through the evidence enrichment
+pipeline before committee review. Broad listing sources intentionally start as
+watchlist/enrichment candidates unless fundamentals, quality, and source metrics
+are added; they should not become research-ready from ticker presence alone.
+The listing loader also filters obvious non-operating security rows such as
+ETFs, test issues, warrants, rights, units, preferred shares, notes, blank-check
+companies, and SPAC/acquisition-company rows before they can consume enrichment
+calls.
+
 Optionally enrich those source rows from a local JSON/CSV metrics cache before
 scoring:
 

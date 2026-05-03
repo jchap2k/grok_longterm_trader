@@ -5,12 +5,26 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 from typing import Any
+from urllib.request import urlopen
 
 
 def load_candidate_source_file(path: str | Path, *, source: str) -> list[dict[str, Any]]:
     """Load a CSV or NasdaqTrader pipe file as discovery candidates."""
     file_path = Path(path)
     text = file_path.read_text(encoding="utf-8-sig")
+    return load_candidate_source_text(text, source=source)
+
+
+def load_candidate_source_url(url: str, *, source: str, timeout_seconds: float = 30.0) -> list[dict[str, Any]]:
+    """Load a remote CSV or NasdaqTrader pipe URL as discovery candidates."""
+    with urlopen(url, timeout=timeout_seconds) as response:
+        raw = response.read()
+    text = raw.decode("utf-8-sig")
+    return load_candidate_source_text(text, source=source)
+
+
+def load_candidate_source_text(text: str, *, source: str) -> list[dict[str, Any]]:
+    """Load CSV or pipe-delimited source text as discovery candidates."""
     delimiter = "|" if "|" in text.splitlines()[0] else ","
     rows = csv.DictReader(text.splitlines(), delimiter=delimiter)
     candidates = []
@@ -56,6 +70,22 @@ def _is_excluded_listing_row(row: dict[str, str]) -> bool:
     if (row.get("etf") or "").upper() == "Y":
         return True
     if (row.get("testissue") or "").upper() == "Y":
+        return True
+    security_name = (row.get("securityname") or row.get("security") or row.get("name") or "").lower()
+    excluded_terms = [
+        "warrant",
+        " right",
+        "unit",
+        "preferred",
+        "depositary share",
+        "notes due",
+        "blank check",
+        "acquisition corp",
+        "acquisition corporation",
+        "acquisition inc",
+        "acquisition company",
+    ]
+    if any(term in security_name for term in excluded_terms):
         return True
     return False
 
