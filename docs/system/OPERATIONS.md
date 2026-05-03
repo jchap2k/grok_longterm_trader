@@ -153,7 +153,7 @@ every name while still keeping expensive enrichment focused on the best
 available candidates.
 
 ```powershell
-python scripts/longterm_extended_universe_scan.py --idea-batch path\to\extended_watchlist_ideas.json --provider yfinance --fundamentals-cache path\to\extended_fundamentals_cache.json --top-percent 10 --min-pass-count 10 --max-pass-count 300 --passed-output path\to\extended_watchlist.python_scan_passed.json --deferred-output path\to\extended_watchlist.python_scan_deferred.json --summary-output path\to\extended_watchlist.python_scan_summary.json --markdown-output path\to\extended_watchlist.python_scan_report.md
+python scripts/longterm_extended_universe_scan.py --idea-batch path\to\extended_watchlist_ideas.json --provider yfinance --fundamentals-cache path\to\extended_fundamentals_cache.json --top-percent 10 --min-pass-count 10 --max-pass-count 300 --min-coverage-percent-for-enrichment 80 --passed-output path\to\extended_watchlist.python_scan_passed.json --deferred-output path\to\extended_watchlist.python_scan_deferred.json --summary-output path\to\extended_watchlist.python_scan_summary.json --markdown-output path\to\extended_watchlist.python_scan_report.md
 ```
 
 The first-pass scan cache is symbol-keyed and resumable. If a prior overnight
@@ -178,7 +178,11 @@ python scripts/longterm_extended_universe_scan.py --idea-batch path\to\extended_
 Use the markdown scan report as the quick human review artifact after overnight
 runs. It shows the scan totals, cache/fetch health, provider errors, skipped
 symbols, the top passed candidates, deferred names, and the next evidence
-enrichment command.
+enrichment command. The JSON and markdown reports also include an enrichment
+readiness call. If fundamentals coverage is below
+`--min-coverage-percent-for-enrichment` (default `80`), the recommendation is
+`continue_fundamentals_cache_fill`; once coverage clears the threshold, it is
+`run_evidence_enrichment_on_passed`.
 
 Then run the evidence pipeline on the Python-scan survivors before committee
 research:

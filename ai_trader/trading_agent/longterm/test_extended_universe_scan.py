@@ -161,6 +161,42 @@ def test_python_first_pass_scan_reports_fundamentals_coverage():
     assert result.summary["fundamentals_missing_symbols"] == ["MISSING1"]
 
 
+def test_python_first_pass_scan_marks_enrichment_not_ready_when_coverage_is_low():
+    ideas = [
+        {"symbol": "TOP1", "fundamental_metrics": _strong("TOP1")},
+        {"symbol": "MISSING1"},
+        {"symbol": "MISSING2"},
+    ]
+
+    result = run_python_first_pass_scan(
+        ideas,
+        top_percent=50,
+        min_coverage_percent_for_enrichment=80,
+    )
+
+    assert result.summary["ready_for_expensive_enrichment"] is False
+    assert result.summary["scan_recommendation"] == "continue_fundamentals_cache_fill"
+    assert "below required 80.0%" in result.summary["readiness_reason"]
+
+
+def test_python_first_pass_scan_marks_enrichment_ready_when_coverage_is_high():
+    ideas = [
+        {"symbol": "TOP1", "fundamental_metrics": _strong("TOP1")},
+        {"symbol": "MID1", "fundamental_metrics": _okay("MID1")},
+        {"symbol": "WEAK1", "fundamental_metrics": _weak("WEAK1")},
+    ]
+
+    result = run_python_first_pass_scan(
+        ideas,
+        top_percent=50,
+        min_coverage_percent_for_enrichment=80,
+    )
+
+    assert result.summary["ready_for_expensive_enrichment"] is True
+    assert result.summary["scan_recommendation"] == "run_evidence_enrichment_on_passed"
+    assert "meets required 80.0%" in result.summary["readiness_reason"]
+
+
 def test_python_first_pass_markdown_summarizes_coverage_and_candidates():
     result = run_python_first_pass_scan(
         [
@@ -182,6 +218,7 @@ def test_python_first_pass_markdown_summarizes_coverage_and_candidates():
     )
 
     assert "# Extended Universe First Pass" in markdown
+    assert "Readiness: not ready" in markdown
     assert "Coverage: 2/3 (66.67%)" in markdown
     assert "| TOP1 |" in markdown
     assert "| MISSING1 |" in markdown

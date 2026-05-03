@@ -33,6 +33,7 @@ def run_python_first_pass_scan(
     max_pass_count: int | None = None,
     limit: int | None = None,
     as_of_date: str | None = None,
+    min_coverage_percent_for_enrichment: float = 80.0,
 ) -> ExtendedUniverseScanResult:
     """Rank broad-universe ideas and advance the top relative slice.
 
@@ -50,6 +51,10 @@ def run_python_first_pass_scan(
     scored = enrich_ideas_with_quality_growth_scorecard(hydrated, as_of_date=as_of_date)
     ranked = _rank_scored_ideas(scored)
     coverage = _fundamentals_coverage(scored)
+    readiness = _enrichment_readiness(
+        coverage,
+        min_coverage_percent_for_enrichment=float(min_coverage_percent_for_enrichment),
+    )
     pass_count = _pass_count(
         len(ranked),
         top_percent=top_percent,
@@ -98,6 +103,7 @@ def run_python_first_pass_scan(
         "input_count": len(ideas),
         "scanned_count": len(ranked),
         **coverage,
+        **readiness,
         "passed_count": len(passed),
         "deferred_count": len(deferred),
         "top_percent": float(top_percent),
@@ -134,6 +140,7 @@ def build_python_first_pass_markdown(
         f"- Passed to enrichment: {summary.get('passed_count', 0)}",
         f"- Deferred: {summary.get('deferred_count', 0)}",
         f"- Top-percent cutoff: {summary.get('top_percent', 'n/a')}%",
+        f"- Readiness: {_readiness_label(summary)}",
         (
             "- Coverage: "
             f"{summary.get('fundamentals_coverage_count', 0)}/{summary.get('scanned_count', 0)} "
@@ -246,6 +253,32 @@ def _fundamentals_coverage(ideas: list[Mapping[str, Any]]) -> dict[str, Any]:
         "fundamentals_coverage_percent": round((len(covered) / total) * 100, 2) if total else 0.0,
         "fundamentals_missing_symbols": missing,
     }
+
+
+def _enrichment_readiness(
+    coverage: Mapping[str, Any],
+    *,
+    min_coverage_percent_for_enrichment: float,
+) -> dict[str, Any]:
+    coverage_percent = float(coverage.get("fundamentals_coverage_percent") or 0.0)
+    required = max(0.0, min(100.0, float(min_coverage_percent_for_enrichment)))
+    ready = coverage_percent >= required
+    return {
+        "min_coverage_percent_for_enrichment": required,
+        "ready_for_expensive_enrichment": ready,
+        "scan_recommendation": "run_evidence_enrichment_on_passed"
+        if ready
+        else "continue_fundamentals_cache_fill",
+        "readiness_reason": (
+            f"Fundamentals coverage {coverage_percent:.2f}% meets required {required:.1f}%."
+            if ready
+            else f"Fundamentals coverage {coverage_percent:.2f}% is below required {required:.1f}%."
+        ),
+    }
+
+
+def _readiness_label(summary: Mapping[str, Any]) -> str:
+    return "ready" if summary.get("ready_for_expensive_enrichment") else "not ready"
 
 
 def _idea_table(ideas: list[Mapping[str, Any]]) -> list[str]:

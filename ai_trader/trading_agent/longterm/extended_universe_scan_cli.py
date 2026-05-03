@@ -37,6 +37,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="With --provider/--fundamentals-cache, fetch only the next N missing symbols this run.",
     )
+    parser.add_argument(
+        "--min-coverage-percent-for-enrichment",
+        type=float,
+        default=80.0,
+        help="Minimum fundamentals coverage before the report marks expensive enrichment as ready.",
+    )
     parser.add_argument("--as-of-date", default="")
     parser.add_argument("--passed-output", required=True)
     parser.add_argument("--deferred-output", default="")
@@ -94,6 +100,7 @@ def run_cli(args: argparse.Namespace, *, fetch_metrics=fetch_yfinance_fundamenta
         max_pass_count=args.max_pass_count,
         limit=args.limit,
         as_of_date=args.as_of_date or None,
+        min_coverage_percent_for_enrichment=args.min_coverage_percent_for_enrichment,
     )
     if args.provider and args.fundamentals_cache:
         _write_json(args.fundamentals_cache, snapshots or {})
