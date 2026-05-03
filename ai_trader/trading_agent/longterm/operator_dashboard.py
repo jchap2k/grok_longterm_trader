@@ -265,81 +265,177 @@ def _site_index_html(
     return _html_shell(
         title="Long-Term Trader Dashboard",
         body=f"""
-        <section class="hero">
-          <p class="eyebrow">Motley-Fool-style research surface</p>
-          <h1>Long-Term Trader Dashboard</h1>
-          <p class="lede">{escape(str(advisory.get("message") or "Review research, parking, and paper-readiness artifacts."))}</p>
-      <div class="hero-grid">
-            <div><span>Advisory</span><strong>{escape(str(advisory.get("state") or "unknown"))}</strong></div>
-            <div><span>Market Regime</span><strong>{escape(str(regime.get("risk_regime") or "unknown"))}</strong></div>
-            <div><span>Paper Candidates</span><strong>{int(dashboard.get("buy_intent_count") or 0)}</strong></div>
-            <div><span>Parking</span><strong>{", ".join(escape(str(item)) for item in dashboard.get("parking_symbols") or []) or "none"}</strong></div>
-          </div>
-        </section>
-        <section class="panel command-center">
-          <div class="section-heading">
-            <p class="eyebrow">Command Center</p>
-            <h2>Agent State And Market Posture</h2>
-          </div>
-          <div class="command-grid">
-            {_status_tile("Agent", advisory.get("state") or "unknown", advisory.get("message") or "")}
-            {_status_tile("Order submission", "disabled", "Read-only dashboard. Stage 6B still requires explicit supervised confirmation.")}
-            {_status_tile("Regime", regime.get("risk_regime") or "unknown", regime.get("reason") or "")}
-            {_status_tile("VIX / 10Y", f"{regime.get('vix_level') if regime.get('vix_level') is not None else 'unknown'} / {regime.get('ten_year_yield_trend') or 'unknown'}", "Used for parking posture, not automatic trading.")}
-          </div>
-        </section>
-        <section class="panel">
-          <div class="section-heading">
-            <p class="eyebrow">Paper-Ready Candidates</p>
-            <h2>Simple BUYs Cleared For Review</h2>
-          </div>
-          {_intent_rows(buy_intents, empty_label="No paper-ready BUY candidates.")}
-        </section>
-        <section class="panel two-column">
-          <div>
-            <div class="section-heading">
-              <p class="eyebrow">Capital Deployment / Parking</p>
-              <h2>Idle Cash Posture</h2>
-            </div>
-            {_intent_rows(parking_intents, empty_label="No parking intent generated.")}
-          </div>
-          <div>
-            <div class="section-heading">
-              <p class="eyebrow">Portfolio Snapshot</p>
-              <h2>Exposure Surface</h2>
-            </div>
-            <p>Portfolio details are sourced from the current action-plan and operator artifacts. Protected/core holdings remain outside Stage 6B paper submission.</p>
-            <ul class="summary-list">
-              <li><strong>{len(buy_intents)}</strong><span>paper-review BUY intents</span></li>
-              <li><strong>{len(parking_intents)}</strong><span>parking intents</span></li>
-              <li><strong>{len(review_intents)}</strong><span>review / follow-up intents</span></li>
-            </ul>
-          </div>
-        </section>
-        <section class="panel">
-          <div class="section-heading">
-            <p class="eyebrow">Safety &amp; Preflight</p>
-            <h2>Paper Boundary Guardrails</h2>
-          </div>
-          <div class="safety-grid">
-            {_safety_chip("Broker submit", "off")}
-            {_safety_chip("Allowed V1 order type", "simple BUY only")}
-            {_safety_chip("Parking submit", "excluded")}
-            {_safety_chip("Rebalance submit", "hard-blocked")}
-          </div>
-        </section>
-        <section class="panel">
-          <div class="section-heading">
-            <p class="eyebrow">Research Board</p>
-            <h2>All Ticker Tear Sheets</h2>
-          </div>
-          <div class="ticker-grid">{''.join(cards)}</div>
-        </section>
-        <section class="safety-strip">
-          <strong>Read-only:</strong> this dashboard does not submit broker orders. Stage 6B still requires explicit supervised confirmation.
-        </section>
-        {_reference_footer()}
+        <div class="dashboard-shell">
+          {_dashboard_rail()}
+          <main class="dashboard-main">
+            {_dashboard_topbar(dashboard=dashboard, regime=regime, buy_intents=buy_intents)}
+            <section class="hero">
+              <p class="eyebrow">Motley-Fool-style research surface</p>
+              <h1>Long-Term Trader Dashboard</h1>
+              <p class="lede">{escape(str(advisory.get("message") or "Review research, parking, and paper-readiness artifacts."))}</p>
+              <div class="hero-grid">
+                <div><span>Advisory</span><strong>{escape(str(advisory.get("state") or "unknown"))}</strong></div>
+                <div><span>Market Regime</span><strong>{escape(str(regime.get("risk_regime") or "unknown"))}</strong></div>
+                <div><span>Paper Candidates</span><strong>{int(dashboard.get("buy_intent_count") or 0)}</strong></div>
+                <div><span>Parking</span><strong>{", ".join(escape(str(item)) for item in dashboard.get("parking_symbols") or []) or "none"}</strong></div>
+              </div>
+            </section>
+            {_dashboard_tabs()}
+            <section class="panel overview-panel">
+              <div class="section-heading">
+                <p class="eyebrow">Overview Highlights</p>
+                <h2>Performance Goal And Latest Recommendation</h2>
+              </div>
+              <div class="overview-grid">
+                <div class="highlight-card">
+                  <h3>Goal: Beat FXAIX over 5 years</h3>
+                  <p>Active-sleeve decisions must earn their place against the protected benchmark/core holding.</p>
+                  <dl>
+                    <div><dt>Paper candidates</dt><dd>{len(buy_intents)}</dd></div>
+                    <div><dt>Parking symbols</dt><dd>{", ".join(escape(str(item)) for item in dashboard.get("parking_symbols") or []) or "none"}</dd></div>
+                    <div><dt>Regime</dt><dd>{escape(str(regime.get("risk_regime") or "unknown"))}</dd></div>
+                  </dl>
+                </div>
+                <div class="highlight-card latest-rec">
+                  <h3>Latest Recommendation</h3>
+                  {_latest_recommendation_html(buy_intents)}
+                </div>
+                <div class="highlight-card coverage-updates">
+                  <h3>Coverage Updates</h3>
+                  <p>{len(symbols)} ticker tear sheets are available in this generated site.</p>
+                  <p>Use the research board to open scorecards, earnings context, article evidence, and charts.</p>
+                </div>
+              </div>
+            </section>
+            <section class="panel command-center">
+              <div class="section-heading">
+                <p class="eyebrow">Command Center</p>
+                <h2>Agent State And Market Posture</h2>
+              </div>
+              <div class="command-grid">
+                {_status_tile("Agent", advisory.get("state") or "unknown", advisory.get("message") or "")}
+                {_status_tile("Order submission", "disabled", "Read-only dashboard. Stage 6B still requires explicit supervised confirmation.")}
+                {_status_tile("Regime", regime.get("risk_regime") or "unknown", regime.get("reason") or "")}
+                {_status_tile("VIX / 10Y", f"{regime.get('vix_level') if regime.get('vix_level') is not None else 'unknown'} / {regime.get('ten_year_yield_trend') or 'unknown'}", "Used for parking posture, not automatic trading.")}
+              </div>
+            </section>
+            <section class="panel">
+              <div class="section-heading">
+                <p class="eyebrow">Paper-Ready Candidates</p>
+                <h2>Simple BUYs Cleared For Review</h2>
+              </div>
+              {_intent_rows(buy_intents, empty_label="No paper-ready BUY candidates.")}
+            </section>
+            <section class="panel two-column">
+              <div>
+                <div class="section-heading">
+                  <p class="eyebrow">Capital Deployment / Parking</p>
+                  <h2>Idle Cash Posture</h2>
+                </div>
+                {_intent_rows(parking_intents, empty_label="No parking intent generated.")}
+              </div>
+              <div>
+                <div class="section-heading">
+                  <p class="eyebrow">Portfolio Snapshot</p>
+                  <h2>Exposure Surface</h2>
+                </div>
+                <p>Portfolio details are sourced from the current action-plan and operator artifacts. Protected/core holdings remain outside Stage 6B paper submission.</p>
+                <ul class="summary-list">
+                  <li><strong>{len(buy_intents)}</strong><span>paper-review BUY intents</span></li>
+                  <li><strong>{len(parking_intents)}</strong><span>parking intents</span></li>
+                  <li><strong>{len(review_intents)}</strong><span>review / follow-up intents</span></li>
+                </ul>
+              </div>
+            </section>
+            <section class="panel">
+              <div class="section-heading">
+                <p class="eyebrow">Safety &amp; Preflight</p>
+                <h2>Paper Boundary Guardrails</h2>
+              </div>
+              <div class="safety-grid">
+                {_safety_chip("Broker submit", "off")}
+                {_safety_chip("Allowed V1 order type", "simple BUY only")}
+                {_safety_chip("Parking submit", "excluded")}
+                {_safety_chip("Rebalance submit", "hard-blocked")}
+              </div>
+            </section>
+            <section class="panel">
+              <div class="section-heading">
+                <p class="eyebrow">Research Board</p>
+                <h2>All Ticker Tear Sheets</h2>
+              </div>
+              <div class="ticker-grid">{''.join(cards)}</div>
+            </section>
+            <section class="safety-strip">
+              <strong>Read-only:</strong> this dashboard does not submit broker orders. Stage 6B still requires explicit supervised confirmation.
+            </section>
+            {_reference_footer()}
+          </main>
+        </div>
         """,
+    )
+
+
+def _dashboard_rail() -> str:
+    items = [
+        ("Dashboard", "#"),
+        ("Paper Candidates", "#"),
+        ("Research Board", "#"),
+        ("Rankings", "#"),
+        ("Coverage", "#"),
+        ("Scorecards", "#"),
+        ("Portfolio", "#"),
+        ("Safety", "#"),
+        ("Settings", "#"),
+    ]
+    links = "".join(f"<a href=\"{href}\"><span></span>{escape(label)}</a>" for label, href in items)
+    return (
+        "<aside class=\"dashboard-rail\">"
+        "<div class=\"rail-brand\"><strong>LT Trader</strong><small>Autonomous long-term research</small></div>"
+        f"<nav>{links}</nav>"
+        "</aside>"
+    )
+
+
+def _dashboard_topbar(
+    *,
+    dashboard: Mapping[str, Any],
+    regime: Mapping[str, Any],
+    buy_intents: list[Mapping[str, Any]],
+) -> str:
+    best_buys = ", ".join(_symbol(item) for item in buy_intents[:3]) or "none"
+    return (
+        "<header class=\"dashboard-topbar\">"
+        "<div class=\"topbar-links\"><a>Long-Term Advisor</a><a>My Stocks</a><a>My Reports</a></div>"
+        "<label class=\"search-box\"><span>Search research universe</span><input aria-label=\"Search research universe\" placeholder=\"Search research universe\" disabled></label>"
+        "<div class=\"best-buys\"><span>Best Buys For Review</span><strong>{best_buys}</strong></div>"
+        "<div class=\"market-tape\"><span>S&amp;P 500</span><strong>{regime}</strong><span>VIX</span><strong>{vix}</strong></div>"
+        "</header>"
+    ).format(
+        best_buys=escape(best_buys),
+        regime=escape(str(regime.get("risk_regime") or "unknown")),
+        vix=escape(str(regime.get("vix_level") if regime.get("vix_level") is not None else "unknown")),
+    )
+
+
+def _dashboard_tabs() -> str:
+    tabs = ["Overview", "Scorecard", "Foundational Core", "Hold / Review", "Closed Positions", "About"]
+    return "<nav class=\"dashboard-tabs\">" + "".join(
+        f"<a class=\"{'is-active' if index == 0 else ''}\" href=\"#\">{escape(tab)}</a>"
+        for index, tab in enumerate(tabs)
+    ) + "</nav>"
+
+
+def _latest_recommendation_html(buy_intents: list[Mapping[str, Any]]) -> str:
+    if not buy_intents:
+        return "<p>No active BUY recommendation cleared promotion review.</p>"
+    item = buy_intents[0]
+    promotion = item.get("promotion_review") if isinstance(item.get("promotion_review"), Mapping) else {}
+    return (
+        f"<p><strong>{escape(_symbol(item))}</strong> cleared as "
+        f"{escape(str(promotion.get('promotion_decision') or 'BUY review'))}.</p>"
+        f"<p>{escape(_short_text(str(item.get('reason') or ''), 160))}</p>"
+        f"<a class=\"read-rec\" href=\"tickers/{escape(_symbol(item))}.html\">Read Recommendation</a>"
     )
 
 
@@ -479,6 +575,188 @@ def _html_shell(*, title: str, body: str) -> str:
       background-size: 34px 34px;
     }}
     a {{ color: inherit; }}
+    .dashboard-shell {{
+      display: grid;
+      grid-template-columns: 252px minmax(0, 1fr);
+      min-height: 100vh;
+    }}
+    .dashboard-rail {{
+      position: sticky;
+      top: 0;
+      align-self: start;
+      min-height: 100vh;
+      padding: 30px 22px;
+      background:
+        radial-gradient(circle at 25% 4%, rgba(40,147,186,.34), transparent 10rem),
+        linear-gradient(180deg, #111947, #10173f 58%, #0f1536);
+      color: rgba(245,241,226,.82);
+      box-shadow: inset -1px 0 rgba(255,255,255,.06);
+    }}
+    .rail-brand {{
+      padding: 10px 8px 28px;
+      border-bottom: 1px solid rgba(255,255,255,.12);
+    }}
+    .rail-brand strong {{
+      display: block;
+      font-size: 31px;
+      line-height: .95;
+      letter-spacing: -.05em;
+    }}
+    .rail-brand small {{
+      display: block;
+      margin-top: 9px;
+      color: rgba(245,241,226,.62);
+      font-weight: 800;
+    }}
+    .dashboard-rail nav {{
+      display: grid;
+      gap: 7px;
+      margin-top: 24px;
+    }}
+    .dashboard-rail a {{
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      min-height: 48px;
+      padding: 11px 12px;
+      border-radius: 16px;
+      color: inherit;
+      text-decoration: none;
+      font-size: 18px;
+      transition: background .18s ease, transform .18s ease;
+    }}
+    .dashboard-rail a:first-child, .dashboard-rail a:hover {{
+      background: rgba(255,255,255,.1);
+      transform: translateX(3px);
+    }}
+    .dashboard-rail a span {{
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(185,205,182,.8);
+      border-radius: 6px;
+      box-shadow: 12px 0 0 -5px rgba(185,205,182,.6), 0 12px 0 -5px rgba(185,205,182,.6);
+    }}
+    .dashboard-main {{ min-width: 0; padding-bottom: 34px; }}
+    .dashboard-topbar {{
+      position: sticky;
+      top: 0;
+      z-index: 4;
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) minmax(250px, 360px) minmax(190px, 240px) minmax(190px, 260px);
+      gap: 18px;
+      align-items: center;
+      padding: 20px 30px;
+      background: rgba(29,36,31,.92);
+      color: rgba(255,250,240,.86);
+      backdrop-filter: blur(18px);
+      border-bottom: 1px solid rgba(255,250,240,.1);
+    }}
+    .topbar-links {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 26px;
+      font-weight: 800;
+    }}
+    .search-box {{
+      display: grid;
+      gap: 4px;
+      padding: 9px 12px;
+      border: 1px solid rgba(255,250,240,.34);
+      border-radius: 10px;
+      background: rgba(255,255,255,.04);
+    }}
+    .search-box span {{
+      color: rgba(255,250,240,.52);
+      font-size: 12px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      font-weight: 800;
+    }}
+    .search-box input {{
+      width: 100%;
+      border: 0;
+      outline: 0;
+      color: rgba(255,250,240,.8);
+      background: transparent;
+      font: inherit;
+    }}
+    .best-buys {{
+      padding: 13px 16px;
+      border-radius: 14px;
+      background: #0b43b8;
+      text-align: center;
+      box-shadow: 0 14px 32px rgba(11,67,184,.24);
+    }}
+    .best-buys span, .market-tape span {{
+      display: block;
+      color: rgba(255,250,240,.68);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }}
+    .best-buys strong {{ display: block; margin-top: 5px; }}
+    .market-tape {{
+      display: grid;
+      grid-template-columns: auto auto;
+      gap: 5px 12px;
+      align-items: baseline;
+      color: rgba(255,250,240,.78);
+    }}
+    .dashboard-tabs {{
+      display: flex;
+      gap: 22px;
+      width: min(1180px, calc(100vw - 40px - 252px));
+      margin: 0 auto 20px;
+      padding: 0 4px;
+      border-bottom: 1px solid var(--line);
+    }}
+    .dashboard-tabs a {{
+      padding: 18px 0;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 17px;
+      font-weight: 800;
+      border-bottom: 3px solid transparent;
+    }}
+    .dashboard-tabs a.is-active {{
+      color: var(--accent);
+      border-color: var(--accent);
+    }}
+    .overview-grid {{
+      display: grid;
+      grid-template-columns: 1.1fr .9fr .9fr;
+      gap: 18px;
+      margin-top: 20px;
+    }}
+    .highlight-card {{
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(244,237,223,.68);
+    }}
+    .highlight-card h3 {{ margin: 0 0 10px; font-size: 27px; letter-spacing: -.04em; }}
+    .highlight-card p {{ color: var(--muted); line-height: 1.45; }}
+    .highlight-card dl {{ margin: 22px 0 0; }}
+    .highlight-card dl div {{
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 11px 0;
+      border-top: 1px solid var(--line);
+    }}
+    .highlight-card dt {{ color: var(--muted); }}
+    .highlight-card dd {{ margin: 0; color: var(--accent); font-weight: 900; }}
+    .read-rec {{
+      display: inline-block;
+      margin-top: 14px;
+      padding: 11px 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 900;
+    }}
     .hero, .ticker-hero, .panel, .safety-strip, .top-nav {{
       width: min(1180px, calc(100vw - 40px));
       margin: 22px auto;
@@ -733,6 +1011,11 @@ def _html_shell(*, title: str, body: str) -> str:
     }}
     .reference-footer a {{ color: var(--accent); font-weight: 800; }}
     @media (max-width: 760px) {{
+      .dashboard-shell {{ display: block; }}
+      .dashboard-rail {{ position: static; min-height: auto; }}
+      .dashboard-topbar {{ position: static; grid-template-columns: 1fr; }}
+      .dashboard-tabs {{ width: min(1180px, calc(100vw - 40px)); overflow-x: auto; }}
+      .overview-grid {{ grid-template-columns: 1fr; }}
       .hero, .ticker-hero, .panel {{ padding: 24px; }}
       .ticker-hero {{ grid-template-columns: 1fr; }}
       .intent-row {{ grid-template-columns: 1fr; }}
