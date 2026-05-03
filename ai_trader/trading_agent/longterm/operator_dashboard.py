@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import base64
 import json
 from html import escape
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 
@@ -448,12 +451,33 @@ def _dashboard_rail() -> str:
         ("Settings", "#settings"),
     ]
     links = "".join(f"<a href=\"{href}\"><span></span>{escape(label)}</a>" for label, href in items)
+    logo = _brand_logo_html()
     return (
         "<aside class=\"dashboard-rail\">"
-        "<div class=\"rail-brand\"><strong>LT Trader</strong><small>Autonomous long-term research</small></div>"
+        f"<div class=\"rail-brand\">{logo}<small>Autonomous long-term research</small></div>"
         f"<nav>{links}</nav>"
         "</aside>"
     )
+
+
+def _brand_logo_html() -> str:
+    data_uri = _logo_data_uri()
+    if not data_uri:
+        return "<strong>Long-Term Trader Agent</strong>"
+    return (
+        f"<img class=\"rail-logo\" src=\"{escape(data_uri)}\" "
+        "alt=\"Long-Term Trader Agent logo\" loading=\"lazy\">"
+    )
+
+
+@lru_cache(maxsize=1)
+def _logo_data_uri() -> str:
+    logo_path = Path(__file__).resolve().parents[1] / "agent" / "utils" / "ltta_logo.jpg"
+    try:
+        encoded = base64.b64encode(logo_path.read_bytes()).decode("ascii")
+    except OSError:
+        return ""
+    return f"data:image/jpeg;base64,{encoded}"
 
 
 def _dashboard_topbar(
@@ -1171,8 +1195,17 @@ def _html_shell(*, title: str, body: str) -> str:
       box-shadow: inset -1px 0 rgba(255,255,255,.06);
     }}
     .rail-brand {{
-      padding: 10px 8px 28px;
+      padding: 0 0 26px;
       border-bottom: 1px solid rgba(255,255,255,.12);
+    }}
+    .rail-logo {{
+      display: block;
+      width: min(168px, 100%);
+      height: auto;
+      margin: 0 0 15px;
+      background: transparent;
+      border-radius: 0;
+      box-shadow: none;
     }}
     .rail-brand strong {{
       display: block;
