@@ -137,11 +137,30 @@ evidence-enrichment command:
 python scripts/longterm_extended_universe.py --source-url https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt --source nasdaq_listed --watchlist-limit 100 --batch-size 10 --ideas-output path\to\extended_watchlist_ideas.json --batches-output-dir path\to\extended_batches --summary-output path\to\extended_universe_summary.json
 ```
 
-Then run the evidence pipeline on the exported watchlist ideas before committee
+For a targeted smoke slice, preserve a chosen symbol order with
+`--include-symbols`:
+
+```powershell
+python scripts/longterm_extended_universe.py --source-url https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt --source nasdaq_listed --include-symbols AAPL,MSFT,NVDA --watchlist-limit 10 --batch-size 5 --ideas-output path\to\extended_watchlist_ideas.json --summary-output path\to\extended_universe_summary.json
+```
+
+For a broad source, do not send thousands of tickers directly into news/Grok or
+committee research. Run the pure-Python first-pass scan first. It attaches or
+loads deterministic fundamentals, builds the non-proprietary quality-growth
+scorecard, ranks the universe by score, and advances the top relative slice
+such as 5-10%. This avoids the swing-trader failure mode where hard gates block
+every name while still keeping expensive enrichment focused on the best
+available candidates.
+
+```powershell
+python scripts/longterm_extended_universe_scan.py --idea-batch path\to\extended_watchlist_ideas.json --provider yfinance --top-percent 10 --min-pass-count 10 --max-pass-count 300 --passed-output path\to\extended_watchlist.python_scan_passed.json --deferred-output path\to\extended_watchlist.python_scan_deferred.json --summary-output path\to\extended_watchlist.python_scan_summary.json
+```
+
+Then run the evidence pipeline on the Python-scan survivors before committee
 research:
 
 ```powershell
-python scripts/longterm_evidence_enrichment_pipeline.py --idea-batch path\to\extended_watchlist_ideas.json --fundamentals-provider yfinance --polygon-news --news-cache-path path\to\polygon_news_cache.json --rate-limit-batch-size 5 --rate-limit-pause-seconds 66 --output path\to\extended_watchlist.evidence_ready.json --summary-output path\to\extended_watchlist.evidence_summary.json
+python scripts/longterm_evidence_enrichment_pipeline.py --idea-batch path\to\extended_watchlist.python_scan_passed.json --fundamentals-provider yfinance --polygon-news --news-cache-path path\to\polygon_news_cache.json --rate-limit-batch-size 5 --rate-limit-pause-seconds 66 --output path\to\extended_watchlist.evidence_ready.json --summary-output path\to\extended_watchlist.evidence_summary.json
 ```
 
 Optionally enrich those source rows from a local JSON/CSV metrics cache before

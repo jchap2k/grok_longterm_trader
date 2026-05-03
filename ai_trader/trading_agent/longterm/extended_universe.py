@@ -20,6 +20,7 @@ def prepare_extended_universe(
     candidates: list[Mapping[str, Any]],
     *,
     source: str,
+    include_symbols: list[str] | None = None,
     watchlist_limit: int = 100,
     batch_size: int = 10,
     engine: DiscoveryEngine | None = None,
@@ -30,18 +31,29 @@ def prepare_extended_universe(
     committee call or trade signal until enrichment adds fundamentals/news
     context.
     """
+    normalized_include = _normalize_include_symbols(include_symbols or [])
+    selected_candidates = _filter_candidates(candidates, normalized_include)
     discovery = (engine or DiscoveryEngine()).build_queue(
-        [dict(candidate) for candidate in candidates],
+        [dict(candidate) for candidate in selected_candidates],
         research_limit=max(0, int(watchlist_limit or 0)),
     )
     capped_watchlist = discovery.watchlist[: max(0, int(watchlist_limit or 0))]
+    if normalized_include:
+        capped_watchlist = sorted(
+            capped_watchlist,
+            key=lambda item: normalized_include.index(item.symbol)
+            if item.symbol in normalized_include
+            else len(normalized_include),
+        )
     watchlist_ideas = DiscoveryEngine.to_research_ideas(capped_watchlist)
     batches = build_research_universe_batches(watchlist_ideas, batch_size=batch_size)
     summary = {
         "schema_version": 1,
         "mode": "extended_universe_prepare",
         "source": source,
-        "candidate_count": len(candidates),
+        "candidate_count": len(selected_candidates),
+        "source_candidate_count": len(candidates),
+        "include_symbols": normalized_include,
         "research_ready_count": len(discovery.research_queue),
         "watchlist_count": len(discovery.watchlist),
         "rejected_count": len(discovery.rejected),
@@ -55,6 +67,23 @@ def prepare_extended_universe(
         batches=batches,
         summary=summary,
     )
+
+
+def _normalize_include_symbols(symbols: list[str]) -> list[str]:
+    normalized: list[str] = []
+    for value in symbols:
+        for part in str(value or "").split(","):
+            symbol = part.strip().upper()
+            if symbol and symbol not in normalized:
+                normalized.append(symbol)
+    return normalized
+
+
+def _filter_candidates(candidates: list[Mapping[str, Any]], include_symbols: list[str]) -> list[Mapping[str, Any]]:
+    if not include_symbols:
+        return [dict(candidate) for candidate in candidates]
+    by_symbol = {str(candidate.get("symbol") or "").upper(): dict(candidate) for candidate in candidates}
+    return [by_symbol[symbol] for symbol in include_symbols if symbol in by_symbol]
 
 
 def _next_enrichment_command() -> str:

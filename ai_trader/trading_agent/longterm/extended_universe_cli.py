@@ -17,6 +17,11 @@ def build_parser() -> argparse.ArgumentParser:
     source_group.add_argument("--source-file", default="")
     source_group.add_argument("--source-url", default="")
     parser.add_argument("--source", required=True)
+    parser.add_argument(
+        "--include-symbols",
+        default="",
+        help="Optional comma-separated symbols to keep from the source, preserving this order.",
+    )
     parser.add_argument("--watchlist-limit", type=int, default=100)
     parser.add_argument("--batch-size", type=int, default=10)
     parser.add_argument("--ideas-output", required=True)
@@ -34,6 +39,7 @@ def run_cli(args: argparse.Namespace) -> int:
     result = prepare_extended_universe(
         candidates,
         source=args.source,
+        include_symbols=_parse_symbols(args.include_symbols),
         watchlist_limit=args.watchlist_limit,
         batch_size=args.batch_size,
     )
@@ -68,6 +74,10 @@ def _write_batches(output_dir: str | Path, batches: list[dict]) -> None:
     for batch in batches:
         target = target_dir / f"{batch['batch_id']}.json"
         target.write_text(json.dumps(batch["ideas"], indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _parse_symbols(value: str) -> list[str]:
+    return [symbol.strip().upper() for symbol in value.split(",") if symbol.strip()]
 
 
 __all__ = ["build_parser", "main", "run_cli"]

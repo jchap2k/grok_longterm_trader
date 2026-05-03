@@ -33,6 +33,26 @@ def test_prepare_extended_universe_exports_watchlist_ideas_and_batches():
     assert "longterm_evidence_enrichment_pipeline.py" in result.summary["next_enrichment_command"]
 
 
+def test_prepare_extended_universe_can_filter_and_order_symbols():
+    candidates = [
+        {"symbol": "AAL", "company_name": "American Airlines", "source": "nasdaq_listed"},
+        {"symbol": "AAPL", "company_name": "Apple", "source": "nasdaq_listed"},
+        {"symbol": "MSFT", "company_name": "Microsoft", "source": "nasdaq_listed"},
+    ]
+
+    result = prepare_extended_universe(
+        candidates,
+        source="nasdaq_listed",
+        include_symbols=["MSFT", "AAPL"],
+        watchlist_limit=10,
+        batch_size=5,
+    )
+
+    assert result.summary["candidate_count"] == 2
+    assert result.summary["include_symbols"] == ["MSFT", "AAPL"]
+    assert [idea["symbol"] for idea in result.watchlist_ideas] == ["MSFT", "AAPL"]
+
+
 def test_extended_universe_cli_writes_ideas_batches_and_summary(tmp_path, monkeypatch, capsys):
     import longterm.extended_universe_cli as cli
 
@@ -58,6 +78,8 @@ def test_extended_universe_cli_writes_ideas_batches_and_summary(tmp_path, monkey
             "nasdaq_listed",
             "--watchlist-limit",
             "2",
+            "--include-symbols",
+            "MSFT,AAPL",
             "--batch-size",
             "1",
             "--ideas-output",
@@ -78,5 +100,6 @@ def test_extended_universe_cli_writes_ideas_batches_and_summary(tmp_path, monkey
     assert exit_code == 0
     assert printed["watchlist_ideas_count"] == 2
     assert saved_summary["batch_count"] == 2
-    assert [idea["symbol"] for idea in ideas] == ["AAPL", "MSFT"]
+    assert [idea["symbol"] for idea in ideas] == ["MSFT", "AAPL"]
+    assert saved_summary["include_symbols"] == ["MSFT", "AAPL"]
     assert batch_files == ["research-batch-001.json", "research-batch-002.json"]
