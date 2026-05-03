@@ -774,6 +774,31 @@ automation design and keeps order submission disabled. Its `agent_next_step`
 rollup is guidance only; it can tell the operator/agent what to review next, but
 it never authorizes broker submission.
 
+Build a compact dashboard from saved artifacts:
+
+```powershell
+python scripts/longterm_operator_dashboard.py --action-plan path\to\account_action_plan.json --market-regime path\to\market_regime.json --operator-status path\to\operator_status_bundle.json --report-output path\to\operator_dashboard.json --html-output path\to\operator_dashboard.html --json
+```
+
+The dashboard is a static read-only view for humans and the future autonomous
+operator surface. It summarizes paper-ready stock BUY candidates, idle/defensive
+parking guidance, current market regime, and a machine-readable
+`agent_advisory` state such as `ready_for_supervised_paper_review`,
+`parking_only_review`, `blocked_preflight`, or `research_more`. It does not
+submit or authorize orders.
+
+Filter the full account action plan to the narrow Stage 6B submit-candidate
+plan before running paper-submit preflights:
+
+```powershell
+python scripts/longterm_action_plan_filter.py --action-plan path\to\account_action_plan.json --output path\to\account_action_plan_stage6b_submit_candidates.json --json
+```
+
+The filtered plan keeps only simple stock `BUY` intents with
+`ACTIONABLE_BUY` promotion state. It excludes review follow-ups, parking
+guidance, blocked rows, and rebalances so the full planning surface can remain
+rich without making the V1 paper boundary noisy or unsafe.
+
 ## Position Intelligence Report
 
 Generate an on-demand monthly or quarterly position intelligence report before
@@ -957,6 +982,12 @@ Generate that file from live market inputs with the snapshot helper:
 
 ```powershell
 python scripts/longterm_market_regime_snapshot.py --provider yfinance --output path\to\market_regime.json
+```
+
+Or let the dry-run scheduler generate it before each cycle:
+
+```powershell
+python scripts/run_longterm_scheduler.py --run-once --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --auto-market-regime-snapshot --market-regime-output path\to\market_regime.json --quiet
 ```
 
 The generated snapshot uses VIX, SPY versus its 200-day moving average, and the

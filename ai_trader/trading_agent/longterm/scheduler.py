@@ -11,6 +11,7 @@ from typing import Any, Callable
 
 from longterm.discovery_enrichment import apply_discovery_enrichment, load_discovery_enrichment_file
 from longterm.idle_cash_policy import load_market_regime_snapshot
+from longterm.market_regime_snapshot import fetch_yfinance_history, build_market_regime_snapshot, market_regime_to_dict
 from longterm.motley_fool_settings import load_motley_fool_capture_settings
 from longterm.orchestration import run_longterm_cycle
 from longterm.orchestration_cli import _load_manual_ideas
@@ -33,6 +34,8 @@ class LongTermSchedulerInputs:
     journal_db: str | Path | None = None
     portfolio_state: str | Path | None = None
     market_regime_file: str | Path | None = None
+    auto_market_regime_snapshot: bool = False
+    market_regime_output: str | Path | None = None
     agent_config: str | Path | None = None
     agent_preset: str = "decision_4"
     launch_login_if_needed: bool = False
@@ -81,8 +84,14 @@ class LongTermSchedulerSummary:
     runs: list[LongTermSchedulerRunRecord] = field(default_factory=list)
 
 
-def build_cycle_kwargs(inputs: LongTermSchedulerInputs) -> dict[str, Any]:
+def build_cycle_kwargs(
+    inputs: LongTermSchedulerInputs,
+    *,
+    market_regime_fetcher: Callable[[str, str], list[dict[str, Any]]] = fetch_yfinance_history,
+) -> dict[str, Any]:
     """Build fresh one-cycle kwargs so portfolio/config files reload each run."""
+    if inputs.market_regime_file and inputs.auto_market_regime_snapshot:
+        raise ValueError("Use either market_regime_file or auto_market_regime_snapshot, not both.")
     profile = PortfolioProfile.from_file(inputs.profile_config)
     manual_ideas = _load_manual_ideas(
         str(inputs.idea_file or ""),
@@ -101,6 +110,10 @@ def build_cycle_kwargs(inputs: LongTermSchedulerInputs) -> dict[str, Any]:
         if inputs.portfolio_state
         else None
     )
+    market_regime = _load_or_generate_market_regime(
+        inputs,
+        market_regime_fetcher=market_regime_fetcher,
+    )
     kwargs: dict[str, Any] = {
         "profile": profile,
         "manual_ideas": manual_ideas,
@@ -108,11 +121,7 @@ def build_cycle_kwargs(inputs: LongTermSchedulerInputs) -> dict[str, Any]:
         "motley_fool_settings": settings,
         "journal_db_path": inputs.journal_db,
         "portfolio_state": portfolio_state,
-        "market_regime": (
-            load_market_regime_snapshot(inputs.market_regime_file)
-            if inputs.market_regime_file
-            else None
-        ),
+        "market_regime": market_regime,
         "agent_preset": inputs.agent_preset,
         "launch_login_if_needed": inputs.launch_login_if_needed,
         "active_sleeve_value": inputs.active_sleeve_value,
@@ -122,6 +131,23 @@ def build_cycle_kwargs(inputs: LongTermSchedulerInputs) -> dict[str, Any]:
     if inputs.agent_config:
         kwargs["agent_config_path"] = inputs.agent_config
     return kwargs
+
+
+def _load_or_generate_market_regime(
+    inputs: LongTermSchedulerInputs,
+    *,
+    market_regime_fetcher: Callable[[str, str], list[dict[str, Any]]],
+) -> Any:
+    if inputs.market_regime_file:
+        return load_market_regime_snapshot(inputs.market_regime_file)
+    if not inputs.auto_market_regime_snapshot:
+        return None
+    snapshot = build_market_regime_snapshot(fetch_history=market_regime_fetcher)
+    if inputs.market_regime_output:
+        output_path = Path(inputs.market_regime_output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(market_regime_to_dict(snapshot), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return snapshot
 
 
 def _load_discovery_candidates(

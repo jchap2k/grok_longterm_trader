@@ -67,6 +67,54 @@ def test_build_cycle_kwargs_loads_market_regime_file(tmp_path):
     assert kwargs["market_regime"].risk_regime == "inflation_rate_shock"
 
 
+def test_build_cycle_kwargs_can_generate_market_regime_snapshot(tmp_path):
+    profile_path = tmp_path / "profile.json"
+    _write_profile(profile_path)
+    output_path = tmp_path / "generated_market_regime.json"
+
+    def fetcher(symbol, period):
+        histories = {
+            "^VIX": [{"close": 16}, {"close": 17}],
+            "SPY": [{"close": 450}] * 200 + [{"close": 500}],
+            "^TNX": [{"close": 42}, {"close": 42}, {"close": 42}],
+        }
+        return histories[symbol]
+
+    kwargs = build_cycle_kwargs(
+        LongTermSchedulerInputs(
+            profile_config=profile_path,
+            auto_market_regime_snapshot=True,
+            market_regime_output=output_path,
+        ),
+        market_regime_fetcher=fetcher,
+    )
+
+    assert kwargs["market_regime"].risk_regime == "normal"
+    assert output_path.exists()
+    assert '"risk_regime": "normal"' in output_path.read_text(encoding="utf-8")
+
+
+def test_build_cycle_kwargs_rejects_auto_and_explicit_market_regime(tmp_path):
+    profile_path = tmp_path / "profile.json"
+    _write_profile(profile_path)
+    regime_path = tmp_path / "regime.json"
+    regime_path.write_text('{"risk_regime":"normal"}', encoding="utf-8")
+
+    try:
+        build_cycle_kwargs(
+            LongTermSchedulerInputs(
+                profile_config=profile_path,
+                market_regime_file=regime_path,
+                auto_market_regime_snapshot=True,
+                market_regime_output=tmp_path / "generated.json",
+            )
+        )
+    except ValueError as exc:
+        assert "Use either market_regime_file or auto_market_regime_snapshot" in str(exc)
+    else:
+        raise AssertionError("Expected conflicting market regime inputs to fail.")
+
+
 def test_build_cycle_kwargs_loads_discovery_source_file(tmp_path):
     profile_path = tmp_path / "profile.json"
     _write_profile(profile_path)
@@ -325,6 +373,41 @@ def test_scheduler_cli_forwards_market_regime_file(tmp_path, capsys):
 
     assert exit_code == 0
     assert scheduler_calls[0][0].market_regime_file == regime_path
+
+
+def test_scheduler_cli_forwards_auto_market_regime_snapshot(tmp_path, capsys):
+    profile_path = tmp_path / "profile.json"
+    _write_profile(profile_path)
+    output_path = tmp_path / "market_regime.json"
+    scheduler_calls = []
+
+    def fake_scheduler(*, inputs, config):
+        scheduler_calls.append((inputs, config))
+        return {
+            "status": "completed",
+            "run_count": 1,
+            "success_count": 1,
+            "error_count": 0,
+            "runs": [],
+        }
+
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--profile-config",
+            str(profile_path),
+            "--auto-market-regime-snapshot",
+            "--market-regime-output",
+            str(output_path),
+            "--run-once",
+        ]
+    )
+
+    exit_code = run_cli(args, scheduler_func=fake_scheduler)
+
+    assert exit_code == 0
+    assert scheduler_calls[0][0].auto_market_regime_snapshot is True
+    assert scheduler_calls[0][0].market_regime_output == output_path
 
 
 def test_scheduler_cli_forwards_discovery_source_file(tmp_path, capsys):
