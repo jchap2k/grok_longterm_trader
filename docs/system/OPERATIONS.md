@@ -821,6 +821,10 @@ portfolio table contract includes symbol, shares, original purchase total cost,
 current total value, percent gain/loss, and status. Anchor targets
 use scroll margins so navigation lands at the section title rather than in the
 body text. The search box filters the research-board ticker cards locally.
+Research-board cards, Rankings rows, and Scorecard rows use static client-side
+pagination hooks (`data-paginated-list` / `data-paginated-item`) so the same
+site shape can scale from dozens of names to a much larger universe before a
+local server or backend-backed dashboard is needed.
 Ticker pages place a generated price chart first, then show thesis, promotion
 state, scorecard, financial sections, earnings context, article evidence, and
 safety notes. The chart is a static-file interactive widget: it includes range

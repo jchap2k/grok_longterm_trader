@@ -258,7 +258,7 @@ def _site_index_html(
             ]
         ).lower()
         cards.append(
-            "<a class=\"ticker-card\" href=\"tickers/{symbol}.html\" data-search-text=\"{search_text}\">"
+            "<a class=\"ticker-card\" href=\"tickers/{symbol}.html\" data-search-text=\"{search_text}\" data-paginated-item>"
             "<span class=\"ticker-kicker\">{intent}</span>"
             "<strong>{symbol}</strong>"
             "<em>{summary}</em>"
@@ -400,7 +400,10 @@ def _site_index_html(
                 <p class="eyebrow">Research Board</p>
                 <h2>All Ticker Tear Sheets</h2>
               </div>
-              <div class="ticker-grid">{''.join(cards)}</div>
+              <div class="pagination-shell" data-paginated-list data-page-size="24" data-pagination-label="tear sheets">
+                <div class="ticker-grid">{''.join(cards)}</div>
+                {_pagination_controls()}
+              </div>
             </section>
             <section class="safety-strip">
               <strong>Read-only:</strong> this dashboard does not submit broker orders. Stage 6B still requires explicit supervised confirmation.
@@ -418,7 +421,7 @@ def _site_index_html(
                 body="Runtime configuration, source toggles, and scheduler controls are intentionally not editable from this static dashboard yet.",
             )}
             {_reference_footer()}
-            <script>{_dashboard_search_script()}{_synced_table_scroller_script()}</script>
+            <script>{_dashboard_search_script()}{_paginated_lists_script()}{_synced_table_scroller_script()}</script>
           </main>
         </div>
         """,
@@ -536,7 +539,7 @@ def _rankings_section(
     for index, item in enumerate(rows, start=1):
         symbol = str(item["symbol"])
         body_rows.append(
-            "<tr>"
+            "<tr data-paginated-item>"
             f"<td>{index}</td>"
             f"<td><a href=\"tickers/{escape(symbol)}.html\">{escape(symbol)}</a></td>"
             f"<td>{float(item['score']):g}</td>"
@@ -558,11 +561,14 @@ def _rankings_section(
         "<h2>Ranked Stock List</h2>"
         "</div>"
         "<p>Stock Details View: stocks are sorted by evidence score, while Actionability explains whether the name is actually cleared for a BUY.</p>"
+        "<div class=\"pagination-shell\" data-paginated-list data-page-size=\"25\" data-pagination-label=\"ranked stocks\">"
         "<div class=\"table-scroll-top\" aria-hidden=\"true\"><div></div></div>"
         "<div class=\"table-scroll\"><table class=\"rankings-table\">"
         "<thead><tr><th>Rank</th><th>Symbol</th><th>Evidence Score</th><th>Actionability</th><th>Why Not Buy</th><th>Trade Value</th><th>Quality</th><th>Growth</th><th>Valuation</th><th>Safety</th><th>Context</th><th>Score Source</th></tr></thead>"
         f"<tbody>{''.join(body_rows)}</tbody>"
         "</table></div>"
+        f"{_pagination_controls()}"
+        "</div>"
         "</section>"
     )
 
@@ -618,7 +624,7 @@ def _scorecards_section(
         symbol = str(item["symbol"])
         top_reasons = "; ".join(item["reasons"][:3]) if item["reasons"] else "n/a"
         body_rows.append(
-            "<tr>"
+            "<tr data-paginated-item>"
             f"<td><a href=\"tickers/{escape(symbol)}.html\">{escape(symbol)}</a></td>"
             f"<td>{escape(_score_cell(item.get('superscore')))}</td>"
             f"<td>{escape(_score_cell(item.get('quality')))}</td>"
@@ -638,11 +644,14 @@ def _scorecards_section(
         "<h2>Universe Scorecards</h2>"
         "</div>"
         "<p>Scorecards condense deterministic quality, growth, valuation, safety, and attention signals before deeper agent research makes final portfolio decisions.</p>"
+        "<div class=\"pagination-shell\" data-paginated-list data-page-size=\"25\" data-pagination-label=\"scorecards\">"
         "<div class=\"table-scroll-top\" aria-hidden=\"true\"><div></div></div>"
         "<div class=\"table-scroll\"><table class=\"scorecards-table\">"
         "<thead><tr><th>Symbol</th><th>Superscore</th><th>Quality</th><th>Growth</th><th>Valuation</th><th>Safety</th><th>Market Buzz</th><th>Investing Type</th><th>Max Drawdown</th><th>Top Reasons</th></tr></thead>"
         f"<tbody>{''.join(body_rows)}</tbody>"
         "</table></div>"
+        f"{_pagination_controls()}"
+        "</div>"
         "</section>"
     )
 
@@ -755,6 +764,16 @@ def _holdings_placeholder_table() -> str:
     )
 
 
+def _pagination_controls() -> str:
+    return (
+        "<div class=\"pagination-controls\">"
+        "<button type=\"button\" class=\"pagination-prev\">Previous</button>"
+        "<span class=\"pagination-status\">Showing all</span>"
+        "<button type=\"button\" class=\"pagination-next\">Next</button>"
+        "</div>"
+    )
+
+
 def _dashboard_search_script() -> str:
     return r"""
 (function initDashboardSearch(){
@@ -765,9 +784,66 @@ def _dashboard_search_script() -> str:
     const query = input.value.trim().toLowerCase();
     cards.forEach(card => {
       const haystack = card.getAttribute("data-search-text") || "";
-      card.hidden = Boolean(query) && !haystack.includes(query);
+      card.dataset.searchHidden = Boolean(query) && !haystack.includes(query) ? "true" : "false";
     });
+    if (window.refreshPaginatedLists) {
+      window.refreshPaginatedLists({ resetPage: true });
+    }
   });
+})();
+"""
+
+
+def _paginated_lists_script() -> str:
+    return r"""
+(function initPaginatedLists(){
+  const applyVisibility = (item) => {
+    item.hidden = item.dataset.searchHidden === "true" || item.dataset.pageHidden === "true";
+  };
+  const refresh = ({ resetPage = false } = {}) => {
+    document.querySelectorAll("[data-paginated-list]").forEach((list) => {
+      const items = Array.from(list.querySelectorAll("[data-paginated-item]"));
+      const pageSize = Math.max(1, parseInt(list.dataset.pageSize || "25", 10));
+      const label = list.dataset.paginationLabel || "items";
+      const candidates = items.filter((item) => item.dataset.searchHidden !== "true");
+      const pageCount = Math.max(1, Math.ceil(candidates.length / pageSize));
+      let page = resetPage ? 1 : parseInt(list.dataset.page || "1", 10);
+      if (!Number.isFinite(page) || page < 1) page = 1;
+      if (page > pageCount) page = pageCount;
+      list.dataset.page = String(page);
+      const start = (page - 1) * pageSize;
+      const end = start + pageSize;
+      candidates.forEach((item, index) => {
+        item.dataset.pageHidden = index >= start && index < end ? "false" : "true";
+      });
+      items.filter((item) => item.dataset.searchHidden === "true").forEach((item) => {
+        item.dataset.pageHidden = "false";
+      });
+      items.forEach(applyVisibility);
+      const status = list.querySelector(".pagination-status");
+      const prev = list.querySelector(".pagination-prev");
+      const next = list.querySelector(".pagination-next");
+      const visibleStart = candidates.length ? start + 1 : 0;
+      const visibleEnd = Math.min(end, candidates.length);
+      if (status) status.textContent = `Showing ${visibleStart}-${visibleEnd} of ${candidates.length} ${label}`;
+      if (prev) {
+        prev.disabled = page <= 1;
+        prev.onclick = () => {
+          list.dataset.page = String(Math.max(1, page - 1));
+          refresh();
+        };
+      }
+      if (next) {
+        next.disabled = page >= pageCount;
+        next.onclick = () => {
+          list.dataset.page = String(Math.min(pageCount, page + 1));
+          refresh();
+        };
+      }
+    });
+  };
+  window.refreshPaginatedLists = refresh;
+  refresh();
 })();
 """
 
@@ -1272,6 +1348,37 @@ def _html_shell(*, title: str, body: str) -> str:
         var(--paper-2);
     }}
     .placeholder-panel p:last-child {{ max-width: 760px; color: var(--muted); }}
+    .pagination-shell {{
+      margin-top: 18px;
+    }}
+    .pagination-controls {{
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 12px;
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 14px;
+    }}
+    .pagination-controls button {{
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 13px;
+      background: rgba(255,250,240,.72);
+      color: var(--ink);
+      font: inherit;
+      font-weight: 900;
+      cursor: pointer;
+    }}
+    .pagination-controls button:disabled {{
+      cursor: not-allowed;
+      opacity: .38;
+    }}
+    .pagination-status {{
+      min-width: 170px;
+      text-align: center;
+      font-weight: 800;
+    }}
     .table-scroll-top, .table-scroll {{
       width: 100%;
       overflow-x: auto;
