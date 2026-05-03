@@ -791,14 +791,17 @@ operator surface. It summarizes paper-ready stock BUY candidates, idle/defensive
 parking guidance, current market regime, and a machine-readable
 `agent_advisory` state such as `ready_for_supervised_paper_review`,
 `parking_only_review`, `blocked_preflight`, or `research_more`. It does not
-submit or authorize orders. The static site uses an original premium research
-dashboard style inspired by the layout concepts at `https://www.fool.com/premium`
-and ticker tear sheets like
+submit or authorize orders. The visual hero renders those machine states as
+short human labels such as `Paper Review Ready` so the JSON remains precise
+while the dashboard stays readable. The static site uses an original premium
+research dashboard style inspired by the layout concepts at
+`https://www.fool.com/premium` and ticker tear sheets like
 `https://www.fool.com/premium/company/NASDAQ/AAPL/financials/summary`, without
-copying Fool branding. The index page uses a static app shell with a left
-navigation rail, top status/search bar, tab strip, and command cockpit sections
-for agent state, overview highlights, paper-ready candidates, capital parking,
-portfolio/exposure summary, safety/preflight guardrails, and the research board.
+copying Fool branding. The index page uses the `Autonomous Research Surface`
+label, a static app shell with a left navigation rail, top status/search bar,
+tab strip, and command cockpit sections for agent state, overview highlights,
+paper-ready candidates, capital parking, portfolio/exposure summary,
+safety/preflight guardrails, and the research board.
 The shell links navigate to real in-page sections. The left rail includes an
 explicit `All Tear Sheets` link for the research-board/ticker-page grid.
 Rankings renders an operator action table from account-action-plan stock
@@ -835,6 +838,15 @@ Ticker pages place a generated price chart first, then show thesis, promotion
 state, scorecard, financial sections, earnings context, article evidence, and
 safety notes. The chart is a static-file interactive widget: it includes range
 controls, hover/crosshair close values, and no external JavaScript dependency.
+
+The generated site also includes an `Agent Desk` bubble as a placeholder for a
+future chat/command surface. In the current static dashboard this panel is
+deliberately inert: example prompts can be viewed, but the textarea and send
+button are disabled. Future work must define authentication, active LLM context
+handoff, audit logging, command parsing, safety prechecks, and an explicit
+supervised approval boundary before any question or command can be sent from the
+dashboard. The placeholder exists to reserve the interaction pattern, not to
+create an execution path.
 
 Validate and open an already-generated static dashboard site:
 
