@@ -184,6 +184,19 @@ readiness call. If fundamentals coverage is below
 `continue_fundamentals_cache_fill`; once coverage clears the threshold, it is
 `run_evidence_enrichment_on_passed`.
 
+The preferred operator command combines source loading, watchlist export, cache
+fill, Python first-pass scan, and markdown reporting into one artifact folder:
+
+```powershell
+python scripts/longterm_extended_universe_first_pass.py --source-url https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt --source nasdaq_listed --watchlist-limit 100 --batch-size 10 --provider yfinance --fundamentals-cache path\to\extended_fundamentals_cache.json --fetch-limit 25 --top-percent 10 --min-pass-count 5 --max-pass-count 20 --min-coverage-percent-for-enrichment 80 --output-dir path\to\extended_universe_first_pass
+```
+
+The combined workflow writes `extended_watchlist_ideas.json`,
+`python_scan_passed.json`, `python_scan_deferred.json`,
+`python_scan_report.md`, and `extended_universe_first_pass_summary.json` in the
+chosen output directory. Increase `--fetch-limit` over repeated runs, or remove
+it for a deliberate long run once you are ready to fill the entire cache.
+
 Then run the evidence pipeline on the Python-scan survivors before committee
 research:
 
