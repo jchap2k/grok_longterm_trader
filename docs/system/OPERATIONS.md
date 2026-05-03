@@ -799,10 +799,12 @@ copying Fool branding. The index page uses a static app shell with a left
 navigation rail, top status/search bar, tab strip, and command cockpit sections
 for agent state, overview highlights, paper-ready candidates, capital parking,
 portfolio/exposure summary, safety/preflight guardrails, and the research board.
-Ticker pages place a generated price chart first, then show thesis, promotion
-state, scorecard, financial sections, earnings context, article evidence, and
-safety notes. The chart is a static-file interactive widget: it includes range
-controls, hover/crosshair close values, and no external JavaScript dependency.
+The shell links navigate to real in-page sections, and the search box filters
+the research-board ticker cards locally. Ticker pages place a generated price
+chart first, then show thesis, promotion state, scorecard, financial sections,
+earnings context, article evidence, and safety notes. The chart is a static-file
+interactive widget: it includes range controls, hover/crosshair close values,
+and no external JavaScript dependency.
 
 Validate and open an already-generated static dashboard site:
 

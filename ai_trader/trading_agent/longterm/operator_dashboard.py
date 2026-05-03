@@ -249,14 +249,23 @@ def _site_index_html(
     for symbol in symbols:
         intent = _intent_for_symbol(action_plan, symbol)
         evidence = evidence_by_symbol.get(symbol, {})
+        search_text = " ".join(
+            [
+                symbol,
+                str(intent.get("intent_type") or ""),
+                str(intent.get("reason") or ""),
+                str(evidence.get("business_summary") or ""),
+            ]
+        ).lower()
         cards.append(
-            "<a class=\"ticker-card\" href=\"tickers/{symbol}.html\">"
+            "<a class=\"ticker-card\" href=\"tickers/{symbol}.html\" data-search-text=\"{search_text}\">"
             "<span class=\"ticker-kicker\">{intent}</span>"
             "<strong>{symbol}</strong>"
             "<em>{summary}</em>"
             "<small>{value}</small>"
             "</a>".format(
                 symbol=escape(symbol),
+                search_text=escape(search_text),
                 intent=escape(str(intent.get("intent_type") or "RESEARCH")),
                 summary=escape(_short_text(str(evidence.get("business_summary") or intent.get("reason") or "Open research page."), 105)),
                 value=escape(_money(intent.get("trade_value") or intent.get("target_value") or 0)),
@@ -269,7 +278,7 @@ def _site_index_html(
           {_dashboard_rail()}
           <main class="dashboard-main">
             {_dashboard_topbar(dashboard=dashboard, regime=regime, buy_intents=buy_intents)}
-            <section class="hero">
+            <section class="hero" id="dashboard-overview">
               <p class="eyebrow">Motley-Fool-style research surface</p>
               <h1>Long-Term Trader Dashboard</h1>
               <p class="lede">{escape(str(advisory.get("message") or "Review research, parking, and paper-readiness artifacts."))}</p>
@@ -281,7 +290,7 @@ def _site_index_html(
               </div>
             </section>
             {_dashboard_tabs()}
-            <section class="panel overview-panel">
+            <section class="panel overview-panel" id="coverage">
               <div class="section-heading">
                 <p class="eyebrow">Overview Highlights</p>
                 <h2>Performance Goal And Latest Recommendation</h2>
@@ -300,14 +309,14 @@ def _site_index_html(
                   <h3>Latest Recommendation</h3>
                   {_latest_recommendation_html(buy_intents)}
                 </div>
-                <div class="highlight-card coverage-updates">
+                <div class="highlight-card coverage-updates" id="scorecards">
                   <h3>Coverage Updates</h3>
                   <p>{len(symbols)} ticker tear sheets are available in this generated site.</p>
                   <p>Use the research board to open scorecards, earnings context, article evidence, and charts.</p>
                 </div>
               </div>
             </section>
-            <section class="panel command-center">
+            <section class="panel command-center" id="rankings">
               <div class="section-heading">
                 <p class="eyebrow">Command Center</p>
                 <h2>Agent State And Market Posture</h2>
@@ -319,14 +328,14 @@ def _site_index_html(
                 {_status_tile("VIX / 10Y", f"{regime.get('vix_level') if regime.get('vix_level') is not None else 'unknown'} / {regime.get('ten_year_yield_trend') or 'unknown'}", "Used for parking posture, not automatic trading.")}
               </div>
             </section>
-            <section class="panel">
+            <section class="panel" id="paper-candidates">
               <div class="section-heading">
                 <p class="eyebrow">Paper-Ready Candidates</p>
                 <h2>Simple BUYs Cleared For Review</h2>
               </div>
               {_intent_rows(buy_intents, empty_label="No paper-ready BUY candidates.")}
             </section>
-            <section class="panel two-column">
+            <section class="panel two-column" id="parking">
               <div>
                 <div class="section-heading">
                   <p class="eyebrow">Capital Deployment / Parking</p>
@@ -336,7 +345,7 @@ def _site_index_html(
               </div>
               <div>
                 <div class="section-heading">
-                  <p class="eyebrow">Portfolio Snapshot</p>
+                  <p class="eyebrow" id="portfolio">Portfolio Snapshot</p>
                   <h2>Exposure Surface</h2>
                 </div>
                 <p>Portfolio details are sourced from the current action-plan and operator artifacts. Protected/core holdings remain outside Stage 6B paper submission.</p>
@@ -347,7 +356,7 @@ def _site_index_html(
                 </ul>
               </div>
             </section>
-            <section class="panel">
+            <section class="panel" id="safety">
               <div class="section-heading">
                 <p class="eyebrow">Safety &amp; Preflight</p>
                 <h2>Paper Boundary Guardrails</h2>
@@ -359,17 +368,18 @@ def _site_index_html(
                 {_safety_chip("Rebalance submit", "hard-blocked")}
               </div>
             </section>
-            <section class="panel">
+            <section class="panel" id="research-board">
               <div class="section-heading">
                 <p class="eyebrow">Research Board</p>
                 <h2>All Ticker Tear Sheets</h2>
               </div>
               <div class="ticker-grid">{''.join(cards)}</div>
             </section>
-            <section class="safety-strip">
+            <section class="safety-strip" id="settings">
               <strong>Read-only:</strong> this dashboard does not submit broker orders. Stage 6B still requires explicit supervised confirmation.
             </section>
             {_reference_footer()}
+            <script>{_dashboard_search_script()}</script>
           </main>
         </div>
         """,
@@ -378,15 +388,15 @@ def _site_index_html(
 
 def _dashboard_rail() -> str:
     items = [
-        ("Dashboard", "#"),
-        ("Paper Candidates", "#"),
-        ("Research Board", "#"),
-        ("Rankings", "#"),
-        ("Coverage", "#"),
-        ("Scorecards", "#"),
-        ("Portfolio", "#"),
-        ("Safety", "#"),
-        ("Settings", "#"),
+        ("Dashboard", "#dashboard-overview"),
+        ("Paper Candidates", "#paper-candidates"),
+        ("Research Board", "#research-board"),
+        ("Rankings", "#rankings"),
+        ("Coverage", "#coverage"),
+        ("Scorecards", "#scorecards"),
+        ("Portfolio", "#portfolio"),
+        ("Safety", "#safety"),
+        ("Settings", "#settings"),
     ]
     links = "".join(f"<a href=\"{href}\"><span></span>{escape(label)}</a>" for label, href in items)
     return (
@@ -406,8 +416,8 @@ def _dashboard_topbar(
     best_buys = ", ".join(_symbol(item) for item in buy_intents[:3]) or "none"
     return (
         "<header class=\"dashboard-topbar\">"
-        "<div class=\"topbar-links\"><a>Long-Term Advisor</a><a>My Stocks</a><a>My Reports</a></div>"
-        "<label class=\"search-box\"><span>Search research universe</span><input aria-label=\"Search research universe\" placeholder=\"Search research universe\" disabled></label>"
+        "<div class=\"topbar-links\"><a href=\"#dashboard-overview\">Long-Term Advisor</a><a href=\"#research-board\">My Stocks</a><a href=\"#coverage\">My Reports</a></div>"
+        "<label class=\"search-box\"><span>Search research universe</span><input class=\"dashboard-search\" aria-label=\"Search research universe\" placeholder=\"Search research universe\"></label>"
         "<div class=\"best-buys\"><span>Best Buys For Review</span><strong>{best_buys}</strong></div>"
         "<div class=\"market-tape\"><span>S&amp;P 500</span><strong>{regime}</strong><span>VIX</span><strong>{vix}</strong></div>"
         "</header>"
@@ -419,10 +429,17 @@ def _dashboard_topbar(
 
 
 def _dashboard_tabs() -> str:
-    tabs = ["Overview", "Scorecard", "Foundational Core", "Hold / Review", "Closed Positions", "About"]
+    tabs = [
+        ("Overview", "#dashboard-overview"),
+        ("Scorecard", "#scorecards"),
+        ("Foundational Core", "#portfolio"),
+        ("Hold / Review", "#research-board"),
+        ("Closed Positions", "#safety"),
+        ("About", "#settings"),
+    ]
     return "<nav class=\"dashboard-tabs\">" + "".join(
-        f"<a class=\"{'is-active' if index == 0 else ''}\" href=\"#\">{escape(tab)}</a>"
-        for index, tab in enumerate(tabs)
+        f"<a class=\"{'is-active' if index == 0 else ''}\" href=\"{href}\">{escape(tab)}</a>"
+        for index, (tab, href) in enumerate(tabs)
     ) + "</nav>"
 
 
@@ -437,6 +454,23 @@ def _latest_recommendation_html(buy_intents: list[Mapping[str, Any]]) -> str:
         f"<p>{escape(_short_text(str(item.get('reason') or ''), 160))}</p>"
         f"<a class=\"read-rec\" href=\"tickers/{escape(_symbol(item))}.html\">Read Recommendation</a>"
     )
+
+
+def _dashboard_search_script() -> str:
+    return r"""
+(function initDashboardSearch(){
+  const input = document.querySelector(".dashboard-search");
+  const cards = Array.from(document.querySelectorAll(".ticker-card[data-search-text]"));
+  if (!input || !cards.length) return;
+  input.addEventListener("input", () => {
+    const query = input.value.trim().toLowerCase();
+    cards.forEach(card => {
+      const haystack = card.getAttribute("data-search-text") || "";
+      card.hidden = Boolean(query) && !haystack.includes(query);
+    });
+  });
+})();
+"""
 
 
 def _status_tile(label: str, value: Any, detail: Any = "") -> str:
