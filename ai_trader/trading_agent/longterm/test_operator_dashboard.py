@@ -205,6 +205,14 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
                 "article_evidence_summaries": [
                     {"title": "Microsoft expands AI cloud capacity", "summary": "Capex supports cloud demand.", "url": "https://example.com/msft"}
                 ],
+            },
+            {
+                "symbol": "NVDA",
+                "business_summary": "Nvidia is an accelerated computing platform.",
+                "quality_growth_scorecard": {
+                    "superscore": 73,
+                    "analysis": {"quality": 80, "growth": 88, "valuation": 42, "safety": 58},
+                },
             }
         ],
         price_history_by_symbol={
@@ -229,14 +237,20 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     assert 'href="#scorecards"' in site["index.html"]
     assert 'href="#portfolio"' in site["index.html"]
     assert 'href="#safety"' in site["index.html"]
+    assert 'href="#settings"' in site["index.html"]
+    assert 'href="#foundational-core"' in site["index.html"]
+    assert 'href="#hold-review"' in site["index.html"]
+    assert 'href="#closed-positions"' in site["index.html"]
+    assert 'href="#about"' in site["index.html"]
     assert "Paper Candidates" in site["index.html"]
     assert "Research Board" in site["index.html"]
+    assert "All Tear Sheets" in site["index.html"]
     assert "Scorecards" in site["index.html"]
     assert "Portfolio" in site["index.html"]
     assert "Safety" in site["index.html"]
     assert "dashboard-topbar" in site["index.html"]
     assert 'href="#dashboard-overview">Long-Term Advisor</a>' in site["index.html"]
-    assert 'href="#research-board">My Stocks</a>' in site["index.html"]
+    assert 'href="#portfolio">My Stocks</a>' in site["index.html"]
     assert 'href="#coverage">My Reports</a>' in site["index.html"]
     assert "Search research universe" in site["index.html"]
     assert "dashboard-search" in site["index.html"]
@@ -259,10 +273,36 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     assert 'id="portfolio"' in site["index.html"]
     assert 'id="safety"' in site["index.html"]
     assert 'id="research-board"' in site["index.html"]
+    assert 'id="rankings"' in site["index.html"]
+    assert 'id="scorecards"' in site["index.html"]
+    assert 'id="foundational-core"' in site["index.html"]
+    assert 'id="hold-review"' in site["index.html"]
+    assert 'id="closed-positions"' in site["index.html"]
+    assert 'id="about"' in site["index.html"]
+    assert 'id="settings"' in site["index.html"]
+    assert "Ranked Stock List" in site["index.html"]
+    assert "Review Score" in site["index.html"]
+    assert "Stock Details View" in site["index.html"]
+    assert "Quality" in site["index.html"]
+    assert "Growth" in site["index.html"]
+    assert "Valuation" in site["index.html"]
+    assert "Safety" in site["index.html"]
+    assert "Trade Value" in site["index.html"]
+    assert site["index.html"].index("<td>MSFT</td>") < site["index.html"].index("<td>NVDA</td>")
+    assert "Scorecard superscore" in site["index.html"]
+    assert "scroll-margin-top" in site["index.html"]
+    assert "Scorecards Placeholder" in site["index.html"]
+    assert "Foundational Core Placeholder" in site["index.html"]
+    assert "Hold / Review Placeholder" in site["index.html"]
+    assert "No closed positions are available in this generated dashboard yet." in site["index.html"]
+    assert "About This Dashboard" in site["index.html"]
+    assert "Settings Placeholder" in site["index.html"]
     assert "Command Center" in site["index.html"]
     assert "Paper-Ready Candidates" in site["index.html"]
     assert "Capital Deployment / Parking" in site["index.html"]
     assert "Portfolio Snapshot" in site["index.html"]
+    assert "Current Portfolio Holdings" in site["index.html"]
+    assert "No current portfolio holdings were supplied for this generated dashboard." in site["index.html"]
     assert "Safety &amp; Preflight" in site["index.html"]
     assert "Research Board" in site["index.html"]
     assert "Order submission" in site["index.html"]

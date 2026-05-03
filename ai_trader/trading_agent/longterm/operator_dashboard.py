@@ -290,7 +290,7 @@ def _site_index_html(
               </div>
             </section>
             {_dashboard_tabs()}
-            <section class="panel overview-panel" id="coverage">
+            <section class="panel overview-panel">
               <div class="section-heading">
                 <p class="eyebrow">Overview Highlights</p>
                 <h2>Performance Goal And Latest Recommendation</h2>
@@ -309,14 +309,14 @@ def _site_index_html(
                   <h3>Latest Recommendation</h3>
                   {_latest_recommendation_html(buy_intents)}
                 </div>
-                <div class="highlight-card coverage-updates" id="scorecards">
+                <div class="highlight-card coverage-updates">
                   <h3>Coverage Updates</h3>
                   <p>{len(symbols)} ticker tear sheets are available in this generated site.</p>
                   <p>Use the research board to open scorecards, earnings context, article evidence, and charts.</p>
                 </div>
               </div>
             </section>
-            <section class="panel command-center" id="rankings">
+            <section class="panel command-center" id="command-center">
               <div class="section-heading">
                 <p class="eyebrow">Command Center</p>
                 <h2>Agent State And Market Posture</h2>
@@ -328,6 +328,39 @@ def _site_index_html(
                 {_status_tile("VIX / 10Y", f"{regime.get('vix_level') if regime.get('vix_level') is not None else 'unknown'} / {regime.get('ten_year_yield_trend') or 'unknown'}", "Used for parking posture, not automatic trading.")}
               </div>
             </section>
+            <section class="panel" id="coverage">
+              <div class="section-heading">
+                <p class="eyebrow">Coverage</p>
+                <h2>Research Coverage Updates</h2>
+              </div>
+              <p>{len(symbols)} ticker tear sheets are available in this generated site.</p>
+              <p>Coverage rows are generated from the current action plan, evidence files, and enrichment artifacts. Future versions can split this into analyst updates, latest news, and thesis-monitor notes.</p>
+            </section>
+            {_rankings_section(symbols=symbols, action_plan=action_plan, evidence_by_symbol=evidence_by_symbol)}
+            {_placeholder_panel(
+                section_id="scorecards",
+                eyebrow="Scorecards",
+                title="Scorecards Placeholder",
+                body="Ticker scorecards are available on each tear sheet. This section is reserved for a portfolio-wide scorecard table.",
+            )}
+            {_placeholder_panel(
+                section_id="foundational-core",
+                eyebrow="Foundational Core",
+                title="Foundational Core Placeholder",
+                body="Protected benchmark/core holdings and approved index or defensive parking choices will appear here when portfolio holdings are supplied.",
+            )}
+            {_placeholder_panel(
+                section_id="hold-review",
+                eyebrow="Hold / Review",
+                title="Hold / Review Placeholder",
+                body="Held names that need thesis review, refreshed evidence, or sell/trim analysis will appear here once portfolio holdings are connected.",
+            )}
+            {_placeholder_panel(
+                section_id="closed-positions",
+                eyebrow="Closed Positions",
+                title="Closed Positions Placeholder",
+                body="No closed positions are available in this generated dashboard yet.",
+            )}
             <section class="panel" id="paper-candidates">
               <div class="section-heading">
                 <p class="eyebrow">Paper-Ready Candidates</p>
@@ -335,26 +368,25 @@ def _site_index_html(
               </div>
               {_intent_rows(buy_intents, empty_label="No paper-ready BUY candidates.")}
             </section>
-            <section class="panel two-column" id="parking">
-              <div>
-                <div class="section-heading">
-                  <p class="eyebrow">Capital Deployment / Parking</p>
-                  <h2>Idle Cash Posture</h2>
-                </div>
-                {_intent_rows(parking_intents, empty_label="No parking intent generated.")}
+            <section class="panel" id="parking">
+              <div class="section-heading">
+                <p class="eyebrow">Capital Deployment / Parking</p>
+                <h2>Idle Cash Posture</h2>
               </div>
-              <div>
-                <div class="section-heading">
-                  <p class="eyebrow" id="portfolio">Portfolio Snapshot</p>
-                  <h2>Exposure Surface</h2>
-                </div>
-                <p>Portfolio details are sourced from the current action-plan and operator artifacts. Protected/core holdings remain outside Stage 6B paper submission.</p>
-                <ul class="summary-list">
-                  <li><strong>{len(buy_intents)}</strong><span>paper-review BUY intents</span></li>
-                  <li><strong>{len(parking_intents)}</strong><span>parking intents</span></li>
-                  <li><strong>{len(review_intents)}</strong><span>review / follow-up intents</span></li>
-                </ul>
+              {_intent_rows(parking_intents, empty_label="No parking intent generated.")}
+            </section>
+            <section class="panel" id="portfolio">
+              <div class="section-heading">
+                <p class="eyebrow">Portfolio Snapshot</p>
+                <h2>Exposure Surface</h2>
               </div>
+              <p>Portfolio details are sourced from the current action-plan and operator artifacts. Protected/core holdings remain outside Stage 6B paper submission.</p>
+              <ul class="summary-list">
+                <li><strong>{len(buy_intents)}</strong><span>paper-review BUY intents</span></li>
+                <li><strong>{len(parking_intents)}</strong><span>parking intents</span></li>
+                <li><strong>{len(review_intents)}</strong><span>review / follow-up intents</span></li>
+              </ul>
+              {_holdings_placeholder_table()}
             </section>
             <section class="panel" id="safety">
               <div class="section-heading">
@@ -375,9 +407,21 @@ def _site_index_html(
               </div>
               <div class="ticker-grid">{''.join(cards)}</div>
             </section>
-            <section class="safety-strip" id="settings">
+            <section class="safety-strip">
               <strong>Read-only:</strong> this dashboard does not submit broker orders. Stage 6B still requires explicit supervised confirmation.
             </section>
+            {_placeholder_panel(
+                section_id="about",
+                eyebrow="About",
+                title="About This Dashboard",
+                body="This is a generated, read-only operator surface for the autonomous long-term trader. It organizes evidence, paper-candidate review, parking posture, and safety state before any supervised paper action.",
+            )}
+            {_placeholder_panel(
+                section_id="settings",
+                eyebrow="Settings",
+                title="Settings Placeholder",
+                body="Runtime configuration, source toggles, and scheduler controls are intentionally not editable from this static dashboard yet.",
+            )}
             {_reference_footer()}
             <script>{_dashboard_search_script()}</script>
           </main>
@@ -390,7 +434,7 @@ def _dashboard_rail() -> str:
     items = [
         ("Dashboard", "#dashboard-overview"),
         ("Paper Candidates", "#paper-candidates"),
-        ("Research Board", "#research-board"),
+        ("All Tear Sheets", "#research-board"),
         ("Rankings", "#rankings"),
         ("Coverage", "#coverage"),
         ("Scorecards", "#scorecards"),
@@ -416,7 +460,7 @@ def _dashboard_topbar(
     best_buys = ", ".join(_symbol(item) for item in buy_intents[:3]) or "none"
     return (
         "<header class=\"dashboard-topbar\">"
-        "<div class=\"topbar-links\"><a href=\"#dashboard-overview\">Long-Term Advisor</a><a href=\"#research-board\">My Stocks</a><a href=\"#coverage\">My Reports</a></div>"
+        "<div class=\"topbar-links\"><a href=\"#dashboard-overview\">Long-Term Advisor</a><a href=\"#portfolio\">My Stocks</a><a href=\"#coverage\">My Reports</a></div>"
         "<label class=\"search-box\"><span>Search research universe</span><input class=\"dashboard-search\" aria-label=\"Search research universe\" placeholder=\"Search research universe\"></label>"
         "<div class=\"best-buys\"><span>Best Buys For Review</span><strong>{best_buys}</strong></div>"
         "<div class=\"market-tape\"><span>S&amp;P 500</span><strong>{regime}</strong><span>VIX</span><strong>{vix}</strong></div>"
@@ -432,15 +476,119 @@ def _dashboard_tabs() -> str:
     tabs = [
         ("Overview", "#dashboard-overview"),
         ("Scorecard", "#scorecards"),
-        ("Foundational Core", "#portfolio"),
-        ("Hold / Review", "#research-board"),
-        ("Closed Positions", "#safety"),
-        ("About", "#settings"),
+        ("Foundational Core", "#foundational-core"),
+        ("Hold / Review", "#hold-review"),
+        ("Closed Positions", "#closed-positions"),
+        ("About", "#about"),
     ]
     return "<nav class=\"dashboard-tabs\">" + "".join(
         f"<a class=\"{'is-active' if index == 0 else ''}\" href=\"{href}\">{escape(tab)}</a>"
         for index, (tab, href) in enumerate(tabs)
     ) + "</nav>"
+
+
+def _placeholder_panel(*, section_id: str, eyebrow: str, title: str, body: str) -> str:
+    return (
+        f"<section class=\"panel placeholder-panel\" id=\"{escape(section_id)}\">"
+        "<div class=\"section-heading\">"
+        f"<p class=\"eyebrow\">{escape(eyebrow)}</p>"
+        f"<h2>{escape(title)}</h2>"
+        "</div>"
+        f"<p>{escape(body)}</p>"
+        "</section>"
+    )
+
+
+def _rankings_section(
+    *,
+    symbols: Iterable[str],
+    action_plan: Mapping[str, Any],
+    evidence_by_symbol: Mapping[str, Mapping[str, Any]],
+) -> str:
+    rows = []
+    for symbol in symbols:
+        intent = _intent_for_symbol(action_plan, symbol)
+        evidence = evidence_by_symbol.get(symbol, {})
+        score, score_source = _review_score_for_symbol(intent=intent, evidence=evidence)
+        if score <= 0:
+            continue
+        scorecard = evidence.get("quality_growth_scorecard") if isinstance(evidence.get("quality_growth_scorecard"), Mapping) else {}
+        analysis = scorecard.get("analysis") if isinstance(scorecard.get("analysis"), Mapping) else {}
+        rows.append(
+            {
+                "symbol": symbol,
+                "score": score,
+                "score_source": score_source,
+                "intent": _intent_type(intent) or "RESEARCH",
+                "trade_value": intent.get("trade_value") or intent.get("target_value") or 0,
+                "quality": analysis.get("quality"),
+                "growth": analysis.get("growth"),
+                "valuation": analysis.get("valuation"),
+                "safety": analysis.get("safety"),
+                "reason": str(intent.get("reason") or evidence.get("business_summary") or ""),
+            }
+        )
+    rows.sort(key=lambda item: (-float(item["score"]), str(item["symbol"])))
+    if not rows:
+        return _placeholder_panel(
+            section_id="rankings",
+            eyebrow="Rankings",
+            title="Rankings Placeholder",
+            body="Ranked stock lists will appear here once review scores or scorecards are supplied.",
+        )
+    body_rows = []
+    for index, item in enumerate(rows, start=1):
+        symbol = str(item["symbol"])
+        body_rows.append(
+            "<tr>"
+            f"<td>{index}</td>"
+            f"<td>{escape(symbol)}</td>"
+            f"<td>{float(item['score']):g}</td>"
+            f"<td>{escape(str(item['intent']))}</td>"
+            f"<td>{escape(_money(item.get('trade_value')))}</td>"
+            f"<td>{escape(_score_cell(item.get('quality')))}</td>"
+            f"<td>{escape(_score_cell(item.get('growth')))}</td>"
+            f"<td>{escape(_score_cell(item.get('valuation')))}</td>"
+            f"<td>{escape(_score_cell(item.get('safety')))}</td>"
+            f"<td>{escape(_short_text(str(item['reason']), 110))}</td>"
+            f"<td>{escape(str(item['score_source']))}</td>"
+            f"<td><a href=\"tickers/{escape(symbol)}.html\">Open</a></td>"
+            "</tr>"
+        )
+    return (
+        "<section class=\"panel\" id=\"rankings\">"
+        "<div class=\"section-heading\">"
+        "<p class=\"eyebrow\">Rankings</p>"
+        "<h2>Ranked Stock List</h2>"
+        "</div>"
+        "<p>Stock Details View: stocks are sorted by the strongest available review score from generated evidence and promotion review metadata.</p>"
+        "<table class=\"rankings-table\">"
+        "<thead><tr><th>Rank</th><th>Symbol</th><th>Review Score</th><th>Intent</th><th>Trade Value</th><th>Quality</th><th>Growth</th><th>Valuation</th><th>Safety</th><th>Context</th><th>Score Source</th><th>Page</th></tr></thead>"
+        f"<tbody>{''.join(body_rows)}</tbody>"
+        "</table>"
+        "</section>"
+    )
+
+
+def _review_score_for_symbol(*, intent: Mapping[str, Any], evidence: Mapping[str, Any]) -> tuple[float, str]:
+    scorecard = evidence.get("quality_growth_scorecard") if isinstance(evidence.get("quality_growth_scorecard"), Mapping) else {}
+    promotion = intent.get("promotion_review") if isinstance(intent.get("promotion_review"), Mapping) else {}
+    candidates = [
+        (scorecard.get("superscore"), "Scorecard superscore"),
+        (promotion.get("confidence"), "Promotion confidence"),
+        (promotion.get("valuation_fit_score"), "Valuation fit"),
+        (promotion.get("quality_score"), "Promotion quality score"),
+    ]
+    for value, label in candidates:
+        score = _number(value)
+        if score > 0:
+            return score, label
+    return 0.0, "No review score"
+
+
+def _score_cell(value: Any) -> str:
+    score = _number(value)
+    return f"{score:g}" if score > 0 else "n/a"
 
 
 def _latest_recommendation_html(buy_intents: list[Mapping[str, Any]]) -> str:
@@ -453,6 +601,18 @@ def _latest_recommendation_html(buy_intents: list[Mapping[str, Any]]) -> str:
         f"{escape(str(promotion.get('promotion_decision') or 'BUY review'))}.</p>"
         f"<p>{escape(_short_text(str(item.get('reason') or ''), 160))}</p>"
         f"<a class=\"read-rec\" href=\"tickers/{escape(_symbol(item))}.html\">Read Recommendation</a>"
+    )
+
+
+def _holdings_placeholder_table() -> str:
+    return (
+        "<div class=\"holdings-table-wrap\">"
+        "<h3>Current Portfolio Holdings</h3>"
+        "<table class=\"holdings-table\">"
+        "<thead><tr><th>Symbol</th><th>Shares</th><th>Market Value</th><th>Status</th></tr></thead>"
+        "<tbody><tr><td colspan=\"4\">No current portfolio holdings were supplied for this generated dashboard.</td></tr></tbody>"
+        "</table>"
+        "</div>"
     )
 
 
@@ -795,6 +955,7 @@ def _html_shell(*, title: str, body: str) -> str:
       width: min(1180px, calc(100vw - 40px));
       margin: 22px auto;
     }}
+    [id] {{ scroll-margin-top: 96px; }}
     .hero, .ticker-hero {{
       padding: 42px;
       border: 1px solid var(--line);
@@ -939,6 +1100,16 @@ def _html_shell(*, title: str, body: str) -> str:
     }}
     .summary-list strong {{ font-size: 34px; color: var(--accent); }}
     .summary-list span {{ color: var(--muted); }}
+    .holdings-table-wrap {{ margin-top: 24px; }}
+    .holdings-table-wrap h3 {{ margin: 0 0 8px; font-size: 22px; letter-spacing: -.03em; }}
+    .holdings-table td[colspan] {{ color: var(--muted); font-style: italic; }}
+    .placeholder-panel {{
+      border-style: dashed;
+      background:
+        linear-gradient(135deg, rgba(15,107,86,.08), transparent 45%),
+        var(--paper-2);
+    }}
+    .placeholder-panel p:last-child {{ max-width: 760px; color: var(--muted); }}
     .ticker-grid {{
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
