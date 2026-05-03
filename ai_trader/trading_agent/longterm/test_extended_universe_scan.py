@@ -126,10 +126,28 @@ def test_python_first_pass_scan_advances_top_percent_not_hard_threshold():
 
     assert result.summary["mode"] == "extended_universe_python_first_pass_scan"
     assert result.summary["top_percent"] == 40.0
+    assert result.summary["rank_score_basis"] == "70pct_moneyball_30pct_quant"
     assert result.summary["passed_count"] == 2
     assert [idea["symbol"] for idea in result.passed_ideas] == ["TOP1", "TOP2"]
     assert result.passed_ideas[0]["python_first_pass_scan"]["decision"] == "advance_to_enrichment"
     assert result.deferred_ideas[-1]["python_first_pass_scan"]["decision"] == "defer_after_python_scan"
+
+
+def test_python_first_pass_scan_exposes_moneyball_quant_and_rank_scores():
+    ideas = [
+        {"symbol": "TOP1", "fundamental_metrics": _strong("TOP1")},
+        {"symbol": "MID1", "fundamental_metrics": _okay("MID1")},
+    ]
+
+    result = run_python_first_pass_scan(ideas, top_percent=50)
+    scan = result.passed_ideas[0]["python_first_pass_scan"]
+
+    assert scan["score_basis"] == "70pct_moneyball_30pct_quant"
+    assert scan["moneyball_score"] == result.passed_ideas[0]["quality_growth_scorecard"]["superscore"]
+    assert scan["quant_score"] > 0
+    assert scan["rank_score"] == scan["score"]
+    assert "Moneyball" in scan["rank_reason"]
+    assert "Quant" in scan["rank_reason"]
 
 
 def test_python_first_pass_scan_keeps_at_least_one_candidate_from_weak_market():
@@ -221,6 +239,8 @@ def test_python_first_pass_markdown_summarizes_coverage_and_candidates():
     assert "Readiness: not ready" in markdown
     assert "Coverage: 2/3 (66.67%)" in markdown
     assert "| TOP1 |" in markdown
+    assert "Moneyball" in markdown
+    assert "Quant" in markdown
     assert "| MISSING1 |" in markdown
     assert "provider timeout" in markdown
     assert "LATER1" in markdown

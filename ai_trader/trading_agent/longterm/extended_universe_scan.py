@@ -67,6 +67,8 @@ def run_python_first_pass_scan(
         payload = dict(row["idea"])
         rank = int(row["rank"])
         score = float(row["score"])
+        moneyball_score = float(row["moneyball_score"])
+        quant_score = float(row["quant_score"])
         percentile = round((rank / len(ranked)) * 100, 2) if ranked else 0.0
         is_passed = rank <= pass_count
         payload["python_first_pass_scan"] = {
@@ -74,6 +76,11 @@ def run_python_first_pass_scan(
             "decision": "advance_to_enrichment" if is_passed else "defer_after_python_scan",
             "rank": rank,
             "score": score,
+            "rank_score": score,
+            "moneyball_score": moneyball_score,
+            "quant_score": quant_score,
+            "score_basis": "70pct_moneyball_30pct_quant",
+            "rank_reason": _rank_reason(moneyball_score=moneyball_score, quant_score=quant_score, rank_score=score),
             "percentile": percentile,
             "top_percent_cutoff": float(top_percent),
             "reason": _scan_reason(
@@ -110,6 +117,7 @@ def run_python_first_pass_scan(
         "min_pass_count": int(min_pass_count),
         "max_pass_count": max_pass_count,
         "pass_count_target": pass_count,
+        "rank_score_basis": "70pct_moneyball_30pct_quant",
         "passed_symbols": [idea["symbol"] for idea in passed if idea.get("symbol")],
         "deferred_symbols": [idea["symbol"] for idea in deferred if idea.get("symbol")],
         "next_enrichment_command": _next_enrichment_command(),
@@ -222,10 +230,14 @@ def _rank_scored_ideas(ideas: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
     rows = []
     for index, idea in enumerate(ideas):
         scorecard = idea.get("quality_growth_scorecard") or {}
+        moneyball_score = _moneyball_score(scorecard)
+        quant_score = _quant_score(scorecard)
         rows.append(
             {
                 "index": index,
-                "score": _score(scorecard),
+                "score": _rank_score(moneyball_score=moneyball_score, quant_score=quant_score),
+                "moneyball_score": moneyball_score,
+                "quant_score": quant_score,
                 "symbol": str(idea.get("symbol") or "").upper(),
                 "idea": dict(idea),
             }
@@ -285,8 +297,8 @@ def _idea_table(ideas: list[Mapping[str, Any]]) -> list[str]:
     if not ideas:
         return ["No rows."]
     lines = [
-        "| Symbol | Rank | Score | Quality | Growth | Valuation | Safety | Decision | Reason |",
-        "|---|---:|---:|---:|---:|---:|---:|---|---|",
+        "| Symbol | Rank | Rank Score | Moneyball | Quant | Quality | Growth | Valuation | Safety | Decision | Reason |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|",
     ]
     for idea in ideas:
         scorecard = idea.get("quality_growth_scorecard") or {}
@@ -297,7 +309,9 @@ def _idea_table(ideas: list[Mapping[str, Any]]) -> list[str]:
                 [
                     _cell(idea.get("symbol")),
                     _cell(scan.get("rank")),
-                    _cell(scan.get("score")),
+                    _cell(scan.get("rank_score", scan.get("score"))),
+                    _cell(scan.get("moneyball_score")),
+                    _cell(scan.get("quant_score")),
                     _cell(scorecard.get("quality_score")),
                     _cell(scorecard.get("growth_score")),
                     _cell(scorecard.get("valuation_score")),
@@ -316,11 +330,37 @@ def _cell(value: Any) -> str:
     return text.replace("|", "\\|").replace("\n", " ").strip()
 
 
-def _score(scorecard: Mapping[str, Any]) -> float:
+def _moneyball_score(scorecard: Mapping[str, Any]) -> float:
     try:
         return float(scorecard.get("superscore") or 0.0)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _quant_score(scorecard: Mapping[str, Any]) -> float:
+    quality = _component_score(scorecard, "quality_score")
+    growth = _component_score(scorecard, "growth_score")
+    valuation = _component_score(scorecard, "valuation_score")
+    safety = _component_score(scorecard, "safety_score")
+    return round((quality * 0.35) + (growth * 0.30) + (valuation * 0.20) + (safety * 0.15), 1)
+
+
+def _component_score(scorecard: Mapping[str, Any], key: str) -> float:
+    try:
+        return float(scorecard.get(key) or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _rank_score(*, moneyball_score: float, quant_score: float) -> float:
+    return round((moneyball_score * 0.70) + (quant_score * 0.30), 1)
+
+
+def _rank_reason(*, moneyball_score: float, quant_score: float, rank_score: float) -> str:
+    return (
+        f"Moneyball {moneyball_score:.1f} weighted 70%; "
+        f"Quant {quant_score:.1f} weighted 30%; rank score {rank_score:.1f}."
+    )
 
 
 def _pass_count(

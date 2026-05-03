@@ -147,10 +147,12 @@ python scripts/longterm_extended_universe.py --source-url https://www.nasdaqtrad
 For a broad source, do not send thousands of tickers directly into news/Grok or
 committee research. Run the pure-Python first-pass scan first. It attaches or
 loads deterministic fundamentals, builds the non-proprietary quality-growth
-scorecard, ranks the universe by score, and advances the top relative slice
-such as 5-10%. This avoids the swing-trader failure mode where hard gates block
-every name while still keeping expensive enrichment focused on the best
-available candidates.
+scorecard, ranks the universe by an explicit first-pass rank score, and advances
+the top relative slice such as 5-10%. The rank score is `70%` Moneyball-style
+quality-growth `superscore` plus `30%` deterministic quant/fundamental blend
+from quality, growth, valuation, and safety. This avoids the swing-trader
+failure mode where hard gates block every name while still keeping expensive
+enrichment focused on the best available candidates.
 
 ```powershell
 python scripts/longterm_extended_universe_scan.py --idea-batch path\to\extended_watchlist_ideas.json --provider yfinance --fundamentals-cache path\to\extended_fundamentals_cache.json --top-percent 10 --min-pass-count 10 --max-pass-count 300 --min-coverage-percent-for-enrichment 80 --passed-output path\to\extended_watchlist.python_scan_passed.json --deferred-output path\to\extended_watchlist.python_scan_deferred.json --summary-output path\to\extended_watchlist.python_scan_summary.json --markdown-output path\to\extended_watchlist.python_scan_report.md
