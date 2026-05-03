@@ -472,7 +472,16 @@ def _brand_logo_html() -> str:
 
 @lru_cache(maxsize=1)
 def _logo_data_uri() -> str:
-    logo_path = Path(__file__).resolve().parents[1] / "agent" / "utils" / "ltta_logo.jpg"
+    logo_dir = Path(__file__).resolve().parents[1] / "agent" / "utils"
+    svg_path = logo_dir / "logo.svg"
+    if svg_path.exists():
+        try:
+            encoded = base64.b64encode(svg_path.read_bytes()).decode("ascii")
+        except OSError:
+            encoded = ""
+        if encoded:
+            return f"data:image/svg+xml;base64,{encoded}"
+    logo_path = logo_dir / "ltta_logo.jpg"
     try:
         encoded = base64.b64encode(logo_path.read_bytes()).decode("ascii")
     except OSError:
