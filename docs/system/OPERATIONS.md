@@ -799,6 +799,20 @@ copying Fool branding. Ticker pages place a generated price chart first, then
 show thesis, promotion state, scorecard, financial sections, earnings context,
 article evidence, and safety notes.
 
+Build a Monday launch packet that combines the dashboard, filtered Stage 6B
+candidate plan, Monday operator check, optional workflow-smoke whole-share
+preview, and runbook state into one no-submit review artifact:
+
+```powershell
+python scripts/longterm_operator_launch_packet.py --dashboard-file path\to\operator_dashboard.json --candidate-plan path\to\account_action_plan_stage6b_submit_candidates.json --monday-check path\to\paper_monday_operator_check.json --workflow-smoke path\to\paper_workflow_smoke.json --runbook path\to\paper_runbook.json --site-index path\to\operator_dashboard_site\index.html --output path\to\monday_launch_packet.md --json-output path\to\monday_launch_packet.json
+```
+
+The launch packet is intentionally higher-level than the runbook. It says
+whether the saved artifacts are ready for supervised review, lists the simple
+paper BUY candidates and any idle-cash parking symbols, repeats the required
+safety conditions, and keeps `order_submission_enabled=false`. It does not reveal
+or run the submit command and it does not call a broker.
+
 Filter the full account action plan to the narrow Stage 6B submit-candidate
 plan before running paper-submit preflights:
 
