@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from dataclasses import dataclass
 from datetime import date
@@ -157,7 +158,14 @@ def enrich_idea_with_relevant_news(
     payload = dict(idea)
     symbol = str(payload.get("symbol") or "").upper()
     payload["symbol"] = symbol
-    articles = provider.fetch_news(symbol, published_after=published_after, limit=max(10, max_items * 3))
+    try:
+        articles = provider.fetch_news(symbol, published_after=published_after, limit=max(10, max_items * 3))
+    except Exception as exc:  # Provider errors should not abort a multi-symbol research campaign.
+        payload["relevant_news"] = []
+        warnings = _note_list(payload.get("enrichment_warnings"))
+        warnings.append(f"news_fetch_failed: {_safe_error_message(exc)}")
+        payload["enrichment_warnings"] = _dedupe(warnings)
+        return payload
     relevant = rank_relevant_news(
         symbol,
         articles,
@@ -454,6 +462,11 @@ def _dedupe(values: list[str]) -> list[str]:
         seen.add(normalized)
         result.append(normalized)
     return result
+
+
+def _safe_error_message(exc: Exception) -> str:
+    message = str(exc)
+    return re.sub(r"(?i)(apiKey=)[^&\s]+", r"\1<redacted>", message)
 
 
 __all__ = [

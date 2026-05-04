@@ -194,6 +194,39 @@ def test_enrich_idea_with_relevant_news_adds_packet_context_and_source_note():
     assert "AWS AI infrastructure deal" in enriched["source_notes"][-1]
 
 
+def test_enrich_idea_with_relevant_news_records_provider_failure_without_crashing():
+    class FailingProvider:
+        def fetch_news(self, symbol: str, **kwargs):
+            raise RuntimeError("429 too many requests")
+
+    idea = {
+        "symbol": "MEDP",
+        "company_name": "Medpace",
+        "business_summary": "Contract research organization for clinical trials.",
+    }
+
+    enriched = enrich_idea_with_relevant_news(idea, provider=FailingProvider(), as_of_date="2026-05-03")
+
+    assert enriched["symbol"] == "MEDP"
+    assert enriched["relevant_news"] == []
+    assert "news_fetch_failed: 429 too many requests" in enriched["enrichment_warnings"]
+
+
+def test_enrich_idea_with_relevant_news_redacts_api_keys_from_provider_errors():
+    class FailingProvider:
+        def fetch_news(self, symbol: str, **kwargs):
+            raise RuntimeError("429 url=https://example.test/news?ticker=MEDP&apiKey=secret123&limit=10")
+
+    enriched = enrich_idea_with_relevant_news(
+        {"symbol": "MEDP", "business_summary": "Contract research organization."},
+        provider=FailingProvider(),
+    )
+
+    warning = enriched["enrichment_warnings"][0]
+    assert "apiKey=<redacted>" in warning
+    assert "secret123" not in warning
+
+
 def test_enrich_ideas_with_relevant_news_uses_symbol_specific_context():
     provider = FakeNewsProvider({"AMZN": _articles()})
 
