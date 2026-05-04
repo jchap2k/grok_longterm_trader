@@ -66,6 +66,90 @@ class PipelineRunResult:
 CommandRunner = Callable[[str], tuple[int, str, str]]
 
 
+def build_committee_batch_stages(
+    *,
+    committee_batch_dir: str | Path,
+    output_dir: str | Path,
+    journal_db: str | Path,
+    portfolio_state: str | Path,
+    market_regime_file: str | Path | None = None,
+    motley_fool_config: str | Path | None = None,
+    agent_preset: str = "decision_6",
+    profile_config: str = "",
+) -> list[PipelineStage]:
+    """Build optional committee batch stages using the existing cycle script."""
+    batch_dir = Path(committee_batch_dir)
+    root = Path(output_dir)
+    batches = sorted(batch_dir.glob("*.json"))
+    stages: list[PipelineStage] = []
+    for index, batch in enumerate(batches, start=1):
+        output = root / f"committee_batch_{index:03d}_cycle.json"
+        command = (
+            "python scripts/run_longterm_cycle.py "
+            f"--idea-batch {_quote(batch)} "
+            f"--journal-db {_quote(journal_db)} "
+            f"--portfolio-state {_quote(portfolio_state)} "
+            f"--agent-preset {agent_preset} --quiet"
+            f"{_optional_path_arg('--market-regime-file', market_regime_file)}"
+            f"{_optional_path_arg('--motley-fool-config', motley_fool_config)}"
+            f"{_optional_path_arg('--profile-config', profile_config)}"
+        )
+        stages.append(
+            PipelineStage(
+                stage_id=f"committee_batch_{index:03d}",
+                title=f"Run committee research batch {index:03d}",
+                command=command,
+                artifact_paths={f"committee_batch_{index:03d}": str(output)},
+                stdout_artifact_path=str(output),
+            )
+        )
+    for stage in stages:
+        validate_stage_command(stage)
+    return stages
+
+
+def build_final_planning_refresh_stage(
+    *,
+    output_dir: str | Path,
+    journal_db: str | Path,
+    portfolio_state: str | Path,
+    market_regime_file: str | Path | None = None,
+    motley_fool_config: str | Path | None = None,
+    agent_preset: str = "decision_6",
+    profile_config: str = "",
+    active_sleeve_value: float | None = None,
+    available_cash: float | None = None,
+) -> PipelineStage:
+    """Build a final empty-cycle planning refresh stage."""
+    root = Path(output_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    empty_batch = root / "empty_idea_batch.json"
+    if not empty_batch.exists():
+        empty_batch.write_text("[]", encoding="utf-8")
+    output = root / "final_planning_refresh.json"
+    command = (
+        "python scripts/run_longterm_cycle.py "
+        f"--idea-batch {_quote(empty_batch)} "
+        f"--journal-db {_quote(journal_db)} "
+        f"--portfolio-state {_quote(portfolio_state)} "
+        f"--agent-preset {agent_preset} --quiet"
+        f"{_optional_path_arg('--market-regime-file', market_regime_file)}"
+        f"{_optional_path_arg('--motley-fool-config', motley_fool_config)}"
+        f"{_optional_path_arg('--profile-config', profile_config)}"
+        f"{_optional_number_arg('--active-sleeve-value', active_sleeve_value)}"
+        f"{_optional_number_arg('--available-cash', available_cash)}"
+    )
+    stage = PipelineStage(
+        stage_id="final_planning_refresh",
+        title="Run final planning refresh through existing cycle orchestration",
+        command=command,
+        artifact_paths={"empty_idea_batch": str(empty_batch), "final_planning_refresh": str(output)},
+        stdout_artifact_path=str(output),
+    )
+    validate_stage_command(stage)
+    return stage
+
+
 def build_paper_preflight_stages(
     *,
     output_dir: str | Path,
@@ -389,6 +473,18 @@ def _quote(value: str | Path) -> str:
     return subprocess.list2cmdline([str(value)])
 
 
+def _optional_path_arg(flag: str, value: str | Path | None) -> str:
+    if not value:
+        return ""
+    return f" {flag} {_quote(value)}"
+
+
+def _optional_number_arg(flag: str, value: float | None) -> str:
+    if value is None:
+        return ""
+    return f" {flag} {_format_number(value)}"
+
+
 def _format_number(value: float | None) -> str:
     if value is None:
         return ""
@@ -399,6 +495,8 @@ __all__ = [
     "PipelineRunResult",
     "PipelineStage",
     "PipelineStageResult",
+    "build_committee_batch_stages",
+    "build_final_planning_refresh_stage",
     "build_paper_preflight_stages",
     "run_pipeline_stages",
     "validate_stage_command",

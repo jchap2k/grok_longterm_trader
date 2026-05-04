@@ -71,6 +71,13 @@ flowchart TD
         LIVE_BUNDLE["Live Readiness Bundle"]
     end
 
+    subgraph Operator["Operator Surface"]
+        PIPELINE["No-Submit Research-to-Paper Pipeline"]
+        STATUS_BUNDLE["Operator Status Bundle"]
+        DASHBOARD["Dashboard Manifest / Localhost Viewer"]
+        LAUNCH["Monday Launch Packet"]
+    end
+
     IDX --> DISC
     MF --> DISC
     MAN --> DISC
@@ -121,6 +128,13 @@ flowchart TD
     READY --> LIVE_BUNDLE
     BROKER_CAP --> LIVE_BUNDLE
     VERIFY --> LIVE_BUNDLE
+
+    ACTION_PLAN --> PIPELINE --> READY
+    LIVE_BUNDLE --> STATUS_BUNDLE
+    STATUS --> STATUS_BUNDLE
+    ACTION_PLAN --> DASHBOARD
+    STATUS_BUNDLE --> DASHBOARD
+    DASHBOARD --> LAUNCH
 
     LIVE_BUNDLE -. "read-only evidence; does not enable live trading" .-> SUBMIT
 ```
@@ -341,14 +355,17 @@ Generates an ordered, read-only Monday paper-trading runbook with expected artif
 `longterm/research_to_paper_pipeline.py`
 Provides the scheduler-ready no-submit command seam from a saved account action
 plan to paper-readiness artifacts. It composes existing scripts instead of
-reimplementing research, benchmark, review, promotion, or paper safety logic:
-Stage 6B action-plan filtering, whole-share preview, workflow smoke,
-paper-smoke readiness, redacted runbook generation, runbook check, Monday
-operator check, status refresh, lifecycle, paper-trading verification,
-live-readiness bundle, and final operator status bundle. It validates the active
-rules file, logs every command, writes `pipeline_summary.json`, keeps
-`order_submission_enabled=false`, and rejects any planned stage containing
-`--submit-paper-orders`. It is artifact orchestration only, not trade authority.
+reimplementing research, benchmark, review, promotion, or paper safety logic.
+Its core path runs Stage 6B action-plan filtering, whole-share preview,
+workflow smoke, paper-smoke readiness, redacted runbook generation, runbook
+check, Monday operator check, status refresh, lifecycle, paper-trading
+verification, live-readiness bundle, and final operator status bundle. It can
+optionally prepend existing committee batch cycle runs and a final empty-cycle
+planning refresh before that paper-preflight path, but it still does not perform
+broker submission. It validates the active rules file, logs every command,
+writes `pipeline_summary.json`, keeps `order_submission_enabled=false`, and
+rejects any planned stage containing `--submit-paper-orders`. It is artifact
+orchestration only, not trade authority.
 
 `longterm/paper_runbook_check.py`
 Reads saved workflow-smoke and paper-smoke-readiness artifacts and verifies they are ready before the operator runs the supervised submit command. It emits a generated timestamp, workflow plan ID, canonical action-plan hash, and buy-promotion summary so the submit CLI can reject missing, stale, mismatched, malformed, not-ready, or pre-promotion-aware evidence before refreshing broker state. It is read-only and does not call brokers or mutate ledgers.
@@ -400,6 +417,17 @@ Assembles a read-only operator bundle from the paper lifecycle summary, buy-prom
 
 `longterm/operator_dashboard.py`
 Builds a static, read-only operator dashboard and optional ticker tear-sheet site from saved artifacts. It renders current advisory state, market regime, paper BUY candidates, parking guidance, portfolio holdings, rankings/actionability, universe scorecards, ticker charts, fundamentals, earnings context, and article evidence without calling brokers or LLMs. The generated site includes a disabled `Agent Desk` placeholder for future authenticated Q&A and supervised command drafting, but the placeholder cannot send messages or orders.
+
+`longterm/operator_dashboard_server.py`
+Builds and serves a versioned read-only dashboard manifest for localhost review.
+The manifest records artifact paths, campaign ID, decision-journal path, active
+rules path/hash, optional lessons snapshot path, and
+`order_submission_enabled=false`. The server resolves the index page, ticker
+pages, summary JSON, manifest JSON, and health check from the current artifact
+files on each request, so a rescan can update the viewer by updating saved
+artifacts rather than regenerating a static site. It filters protected symbols
+out of actionable dashboard candidates and never calls brokers, LLMs, or submit
+commands.
 
 `longterm/position_report.py`
 Builds an on-demand monthly or quarterly position intelligence report from portfolio state, the decision journal, symbol feedback profiles, review status, paper preview status, paper execution status, provider-free paper outcome summaries, outcome freshness, and optional feedback-refresh summaries. It summarizes the portfolio and then shows collected research/feedback context for each held symbol, including knowledge gaps. It can produce a Brevo-compatible email payload, but it is not scheduler-wired and does not submit broker orders.

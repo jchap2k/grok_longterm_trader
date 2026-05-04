@@ -685,6 +685,21 @@ submit command and rejects any planned stage containing `--submit-paper-orders`.
 Use `--print-plan-only` when wiring a scheduler or reviewing the exact command
 order without executing any stage.
 
+The same wrapper can optionally prepend existing research/planning stages before
+the paper preflight. This is still no-submit orchestration: committee batches run
+through `run_longterm_cycle.py`, a final empty idea-batch cycle refreshes account
+planning from the journal, and then the normal paper-readiness stages run:
+
+```powershell
+python scripts/longterm_research_to_paper_pipeline.py --output-dir path\to\pipeline_artifacts --committee-batch-dir path\to\committee_batches --final-planning-refresh --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --market-regime-file path\to\market_regime.json --motley-fool-config path\to\disabled_fool_config.json --active-sleeve-value 74000 --available-cash 74000 --skip-price-map --expected-cash 74000 --json
+```
+
+Use this expanded form only when the saved committee batch files and portfolio
+snapshot are already prepared. It does not perform broad-universe discovery,
+fundamentals cache filling, Polygon/Grok enrichment, or broker submission by
+itself; those remain upstream artifacts until the scheduler design explicitly
+adds them as separate safe stages.
+
 Check saved pre-submit runbook artifacts:
 
 ```powershell
@@ -1073,6 +1088,22 @@ The preview helper checks for `index.html` and ticker pages, prints a local
 `file:///.../index.html` URL, optionally opens it in the default browser, and can
 write a JSON preview report with `--report-output`. It is local preview only and
 does not call a broker or mutate artifacts.
+
+Serve a read-only localhost dashboard from a manifest instead of regenerating
+static files after each artifact refresh:
+
+```powershell
+python scripts/longterm_operator_dashboard_server.py --manifest path\to\dashboard_manifest.json --write-manifest --write-manifest-only --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --market-regime path\to\market_regime.json --operator-status path\to\operator_status_bundle.json --evidence-file path\to\research_queue_reconciled.json --price-history-file path\to\price_history.json --decision-journal path\to\journal.db --active-rules ai_trader\rules\active_rules.txt --campaign-id campaign_name --json
+python scripts/longterm_operator_dashboard_server.py --manifest path\to\dashboard_manifest.json --host 127.0.0.1 --port 8765 --json
+```
+
+The manifest records artifact paths, campaign ID, decision-journal path, active
+rules path/hash, and `order_submission_enabled=false`. The server resolves
+`/`, `/tickers/<SYMBOL>.html`, `/api/summary.json`, `/api/manifest.json`, and
+`/health` directly from the latest saved files. It is an artifact viewer only:
+it does not call Alpaca, run research, call an LLM, reveal submit commands, or
+write ledgers. Protected symbols such as `FXAIX` may appear as holdings, but the
+server filters them out of actionable dashboard candidate lists.
 
 Build a Monday launch packet that combines the dashboard, filtered Stage 6B
 candidate plan, Monday operator check, optional workflow-smoke whole-share
