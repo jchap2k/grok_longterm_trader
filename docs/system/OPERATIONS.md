@@ -273,6 +273,26 @@ rerunning earlier stages:
 python scripts/longterm_research_selection.py --evidence-file path\to\evidence_campaign\campaign_enriched.json --output-dir path\to\research_selection --campaign-id extended_universe_YYYYMMDD --top-percent 20 --min-count 10 --max-count 50
 ```
 
+Before sending a selected queue to the committee, run source reconciliation.
+This compares wide-universe selections against optional comparison lists such
+as Motley Fool coverage or symbols recently researched by the journal. Overlap
+is allowed and often useful: a symbol that appears in both the broad universe
+and Motley Fool should not be dropped. Instead, the row is annotated with
+`source_convergence`, source notes, and a suggested research mode so the
+committee can treat it as either fresh research or an update to an existing
+thesis.
+
+```powershell
+python scripts/longterm_research_queue_reconciliation.py --research-queue path\to\research_selection\research_queue_selected.json --comparison-source motley_fool=path\to\fool_evidence_ready.json --recent-symbols-file path\to\recent_researched_symbols.json --output-dir path\to\committee_preflight --batch-size 5
+```
+
+The preflight writes `research_queue_reconciled.json` / `.jsonl`,
+`research_queue_reconciliation_summary.json`,
+`research_queue_reconciliation_report.md`, a `committee_batches\` folder, and a
+`research_campaign_manifest.json`. Use those committee batches, in order, for
+the paced CGH research campaign. This keeps overlap auditable without letting
+duplicate sources inflate an idea into an automatic buy.
+
 Optionally enrich those source rows from a local JSON/CSV metrics cache before
 scoring:
 
