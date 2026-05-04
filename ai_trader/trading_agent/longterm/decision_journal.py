@@ -319,7 +319,6 @@ class LongTermDecisionJournal:
                        confidence, suggested_size_pct, key_thesis, packet_json,
                        decision_json
                 FROM longterm_decision_journal
-                WHERE recommendation IN ('BUY', 'ADD', 'HOLD')
                 ORDER BY timestamp DESC
                 """
             ).fetchall()
@@ -331,6 +330,9 @@ class LongTermDecisionJournal:
             record = dict(row)
             symbol = record["symbol"]
             if symbol in latest_by_symbol:
+                continue
+            if str(record.get("recommendation") or "").upper() not in {"BUY", "ADD", "HOLD"}:
+                latest_by_symbol[symbol] = {}
                 continue
             decision = json.loads(record.get("decision_json") or "{}")
             reason = (
@@ -363,7 +365,12 @@ class LongTermDecisionJournal:
             record["revenue_growth_1y_pct"] = decision.get("revenue_growth_1y_pct")
             record["estimated_return_range"] = decision.get("estimated_return_range") or ""
             record["estimated_max_drawdown_pct"] = decision.get("estimated_max_drawdown_pct")
-            symbol_history = [dict(item) for item in rows if item["symbol"] == symbol]
+            symbol_history = [
+                dict(item)
+                for item in rows
+                if item["symbol"] == symbol
+                and str(item["recommendation"]).upper() in {"BUY", "ADD", "HOLD"}
+            ]
             record["times_recommended"] = len(symbol_history)
             record["repeat_recommendation_count"] = len(symbol_history)
             record["new_information_notes"] = _new_information_notes(symbol_history)
@@ -375,7 +382,7 @@ class LongTermDecisionJournal:
             latest_by_symbol[symbol] = record
 
         ranked = sorted(
-            latest_by_symbol.values(),
+            [row for row in latest_by_symbol.values() if row],
             key=lambda row: (
                 float(row.get("ranking_score") or 0.0),
                 str(row.get("timestamp") or ""),

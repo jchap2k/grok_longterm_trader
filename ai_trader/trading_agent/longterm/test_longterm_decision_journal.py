@@ -186,6 +186,29 @@ def test_decision_journal_tracks_recommendation_rank_movement(tmp_path):
     assert nvda["rank_movement"] == "down"
 
 
+def test_recommendation_table_removes_symbol_when_latest_decision_is_pass(tmp_path):
+    db_path = tmp_path / "longterm_decisions.db"
+    journal = LongTermDecisionJournal(db_path)
+    profile = PortfolioProfile(benchmark_symbol="FXAIX")
+
+    journal.record_decision(
+        create_research_packet_from_idea({"symbol": "MSFT", "company_name": "Microsoft"}, profile=profile),
+        decision={"recommendation": "BUY", "confidence": 86, "suggested_size_pct": 6},
+    )
+    journal.record_decision(
+        create_research_packet_from_idea({"symbol": "MSFT", "company_name": "Microsoft"}, profile=profile),
+        decision={"recommendation": "PASS", "confidence": 72, "suggested_size_pct": 0},
+    )
+    journal.record_decision(
+        create_research_packet_from_idea({"symbol": "NVDA", "company_name": "Nvidia"}, profile=profile),
+        decision={"recommendation": "BUY", "confidence": 90, "suggested_size_pct": 5},
+    )
+
+    rows = journal.list_recommendation_table(limit=5)
+
+    assert [row["symbol"] for row in rows] == ["NVDA"]
+
+
 def test_decision_journal_records_thesis_review_events_with_traceability(tmp_path):
     db_path = tmp_path / "longterm_decisions.db"
     journal = LongTermDecisionJournal(db_path)
