@@ -235,11 +235,14 @@ For larger survivor slices, prefer the campaign wrapper. It runs the same
 evidence pipeline in resumable batches, writes per-batch input/output/summary
 files, and continuously refreshes combined JSON and JSONL outputs. Use
 `--max-batches` for a bounded smoke or to advance an overnight run in chunks;
-use `--resume` to skip batches already completed in the campaign folder.
+use `--resume` to skip batches already completed in the campaign folder. When
+using Polygon's free-tier rolling limit, keep both provider and campaign batch
+pauses enabled so consecutive campaign batches do not start inside the same
+one-minute request window.
 
 ```powershell
-python scripts/longterm_evidence_enrichment_campaign.py --idea-batch path\to\extended_watchlist.python_scan_passed.json --fundamentals-provider yfinance --polygon-news --news-cache-path path\to\polygon_news_cache.json --skip-grok --batch-size 25 --max-batches 1 --output-dir path\to\evidence_campaign
-python scripts/longterm_evidence_enrichment_campaign.py --idea-batch path\to\extended_watchlist.python_scan_passed.json --fundamentals-provider yfinance --polygon-news --news-cache-path path\to\polygon_news_cache.json --xai-grok --batch-size 25 --resume --output-dir path\to\evidence_campaign
+python scripts/longterm_evidence_enrichment_campaign.py --idea-batch path\to\extended_watchlist.python_scan_passed.json --fundamentals-provider yfinance --polygon-news --news-cache-path path\to\polygon_news_cache.json --skip-grok --batch-size 25 --max-batches 1 --rate-limit-batch-size 5 --rate-limit-pause-seconds 69 --campaign-batch-pause-seconds 69 --output-dir path\to\evidence_campaign
+python scripts/longterm_evidence_enrichment_campaign.py --idea-batch path\to\extended_watchlist.python_scan_passed.json --fundamentals-provider yfinance --polygon-news --news-cache-path path\to\polygon_news_cache.json --xai-grok --batch-size 25 --resume --rate-limit-batch-size 5 --rate-limit-pause-seconds 69 --campaign-batch-pause-seconds 69 --output-dir path\to\evidence_campaign
 ```
 
 Optionally enrich those source rows from a local JSON/CSV metrics cache before

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -51,6 +52,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-news-items", type=int, default=5)
     parser.add_argument("--rate-limit-batch-size", type=int, default=5)
     parser.add_argument("--rate-limit-pause-seconds", type=float, default=66.0)
+    parser.add_argument(
+        "--campaign-batch-pause-seconds",
+        type=float,
+        default=0.0,
+        help="Optional pause between processed campaign batches; useful for rolling provider limits.",
+    )
     parser.add_argument("--news-cache-path", default="")
     parser.add_argument("--polygon-api-key-env", default="POLYGON_API_KEY")
     parser.add_argument("--xai-api-key-env", default="XAI_API_KEY")
@@ -61,7 +68,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run_cli(args: argparse.Namespace) -> int:
+def run_cli(args: argparse.Namespace, *, sleep=time.sleep) -> int:
     ideas = _load_ideas(args.idea_batch, single=False)
     output_dir = Path(args.output_dir)
     batches_dir = output_dir / "batches"
@@ -81,10 +88,13 @@ def run_cli(args: argparse.Namespace) -> int:
     enriched: list[dict[str, Any]] = []
     batch_summaries: list[dict[str, Any]] = []
     skipped_batches = 0
+    pause_seconds = max(0.0, float(args.campaign_batch_pause_seconds))
+    pause_count = 0
 
     for index, batch in enumerate(selected_batches, start=1):
         paths = _batch_paths(batches_dir, index)
         _write_json(paths["input"], batch)
+        processed_batch = False
         if args.resume and paths["output"].exists() and paths["summary"].exists():
             batch_ideas = _load_list(paths["output"])
             batch_summary = json.loads(paths["summary"].read_text(encoding="utf-8"))
@@ -108,6 +118,7 @@ def run_cli(args: argparse.Namespace) -> int:
             batch_summary = dict(result["summary"])
             _write_json(paths["output"], batch_ideas)
             _write_json(paths["summary"], batch_summary)
+            processed_batch = True
         batch_summary.update(
             {
                 "batch_index": index,
@@ -119,6 +130,9 @@ def run_cli(args: argparse.Namespace) -> int:
         enriched.extend(batch_ideas)
         batch_summaries.append(batch_summary)
         _write_combined_outputs(output_dir, enriched)
+        if processed_batch and pause_seconds > 0.0 and index < len(selected_batches):
+            sleep(pause_seconds)
+            pause_count += 1
 
     summary = {
         "schema_version": 1,
@@ -130,6 +144,8 @@ def run_cli(args: argparse.Namespace) -> int:
         "selected_batch_count": len(selected_batches),
         "completed_batch_count": len(batch_summaries),
         "skipped_batch_count": skipped_batches,
+        "campaign_batch_pause_seconds": pause_seconds,
+        "campaign_batch_pause_count": pause_count,
         "enriched_count": len(enriched),
         "output_dir": str(output_dir),
         "batches_dir": str(batches_dir),

@@ -113,3 +113,38 @@ def test_evidence_enrichment_campaign_resume_skips_completed_batches(tmp_path, c
     assert printed["completed_batch_count"] == 2
     assert printed["skipped_batch_count"] == 1
     assert printed["enriched_count"] == 3
+
+
+def test_evidence_enrichment_campaign_pauses_between_processed_batches(tmp_path, capsys):
+    ideas_path = tmp_path / "ideas.json"
+    fundamentals_path = tmp_path / "fundamentals.json"
+    output_dir = tmp_path / "campaign"
+    symbols = ["AAA", "BBB", "CCC"]
+    ideas_path.write_text(json.dumps([_idea(symbol) for symbol in symbols]), encoding="utf-8")
+    fundamentals_path.write_text(json.dumps(_fundamentals(symbols)), encoding="utf-8")
+    sleep_calls: list[float] = []
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--idea-batch",
+                str(ideas_path),
+                "--fundamentals-snapshot-file",
+                str(fundamentals_path),
+                "--skip-grok",
+                "--batch-size",
+                "1",
+                "--campaign-batch-pause-seconds",
+                "69",
+                "--output-dir",
+                str(output_dir),
+            ]
+        ),
+        sleep=sleep_calls.append,
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert sleep_calls == [69.0, 69.0]
+    assert printed["campaign_batch_pause_seconds"] == 69.0
+    assert printed["campaign_batch_pause_count"] == 2
