@@ -88,6 +88,7 @@ def test_paper_runbook_reveals_supervised_submit_only_when_requested():
 
 def test_paper_runbook_cli_outputs_json(tmp_path, capsys):
     report_path = tmp_path / "paper_runbook.json"
+    artifacts_dir = tmp_path / "artifacts"
     args = build_parser().parse_args(
         [
             "--journal-db",
@@ -99,7 +100,7 @@ def test_paper_runbook_cli_outputs_json(tmp_path, capsys):
             "--action-plan",
             "account_action_plan.json",
             "--output-dir",
-            str(tmp_path / "artifacts"),
+            str(artifacts_dir),
             "--profile-config",
             "profile.json",
             "--expected-cash",
@@ -120,6 +121,7 @@ def test_paper_runbook_cli_outputs_json(tmp_path, capsys):
     assert payload["steps"][5]["requires_explicit_reveal"] is True
     assert "redacted" in payload["steps"][5]["command"].lower()
     assert json.loads(report_path.read_text(encoding="utf-8"))["mode"] == "paper_runbook"
+    assert json.loads((artifacts_dir / "paper_runbook.json").read_text(encoding="utf-8"))["mode"] == "paper_runbook"
 
 
 def test_paper_runbook_cli_can_explicitly_reveal_submit_command(tmp_path, capsys):

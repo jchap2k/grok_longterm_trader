@@ -39,8 +39,13 @@ def run_cli(args: argparse.Namespace) -> int:
         profile_config=args.profile_config,
         include_submit_command=args.include_submit_command,
     )
+    canonical_output = Path(runbook["artifacts"]["paper_runbook"])
+    canonical_output.parent.mkdir(parents=True, exist_ok=True)
+    canonical_output.write_text(json.dumps(runbook, indent=2, sort_keys=True), encoding="utf-8")
     if args.report_output:
-        Path(args.report_output).write_text(json.dumps(runbook, indent=2, sort_keys=True), encoding="utf-8")
+        report_output = Path(args.report_output)
+        report_output.parent.mkdir(parents=True, exist_ok=True)
+        report_output.write_text(json.dumps(runbook, indent=2, sort_keys=True), encoding="utf-8")
     if args.json:
         print(json.dumps(runbook, indent=2, sort_keys=True))
     else:
