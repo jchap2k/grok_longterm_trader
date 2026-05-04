@@ -18,6 +18,7 @@ DEFAULT_PROTECTED_SYMBOLS = {"FXAIX"}
 class ResearchSelectionResult:
     selected: list[dict[str, Any]]
     deferred: list[dict[str, Any]]
+    ranked: list[dict[str, Any]]
     skipped: list[dict[str, Any]]
     summary: dict[str, Any]
 
@@ -81,6 +82,7 @@ def select_research_queue(
     deferred: list[dict[str, Any]] = []
     for index, row in enumerate(scored, start=1):
         metadata = dict(row["research_selection"])
+        metadata["overall_rank"] = index
         if index <= selection_count:
             metadata["selected_rank"] = index
             metadata["deferred_rank"] = None
@@ -105,13 +107,14 @@ def select_research_queue(
         "scored_count": len(scored),
         "selected_count": len(selected),
         "deferred_count": len(deferred),
+        "ranked_count": len(scored),
         "skipped_count": len(skipped),
         "skipped_protected_symbols": [item["symbol"] for item in skipped if item.get("skip_reason") == "protected_symbol"],
         "top_percent": float(top_percent),
         "min_count": int(min_count),
         "max_count": int(max_count),
     }
-    return ResearchSelectionResult(selected=selected, deferred=deferred, skipped=skipped, summary=summary)
+    return ResearchSelectionResult(selected=selected, deferred=deferred, ranked=scored, skipped=skipped, summary=summary)
 
 
 def _with_selection_metadata(
@@ -140,6 +143,7 @@ def _with_selection_metadata(
         "research_selection_id": f"rs-{selection_id}",
         "evidence_packet_hash": evidence_hash,
         "selection_score": score,
+        "overall_rank": None,
         "selected_rank": None,
         "deferred_rank": None,
         "selected_for_committee": False,

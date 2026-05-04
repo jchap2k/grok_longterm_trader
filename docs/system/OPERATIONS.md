@@ -221,6 +221,8 @@ is written under `research_selection\`:
 
 - `research_queue_selected.json` / `.jsonl`: the evidence-rich idea batch for
   CGH committee research.
+- `research_queue_ranked_all.json` / `.jsonl`: the full scored backlog in rank
+  order, including selected and deferred names.
 - `research_queue_deferred.json` / `.jsonl`: scored names below the selected
   relative slice.
 - `research_queue_summary.json`: formula version, counts, selected output path,

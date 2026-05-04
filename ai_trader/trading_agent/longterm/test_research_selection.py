@@ -73,10 +73,12 @@ def test_select_research_queue_ranks_evidence_and_skips_protected_symbol():
     assert result.summary["skipped_protected_symbols"] == ["FXAIX"]
     assert result.summary["formula_version"] == "research_selection_v1"
     assert result.selected[0]["research_selection"]["selected_rank"] == 1
+    assert result.selected[0]["research_selection"]["overall_rank"] == 1
     assert result.selected[0]["research_selection"]["selected_for_committee"] is True
     assert result.selected[0]["research_selection"]["research_selection_id"]
     assert "research_selection_id=" in "\n".join(result.selected[0]["source_notes"])
     assert result.deferred[0]["symbol"] == "WEAK"
+    assert [row["symbol"] for row in result.ranked] == ["STRONG", "WEAK"]
     assert "evidence warning penalty" in " ".join(result.deferred[0]["research_selection"]["defer_reasons"])
 
 
@@ -156,13 +158,18 @@ def test_research_selection_cli_writes_queue_artifacts(tmp_path, capsys):
 
     printed = json.loads(capsys.readouterr().out)
     selected = json.loads((output_dir / "research_queue_selected.json").read_text(encoding="utf-8"))
+    ranked = json.loads((output_dir / "research_queue_ranked_all.json").read_text(encoding="utf-8"))
+    ranked_lines = (output_dir / "research_queue_ranked_all.jsonl").read_text(encoding="utf-8").splitlines()
     selected_lines = (output_dir / "research_queue_selected.jsonl").read_text(encoding="utf-8").splitlines()
     summary = json.loads((output_dir / "research_queue_summary.json").read_text(encoding="utf-8"))
     report = (output_dir / "research_queue_report.md").read_text(encoding="utf-8")
     assert code == 0
     assert printed["selected_count"] == 1
     assert selected[0]["symbol"] == "AAA"
+    assert [row["symbol"] for row in ranked] == ["AAA", "BBB"]
     assert len(selected_lines) == 1
+    assert len(ranked_lines) == 2
     assert summary["selected_output"].endswith("research_queue_selected.json")
+    assert summary["ranked_all_output"].endswith("research_queue_ranked_all.json")
     assert "Research Selection Queue" in report
     assert "AAA" in report

@@ -47,6 +47,8 @@ def run_cli(args: argparse.Namespace) -> int:
         {
             "input": str(Path(args.evidence_file)),
             "output_dir": str(output_dir),
+            "ranked_all_output": str(output_dir / "research_queue_ranked_all.json"),
+            "ranked_all_jsonl_output": str(output_dir / "research_queue_ranked_all.jsonl"),
             "selected_output": str(output_dir / "research_queue_selected.json"),
             "selected_jsonl_output": str(output_dir / "research_queue_selected.jsonl"),
             "deferred_output": str(output_dir / "research_queue_deferred.json"),
@@ -54,6 +56,8 @@ def run_cli(args: argparse.Namespace) -> int:
             "report_output": str(output_dir / "research_queue_report.md"),
         }
     )
+    _write_json(output_dir / "research_queue_ranked_all.json", result.ranked)
+    _write_jsonl(output_dir / "research_queue_ranked_all.jsonl", result.ranked)
     _write_json(output_dir / "research_queue_selected.json", result.selected)
     _write_jsonl(output_dir / "research_queue_selected.jsonl", result.selected)
     _write_json(output_dir / "research_queue_deferred.json", result.deferred)
@@ -80,6 +84,7 @@ def _format_report(result: ResearchSelectionResult, summary: Mapping[str, Any]) 
         f"- Input count: {summary.get('input_count')}",
         f"- Selected: {summary.get('selected_count')}",
         f"- Deferred: {summary.get('deferred_count')}",
+        f"- Full ranked backlog: `{summary.get('ranked_all_output')}`",
         f"- Skipped protected: {', '.join(summary.get('skipped_protected_symbols') or []) or 'none'}",
         f"- Selected idea batch: `{summary.get('selected_output')}`",
         "",
