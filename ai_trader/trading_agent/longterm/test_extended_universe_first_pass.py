@@ -90,6 +90,14 @@ def test_extended_universe_first_pass_cli_prepares_scans_and_writes_artifacts(tm
     printed = json.loads(capsys.readouterr().out)
     ideas = json.loads((output_dir / "extended_watchlist_ideas.json").read_text(encoding="utf-8"))
     passed = json.loads((output_dir / "python_scan_passed.json").read_text(encoding="utf-8"))
+    passed_jsonl = [
+        json.loads(line)
+        for line in (output_dir / "python_scan_passed.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    scanned_jsonl = [
+        json.loads(line)
+        for line in (output_dir / "python_scan_scanned.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
     report = (output_dir / "python_scan_report.md").read_text(encoding="utf-8")
     assert code == 0
     assert printed["mode"] == "extended_universe_first_pass"
@@ -97,5 +105,8 @@ def test_extended_universe_first_pass_cli_prepares_scans_and_writes_artifacts(tm
     assert printed["scan"]["passed_count"] == 3
     assert [idea["symbol"] for idea in ideas] == ["TOP1", "WEAK1", "MID1"]
     assert [idea["symbol"] for idea in passed] == ["TOP1", "MID1", "WEAK1"]
+    assert [idea["symbol"] for idea in passed_jsonl] == ["TOP1", "MID1", "WEAK1"]
+    assert [idea["symbol"] for idea in scanned_jsonl] == ["TOP1", "MID1", "WEAK1"]
     assert "# Extended Universe Python First Pass" in report
     assert printed["artifacts"]["markdown_report"].endswith("python_scan_report.md")
+    assert printed["artifacts"]["passed_jsonl"].endswith("python_scan_passed.jsonl")

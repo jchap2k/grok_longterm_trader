@@ -47,6 +47,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--passed-output", required=True)
     parser.add_argument("--deferred-output", default="")
     parser.add_argument("--scanned-output", default="")
+    parser.add_argument("--passed-jsonl-output", default="")
+    parser.add_argument("--deferred-jsonl-output", default="")
+    parser.add_argument("--scanned-jsonl-output", default="")
     parser.add_argument("--summary-output", default="")
     parser.add_argument("--markdown-output", default="")
     return parser
@@ -107,6 +110,13 @@ def run_cli(args: argparse.Namespace, *, fetch_metrics=fetch_yfinance_fundamenta
     passed_path = _write_json(args.passed_output, result.passed_ideas)
     deferred_path = _write_json(args.deferred_output, result.deferred_ideas) if args.deferred_output else None
     scanned_path = _write_json(args.scanned_output, result.scanned_ideas) if args.scanned_output else None
+    passed_jsonl_path = _write_jsonl(args.passed_jsonl_output, result.passed_ideas) if args.passed_jsonl_output else None
+    deferred_jsonl_path = (
+        _write_jsonl(args.deferred_jsonl_output, result.deferred_ideas) if args.deferred_jsonl_output else None
+    )
+    scanned_jsonl_path = (
+        _write_jsonl(args.scanned_jsonl_output, result.scanned_ideas) if args.scanned_jsonl_output else None
+    )
     summary = dict(result.summary)
     summary["input"] = str(Path(args.idea_batch))
     summary["fundamentals_mode"] = "snapshot_file" if args.snapshot_file else args.provider
@@ -125,6 +135,12 @@ def run_cli(args: argparse.Namespace, *, fetch_metrics=fetch_yfinance_fundamenta
         summary["deferred_output"] = str(deferred_path)
     if scanned_path:
         summary["scanned_output"] = str(scanned_path)
+    if passed_jsonl_path:
+        summary["passed_jsonl_output"] = str(passed_jsonl_path)
+    if deferred_jsonl_path:
+        summary["deferred_jsonl_output"] = str(deferred_jsonl_path)
+    if scanned_jsonl_path:
+        summary["scanned_jsonl_output"] = str(scanned_jsonl_path)
     if args.markdown_output:
         markdown_path = _write_text(
             args.markdown_output,
@@ -201,6 +217,14 @@ def _write_json(path: str | Path, payload: Any) -> Path:
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return output_path
+
+
+def _write_jsonl(path: str | Path, rows: list[Mapping[str, Any]]) -> Path:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [json.dumps(row, sort_keys=True) for row in rows]
+    output_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
     return output_path
 
 

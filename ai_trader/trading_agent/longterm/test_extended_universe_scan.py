@@ -299,6 +299,68 @@ def test_extended_universe_scan_cli_writes_pass_defer_and_summary(tmp_path, caps
     assert [idea["symbol"] for idea in deferred] == ["WEAK1"]
 
 
+def test_extended_universe_scan_cli_can_write_jsonl_sidecars(tmp_path, capsys):
+    ideas_path = tmp_path / "ideas.json"
+    snapshots_path = tmp_path / "fundamentals.json"
+    passed_output = tmp_path / "passed.json"
+    deferred_output = tmp_path / "deferred.json"
+    scanned_output = tmp_path / "scanned.json"
+    passed_jsonl = tmp_path / "passed.jsonl"
+    deferred_jsonl = tmp_path / "deferred.jsonl"
+    scanned_jsonl = tmp_path / "scanned.jsonl"
+    ideas_path.write_text(
+        json.dumps(
+            [
+                {"symbol": "TOP1", "company_name": "Top One"},
+                {"symbol": "WEAK1", "company_name": "Weak One"},
+                {"symbol": "MID1", "company_name": "Middle One"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    snapshots_path.write_text(
+        json.dumps({"TOP1": _strong("TOP1"), "WEAK1": _weak("WEAK1"), "MID1": _okay("MID1")}),
+        encoding="utf-8",
+    )
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--idea-batch",
+                str(ideas_path),
+                "--snapshot-file",
+                str(snapshots_path),
+                "--top-percent",
+                "34",
+                "--passed-output",
+                str(passed_output),
+                "--deferred-output",
+                str(deferred_output),
+                "--scanned-output",
+                str(scanned_output),
+                "--passed-jsonl-output",
+                str(passed_jsonl),
+                "--deferred-jsonl-output",
+                str(deferred_jsonl),
+                "--scanned-jsonl-output",
+                str(scanned_jsonl),
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    passed_lines = [json.loads(line) for line in passed_jsonl.read_text(encoding="utf-8").splitlines()]
+    deferred_lines = [json.loads(line) for line in deferred_jsonl.read_text(encoding="utf-8").splitlines()]
+    scanned_lines = [json.loads(line) for line in scanned_jsonl.read_text(encoding="utf-8").splitlines()]
+    assert code == 0
+    assert printed["passed_jsonl_output"] == str(passed_jsonl)
+    assert printed["deferred_jsonl_output"] == str(deferred_jsonl)
+    assert printed["scanned_jsonl_output"] == str(scanned_jsonl)
+    assert [idea["symbol"] for idea in passed_lines] == ["TOP1", "MID1"]
+    assert [idea["symbol"] for idea in deferred_lines] == ["WEAK1"]
+    assert [idea["symbol"] for idea in scanned_lines] == ["TOP1", "MID1", "WEAK1"]
+
+
 def test_extended_universe_scan_cli_reuses_and_updates_provider_cache(tmp_path, capsys):
     ideas_path = tmp_path / "ideas.json"
     cache_path = tmp_path / "fundamentals_cache.json"

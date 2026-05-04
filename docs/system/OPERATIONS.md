@@ -155,7 +155,7 @@ failure mode where hard gates block every name while still keeping expensive
 enrichment focused on the best available candidates.
 
 ```powershell
-python scripts/longterm_extended_universe_scan.py --idea-batch path\to\extended_watchlist_ideas.json --provider yfinance --fundamentals-cache path\to\extended_fundamentals_cache.json --top-percent 10 --min-pass-count 10 --max-pass-count 300 --min-coverage-percent-for-enrichment 80 --passed-output path\to\extended_watchlist.python_scan_passed.json --deferred-output path\to\extended_watchlist.python_scan_deferred.json --summary-output path\to\extended_watchlist.python_scan_summary.json --markdown-output path\to\extended_watchlist.python_scan_report.md
+python scripts/longterm_extended_universe_scan.py --idea-batch path\to\extended_watchlist_ideas.json --provider yfinance --fundamentals-cache path\to\extended_fundamentals_cache.json --top-percent 10 --min-pass-count 10 --max-pass-count 300 --min-coverage-percent-for-enrichment 80 --passed-output path\to\extended_watchlist.python_scan_passed.json --deferred-output path\to\extended_watchlist.python_scan_deferred.json --scanned-output path\to\extended_watchlist.python_scan_scanned.json --passed-jsonl-output path\to\extended_watchlist.python_scan_passed.jsonl --deferred-jsonl-output path\to\extended_watchlist.python_scan_deferred.jsonl --scanned-jsonl-output path\to\extended_watchlist.python_scan_scanned.jsonl --summary-output path\to\extended_watchlist.python_scan_summary.json --markdown-output path\to\extended_watchlist.python_scan_report.md
 ```
 
 The first-pass scan cache is symbol-keyed and resumable. If a prior overnight
@@ -174,7 +174,7 @@ cache. Prefer the final enrichment pass after coverage is high enough for the
 universe slice being evaluated.
 
 ```powershell
-python scripts/longterm_extended_universe_scan.py --idea-batch path\to\extended_watchlist_ideas.json --provider yfinance --fundamentals-cache path\to\extended_fundamentals_cache.json --fetch-limit 100 --top-percent 10 --min-pass-count 10 --max-pass-count 300 --passed-output path\to\extended_watchlist.python_scan_passed.json --deferred-output path\to\extended_watchlist.python_scan_deferred.json --summary-output path\to\extended_watchlist.python_scan_summary.json --markdown-output path\to\extended_watchlist.python_scan_report.md
+python scripts/longterm_extended_universe_scan.py --idea-batch path\to\extended_watchlist_ideas.json --provider yfinance --fundamentals-cache path\to\extended_fundamentals_cache.json --fetch-limit 100 --top-percent 10 --min-pass-count 10 --max-pass-count 300 --passed-output path\to\extended_watchlist.python_scan_passed.json --deferred-output path\to\extended_watchlist.python_scan_deferred.json --scanned-output path\to\extended_watchlist.python_scan_scanned.json --passed-jsonl-output path\to\extended_watchlist.python_scan_passed.jsonl --deferred-jsonl-output path\to\extended_watchlist.python_scan_deferred.jsonl --scanned-jsonl-output path\to\extended_watchlist.python_scan_scanned.jsonl --summary-output path\to\extended_watchlist.python_scan_summary.json --markdown-output path\to\extended_watchlist.python_scan_report.md
 ```
 
 Use the markdown scan report as the quick human review artifact after overnight
@@ -200,9 +200,13 @@ python scripts/longterm_extended_universe_first_pass.py --source-url https://www
 
 The combined workflow writes `extended_watchlist_ideas.json`,
 `python_scan_passed.json`, `python_scan_deferred.json`,
-`python_scan_report.md`, and `extended_universe_first_pass_summary.json` in the
-chosen output directory. Increase `--fetch-limit` over repeated runs, or remove
-it for a deliberate long run once you are ready to fill the entire cache.
+`python_scan_scanned.json`, matching `.jsonl` sidecars for the passed/deferred/
+scanned per-symbol records, `python_scan_report.md`, and
+`extended_universe_first_pass_summary.json` in the chosen output directory.
+Use JSON as the canonical nested artifact for downstream scripts, and JSONL for
+large-universe inspection, streaming, diffs, and resume/debug tooling. Increase
+`--fetch-limit` over repeated runs, or remove it for a deliberate long run once
+you are ready to fill the entire cache.
 
 Then run the evidence pipeline on the Python-scan survivors before committee
 research:

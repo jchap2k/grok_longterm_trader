@@ -14,7 +14,7 @@ from longterm.extended_universe_scan import (
     fetch_yfinance_fundamental_metrics,
     run_python_first_pass_scan,
 )
-from longterm.extended_universe_scan_cli import _load_optional_symbol_cache, _write_json, _write_text
+from longterm.extended_universe_scan_cli import _load_optional_symbol_cache, _write_json, _write_jsonl, _write_text
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -81,6 +81,9 @@ def run_cli(args: argparse.Namespace, *, fetch_metrics=fetch_yfinance_fundamenta
     _write_json(artifacts["passed"], scan.passed_ideas)
     _write_json(artifacts["deferred"], scan.deferred_ideas)
     _write_json(artifacts["scanned"], scan.scanned_ideas)
+    _write_jsonl(artifacts["passed_jsonl"], scan.passed_ideas)
+    _write_jsonl(artifacts["deferred_jsonl"], scan.deferred_ideas)
+    _write_jsonl(artifacts["scanned_jsonl"], scan.scanned_ideas)
     scan_summary = dict(scan.summary)
     scan_summary.update(cache_stats)
     scan_summary.update(_remaining_fetch_work(scan_summary, args.fetch_limit))
@@ -89,6 +92,9 @@ def run_cli(args: argparse.Namespace, *, fetch_metrics=fetch_yfinance_fundamenta
     scan_summary["passed_output"] = str(artifacts["passed"])
     scan_summary["deferred_output"] = str(artifacts["deferred"])
     scan_summary["scanned_output"] = str(artifacts["scanned"])
+    scan_summary["passed_jsonl_output"] = str(artifacts["passed_jsonl"])
+    scan_summary["deferred_jsonl_output"] = str(artifacts["deferred_jsonl"])
+    scan_summary["scanned_jsonl_output"] = str(artifacts["scanned_jsonl"])
     scan_summary["markdown_output"] = str(artifacts["markdown_report"])
     _write_json(artifacts["scan_summary"], scan_summary)
     _write_text(
@@ -120,6 +126,9 @@ def _artifact_paths(output_dir: Path) -> dict[str, Path]:
         "passed": output_dir / "python_scan_passed.json",
         "deferred": output_dir / "python_scan_deferred.json",
         "scanned": output_dir / "python_scan_scanned.json",
+        "passed_jsonl": output_dir / "python_scan_passed.jsonl",
+        "deferred_jsonl": output_dir / "python_scan_deferred.jsonl",
+        "scanned_jsonl": output_dir / "python_scan_scanned.jsonl",
         "scan_summary": output_dir / "python_scan_summary.json",
         "markdown_report": output_dir / "python_scan_report.md",
         "workflow_summary": output_dir / "extended_universe_first_pass_summary.json",
