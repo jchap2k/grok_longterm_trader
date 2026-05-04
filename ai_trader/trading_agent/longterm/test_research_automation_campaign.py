@@ -130,6 +130,104 @@ def test_research_automation_campaign_reaches_evidence_ready_with_skip_grok(tmp_
     assert [idea["symbol"] for idea in enriched] == ["AAA", "BBB", "CCC"]
 
 
+def test_research_automation_campaign_forwards_evidence_campaign_pause(tmp_path, monkeypatch, capsys):
+    import longterm.research_automation_campaign_cli as cli
+
+    campaign_dir = tmp_path / "campaign"
+
+    def fake_loader(url, *, source):
+        return [
+            {"symbol": "AAA", "company_name": "AAA Corp", "source": source},
+            {"symbol": "BBB", "company_name": "BBB Corp", "source": source},
+        ]
+
+    monkeypatch.setattr(cli, "load_candidate_source_url", fake_loader)
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--source-url",
+                "https://example.test/nasdaq.txt",
+                "--source",
+                "nasdaq_listed",
+                "--campaign-dir",
+                str(campaign_dir),
+                "--watchlist-limit",
+                "2",
+                "--run-until",
+                "evidence_ready",
+                "--max-fundamental-fetches",
+                "2",
+                "--evidence-batch-size",
+                "2",
+                "--campaign-batch-pause-seconds",
+                "69",
+                "--skip-grok",
+            ]
+        ),
+        fetch_metrics=_metrics,
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert printed["stage"] == "evidence_ready"
+    assert printed["evidence"]["campaign_batch_pause_seconds"] == 69.0
+
+
+def test_research_automation_campaign_reaches_research_queue_ready(tmp_path, monkeypatch, capsys):
+    import longterm.research_automation_campaign_cli as cli
+
+    campaign_dir = tmp_path / "campaign"
+
+    def fake_loader(url, *, source):
+        return [
+            {"symbol": "AAA", "company_name": "AAA Corp", "source": source},
+            {"symbol": "BBB", "company_name": "BBB Corp", "source": source},
+            {"symbol": "CCC", "company_name": "CCC Corp", "source": source},
+        ]
+
+    monkeypatch.setattr(cli, "load_candidate_source_url", fake_loader)
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--source-url",
+                "https://example.test/nasdaq.txt",
+                "--source",
+                "nasdaq_listed",
+                "--campaign-dir",
+                str(campaign_dir),
+                "--watchlist-limit",
+                "3",
+                "--run-until",
+                "research_queue_ready",
+                "--max-fundamental-fetches",
+                "3",
+                "--evidence-batch-size",
+                "3",
+                "--selection-top-percent",
+                "50",
+                "--selection-min-count",
+                "1",
+                "--selection-max-count",
+                "2",
+                "--skip-grok",
+            ]
+        ),
+        fetch_metrics=_metrics,
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    selected = json.loads(
+        (campaign_dir / "research_selection" / "research_queue_selected.json").read_text(encoding="utf-8")
+    )
+    assert code == 0
+    assert printed["stage"] == "research_queue_ready"
+    assert printed["research_selection"]["selected_count"] == 2
+    assert len(selected) == 2
+    assert selected[0]["research_selection"]["research_selection_id"].startswith("rs-")
+
+
 def test_research_automation_campaign_resume_continues_partial_scan(tmp_path, monkeypatch, capsys):
     import longterm.research_automation_campaign_cli as cli
 

@@ -200,19 +200,38 @@ python scripts/longterm_extended_universe_first_pass.py --source-url https://www
 
 For unattended overnight-style work, use the research automation campaign
 wrapper. It advances a campaign folder through universe preparation,
-fundamentals cache fill, Python first-pass ranking, and optionally the
-skip-Grok evidence campaign. It writes `campaign_state.json` plus append-only
-`campaign_events.jsonl` so the command can be resumed safely.
+fundamentals cache fill, Python first-pass ranking, optional skip-Grok evidence
+campaigning, and a deterministic committee research queue. It writes
+`campaign_state.json` plus append-only `campaign_events.jsonl` so the command
+can be resumed safely.
 
 ```powershell
 python scripts/longterm_research_automation_campaign.py --source-url https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt --source nasdaq_listed --campaign-dir path\to\research_campaign --watchlist-limit 3042 --run-until scan_ready --max-fundamental-fetches 500 --fundamental-fetch-chunk-size 500
-python scripts/longterm_research_automation_campaign.py --source-url https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt --source nasdaq_listed --campaign-dir path\to\research_campaign --resume --run-until evidence_ready --max-fundamental-fetches 500 --polygon-news --skip-grok --evidence-batch-size 25 --max-evidence-batches 2
+python scripts/longterm_research_automation_campaign.py --source-url https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt --source nasdaq_listed --campaign-dir path\to\research_campaign --resume --run-until evidence_ready --max-fundamental-fetches 500 --polygon-news --skip-grok --evidence-batch-size 25 --max-evidence-batches 2 --rate-limit-batch-size 5 --rate-limit-pause-seconds 69 --campaign-batch-pause-seconds 69
+python scripts/longterm_research_automation_campaign.py --source-url https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt --source nasdaq_listed --campaign-dir path\to\research_campaign --resume --run-until research_queue_ready --max-fundamental-fetches 500 --polygon-news --skip-grok --evidence-batch-size 25 --selection-top-percent 20 --selection-min-count 10 --selection-max-count 50 --rate-limit-batch-size 5 --rate-limit-pause-seconds 69 --campaign-batch-pause-seconds 69
 ```
 
 Default behavior is dry-run and research-only. The automation command does not
 submit paper or live orders. Grok remains explicit via `--xai-grok`; if neither
 `--xai-grok` nor `--skip-grok` is supplied, the automation uses skip-Grok
 evidence enrichment as the safer default.
+
+When the campaign reaches `research_queue_ready`, the selected committee queue
+is written under `research_selection\`:
+
+- `research_queue_selected.json` / `.jsonl`: the evidence-rich idea batch for
+  CGH committee research.
+- `research_queue_deferred.json` / `.jsonl`: scored names below the selected
+  relative slice.
+- `research_queue_summary.json`: formula version, counts, selected output path,
+  and protected-symbol skip information.
+- `research_queue_report.md`: human-readable top queue and defer reasons.
+
+The selection stage is Python-only and relative. It uses the deterministic
+quality-growth scorecard, valuation/safety discipline, article evidence,
+earnings context, evidence-brief completeness, and warning penalties. It does
+not place trades, does not write the decision journal, and hard-skips protected
+symbols such as `FXAIX`.
 
 The combined workflow writes `extended_watchlist_ideas.json`,
 `python_scan_passed.json`, `python_scan_deferred.json`,
@@ -243,6 +262,13 @@ one-minute request window.
 ```powershell
 python scripts/longterm_evidence_enrichment_campaign.py --idea-batch path\to\extended_watchlist.python_scan_passed.json --fundamentals-provider yfinance --polygon-news --news-cache-path path\to\polygon_news_cache.json --skip-grok --batch-size 25 --max-batches 1 --rate-limit-batch-size 5 --rate-limit-pause-seconds 69 --campaign-batch-pause-seconds 69 --output-dir path\to\evidence_campaign
 python scripts/longterm_evidence_enrichment_campaign.py --idea-batch path\to\extended_watchlist.python_scan_passed.json --fundamentals-provider yfinance --polygon-news --news-cache-path path\to\polygon_news_cache.json --xai-grok --batch-size 25 --resume --rate-limit-batch-size 5 --rate-limit-pause-seconds 69 --campaign-batch-pause-seconds 69 --output-dir path\to\evidence_campaign
+```
+
+To select a committee queue from an already completed evidence campaign without
+rerunning earlier stages:
+
+```powershell
+python scripts/longterm_research_selection.py --evidence-file path\to\evidence_campaign\campaign_enriched.json --output-dir path\to\research_selection --campaign-id extended_universe_YYYYMMDD --top-percent 20 --min-count 10 --max-count 50
 ```
 
 Optionally enrich those source rows from a local JSON/CSV metrics cache before

@@ -34,7 +34,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--source", required=True)
     parser.add_argument("--campaign-dir", required=True)
     parser.add_argument("--resume", action="store_true")
-    parser.add_argument("--run-until", choices=["scan_ready", "evidence_ready"], default="scan_ready")
+    parser.add_argument(
+        "--run-until",
+        choices=["scan_ready", "evidence_ready", "research_queue_ready"],
+        default="scan_ready",
+    )
     parser.add_argument("--watchlist-limit", type=int, default=100)
     parser.add_argument("--universe-batch-size", type=int, default=50)
     parser.add_argument("--top-percent", type=float, default=10.0)
@@ -45,10 +49,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fundamental-fetch-chunk-size", type=int, default=500)
     parser.add_argument("--evidence-batch-size", type=int, default=25)
     parser.add_argument("--max-evidence-batches", type=int, default=None)
+    parser.add_argument("--rate-limit-batch-size", type=int, default=5)
+    parser.add_argument("--rate-limit-pause-seconds", type=float, default=66.0)
+    parser.add_argument("--campaign-batch-pause-seconds", type=float, default=0.0)
     parser.add_argument("--polygon-news", action="store_true")
     parser.add_argument("--news-cache-path", default="")
     parser.add_argument("--skip-grok", action="store_true")
     parser.add_argument("--xai-grok", action="store_true")
+    parser.add_argument("--selection-top-percent", type=float, default=20.0)
+    parser.add_argument("--selection-min-count", type=int, default=10)
+    parser.add_argument("--selection-max-count", type=int, default=50)
+    parser.add_argument("--portfolio-state", default="")
+    parser.add_argument("--recent-research-symbols-file", default="")
     parser.add_argument("--as-of-date", default="")
     return parser
 
@@ -66,8 +78,11 @@ def run_cli(args: argparse.Namespace, *, fetch_metrics=fetch_yfinance_fundamenta
 
     _run_scan_stage(args, campaign_dir, state, fetch_metrics=fetch_metrics)
 
-    if args.run_until == "evidence_ready" and state.get("stage") == "scan_ready":
+    if args.run_until in {"evidence_ready", "research_queue_ready"} and state.get("stage") == "scan_ready":
         _run_evidence_stage(args, campaign_dir, state)
+
+    if args.run_until == "research_queue_ready" and state.get("stage") == "evidence_ready":
+        _run_selection_stage(args, campaign_dir, state)
 
     _write_state(campaign_dir, state)
     print(json.dumps(state, indent=2, sort_keys=True))
@@ -192,6 +207,12 @@ def _run_evidence_stage(args: argparse.Namespace, campaign_dir: Path, state: dic
         "--output-dir",
         str(evidence_dir),
         "--resume",
+        "--rate-limit-batch-size",
+        str(args.rate_limit_batch_size),
+        "--rate-limit-pause-seconds",
+        str(args.rate_limit_pause_seconds),
+        "--campaign-batch-pause-seconds",
+        str(args.campaign_batch_pause_seconds),
     ]
     if args.max_evidence_batches is not None:
         evidence_args.extend(["--max-batches", str(args.max_evidence_batches)])
@@ -216,6 +237,44 @@ def _run_evidence_stage(args: argparse.Namespace, campaign_dir: Path, state: dic
         state["stage"] = "evidence_in_progress"
     _write_state(campaign_dir, state)
     _record_event(campaign_dir, "evidence_campaign_advanced", summary)
+
+
+def _run_selection_stage(args: argparse.Namespace, campaign_dir: Path, state: dict[str, Any]) -> None:
+    selection_dir = campaign_dir / "research_selection"
+    selection_args = [
+        "--evidence-file",
+        str(campaign_dir / "evidence_campaign" / "campaign_enriched.json"),
+        "--output-dir",
+        str(selection_dir),
+        "--campaign-id",
+        str(campaign_dir.name),
+        "--top-percent",
+        str(args.selection_top_percent),
+        "--min-count",
+        str(args.selection_min_count),
+        "--max-count",
+        str(args.selection_max_count),
+    ]
+    if args.portfolio_state:
+        selection_args.extend(["--portfolio-state", args.portfolio_state])
+    if args.recent_research_symbols_file:
+        selection_args.extend(["--recent-research-symbols-file", args.recent_research_symbols_file])
+
+    from longterm.research_selection_cli import build_parser as build_selection_parser
+    from longterm.research_selection_cli import run_cli as run_selection_cli
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        run_selection_cli(build_selection_parser().parse_args(selection_args))
+    summary = _load_json(selection_dir / "research_queue_summary.json")
+    state["research_selection"] = summary
+    if int(summary.get("selected_count") or 0) > 0:
+        state["stage"] = "research_queue_ready"
+        event_type = "research_queue_selected"
+    else:
+        state["stage"] = "research_queue_empty"
+        event_type = "research_queue_empty"
+    _write_state(campaign_dir, state)
+    _record_event(campaign_dir, event_type, summary)
 
 
 def _write_scan_outputs(campaign_dir: Path, result) -> None:
