@@ -198,6 +198,22 @@ fill, Python first-pass scan, and markdown reporting into one artifact folder:
 python scripts/longterm_extended_universe_first_pass.py --source-url https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt --source nasdaq_listed --watchlist-limit 100 --batch-size 10 --provider yfinance --fundamentals-cache path\to\extended_fundamentals_cache.json --fetch-limit 25 --top-percent 10 --min-pass-count 5 --max-pass-count 20 --min-coverage-percent-for-enrichment 80 --output-dir path\to\extended_universe_first_pass
 ```
 
+For unattended overnight-style work, use the research automation campaign
+wrapper. It advances a campaign folder through universe preparation,
+fundamentals cache fill, Python first-pass ranking, and optionally the
+skip-Grok evidence campaign. It writes `campaign_state.json` plus append-only
+`campaign_events.jsonl` so the command can be resumed safely.
+
+```powershell
+python scripts/longterm_research_automation_campaign.py --source-url https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt --source nasdaq_listed --campaign-dir path\to\research_campaign --watchlist-limit 3042 --run-until scan_ready --max-fundamental-fetches 500 --fundamental-fetch-chunk-size 500
+python scripts/longterm_research_automation_campaign.py --source-url https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt --source nasdaq_listed --campaign-dir path\to\research_campaign --resume --run-until evidence_ready --max-fundamental-fetches 500 --polygon-news --skip-grok --evidence-batch-size 25 --max-evidence-batches 2
+```
+
+Default behavior is dry-run and research-only. The automation command does not
+submit paper or live orders. Grok remains explicit via `--xai-grok`; if neither
+`--xai-grok` nor `--skip-grok` is supplied, the automation uses skip-Grok
+evidence enrichment as the safer default.
+
 The combined workflow writes `extended_watchlist_ideas.json`,
 `python_scan_passed.json`, `python_scan_deferred.json`,
 `python_scan_scanned.json`, matching `.jsonl` sidecars for the passed/deferred/
