@@ -338,6 +338,18 @@ Combines paper account cleanliness, broker capability compatibility, optional sc
 `longterm/paper_runbook.py`
 Generates an ordered, read-only Monday paper-trading runbook with expected artifact paths and commands for snapshot, workflow smoke, readiness, runbook check, Monday operator check, supervised submit, status refresh, manual cleanup reminder, paper-trading verification, live-readiness evidence, and final operator status bundle output. It can propagate a shared paper profile config into generated commands and can save the runbook JSON with `--report-output` so later artifact checks can verify submit-command redaction. The supervised submit command is redacted by default and is only printed when the operator explicitly requests `--include-submit-command`. It does not call brokers or submit orders.
 
+`longterm/research_to_paper_pipeline.py`
+Provides the scheduler-ready no-submit command seam from a saved account action
+plan to paper-readiness artifacts. It composes existing scripts instead of
+reimplementing research, benchmark, review, promotion, or paper safety logic:
+Stage 6B action-plan filtering, whole-share preview, workflow smoke,
+paper-smoke readiness, redacted runbook generation, runbook check, Monday
+operator check, status refresh, lifecycle, paper-trading verification,
+live-readiness bundle, and final operator status bundle. It validates the active
+rules file, logs every command, writes `pipeline_summary.json`, keeps
+`order_submission_enabled=false`, and rejects any planned stage containing
+`--submit-paper-orders`. It is artifact orchestration only, not trade authority.
+
 `longterm/paper_runbook_check.py`
 Reads saved workflow-smoke and paper-smoke-readiness artifacts and verifies they are ready before the operator runs the supervised submit command. It emits a generated timestamp, workflow plan ID, canonical action-plan hash, and buy-promotion summary so the submit CLI can reject missing, stale, mismatched, malformed, not-ready, or pre-promotion-aware evidence before refreshing broker state. It is read-only and does not call brokers or mutate ledgers.
 

@@ -667,6 +667,24 @@ and supervised-submit commands reuse the same paper profile. After any future
 supervised paper buy is observed, the runbook includes a manual cleanup reminder
 to sell or cancel the temporary paper position in Alpaca before the next run.
 
+Build the no-submit research-to-paper preflight pipeline from a saved account
+action plan:
+
+```powershell
+python scripts/longterm_research_to_paper_pipeline.py --output-dir path\to\pipeline_artifacts --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --price-map path\to\price_map.json --skip-price-map --print-plan-only --json
+python scripts/longterm_research_to_paper_pipeline.py --output-dir path\to\pipeline_artifacts --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --price-map path\to\price_map.json --skip-price-map --expected-cash 74000 --summary-output path\to\pipeline_artifacts\pipeline_summary.json --json
+```
+
+The pipeline wrapper is the scheduler-ready command seam. It composes existing
+scripts rather than reimplementing research, benchmark, review, promotion, or
+paper safety logic. V1 starts from a saved account action plan, filters it
+through `longterm_action_plan_filter.py`, builds whole-share paper preview and
+readiness artifacts, generates a redacted runbook, checks the saved runbook
+artifacts, and writes one `pipeline_summary.json`. It never executes or prints a
+submit command and rejects any planned stage containing `--submit-paper-orders`.
+Use `--print-plan-only` when wiring a scheduler or reviewing the exact command
+order without executing any stage.
+
 Check saved pre-submit runbook artifacts:
 
 ```powershell
