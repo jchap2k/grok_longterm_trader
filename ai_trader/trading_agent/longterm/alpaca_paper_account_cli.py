@@ -66,6 +66,11 @@ def _write_portfolio_state(path: str | Path, state: PortfolioState) -> None:
                 "symbol": holding.symbol,
                 "market_value": holding.market_value,
                 "quantity": holding.quantity,
+                "current_price": holding.current_price,
+                "avg_entry_price": holding.avg_entry_price,
+                "original_purchase_total_cost": holding.original_purchase_total_cost,
+                "unrealized_pnl": holding.unrealized_pnl,
+                "unrealized_pnl_percent": holding.unrealized_pnl_percent,
             }
             for holding in state.holdings
         ],

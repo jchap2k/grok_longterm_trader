@@ -175,3 +175,42 @@ def test_evidence_enrichment_pipeline_cli_writes_enriched_batch_from_snapshots(t
     assert "research_evidence_brief_v1 | AMZN" in payload[0]["evidence_brief"]
     assert summary["output"] == str(output)
     assert printed["summary_output"] == str(summary_output)
+
+
+def test_evidence_enrichment_pipeline_cli_exposes_perplexity_research_mode():
+    args = build_parser().parse_args(
+        [
+            "--idea-batch",
+            "ideas.json",
+            "--perplexity-research",
+            "--output",
+            "enriched.json",
+        ]
+    )
+
+    assert args.perplexity_research is True
+    assert args.perplexity_model == "sonar"
+    assert args.grok_model == "grok-4.3"
+    assert args.perplexity_credits_purchased_to_date is None
+
+
+def test_evidence_enrichment_pipeline_summary_includes_research_model_usage():
+    class FakeUsageClient(FakeGrokResearchClient):
+        def usage_summary(self):
+            return {
+                "provider": "perplexity",
+                "estimated_total_cost_usd": 0.42,
+                "estimated_remaining_to_tier_1_usd": 37.58,
+            }
+
+    result = run_evidence_enrichment_pipeline(
+        [_idea()],
+        fundamentals_by_symbol=_fundamentals(),
+        news_provider=FakeNewsProvider(_articles()),
+        grok_client=FakeUsageClient(_grok_snapshot()),
+        as_of_date="2026-05-02",
+    )
+
+    usage = result["summary"]["research_model_usage"]
+    assert usage["provider"] == "perplexity"
+    assert usage["estimated_total_cost_usd"] == 0.42

@@ -64,6 +64,47 @@ def test_price_map_fetches_buy_and_rebalance_symbols_without_protected_symbols()
     assert "NVDA" in build_price_map_markdown(result)
 
 
+def test_price_map_fetches_stage6b_approved_parking_symbols_across_regimes():
+    plan = {
+        "intents": [
+            {
+                "symbol": "SPY",
+                "intent_type": "PARK_IDLE_CASH",
+                "order_intent": "BUY",
+                "allowed": True,
+                "parking_execution": True,
+            },
+            {
+                "symbol": "SGOV",
+                "intent_type": "PARK_DEFENSIVE_CASH",
+                "order_intent": "BUY",
+                "allowed": True,
+                "parking_execution": True,
+            },
+            {
+                "symbol": "TLT",
+                "intent_type": "PARK_DEFENSIVE_CASH",
+                "order_intent": "BUY",
+                "allowed": True,
+                "parking_execution": True,
+            },
+            {
+                "symbol": "BIL",
+                "intent_type": "PARK_DEFENSIVE_CASH",
+                "order_intent": "BUY",
+                "allowed": True,
+            },
+        ]
+    }
+    provider = FakeQuoteProvider({"SPY": 512.34, "SGOV": 100.5, "TLT": 88.75})
+
+    result = build_price_map_from_action_plan(plan, quote_provider=provider).to_dict()
+
+    assert provider.calls == ["SPY", "SGOV", "TLT"]
+    assert result["price_map"] == {"SGOV": 100.5, "SPY": 512.34, "TLT": 88.75}
+    assert result["missing_symbols"] == []
+
+
 def test_price_map_records_missing_symbols_when_quote_fails_or_is_zero():
     plan = {
         "intents": [

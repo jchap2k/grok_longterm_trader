@@ -26,6 +26,7 @@ class MotleyFoolDashboardRow:
     service: str = ""
     price: str = ""
     discussion_count: int | None = None
+    recommendation_count: int | None = None
     company_url: str = ""
     exchange: str = ""
 
@@ -44,6 +45,7 @@ class MotleyFoolCandidate:
     rank: int | None = None
     price: str = ""
     discussion_count: int | None = None
+    recommendation_count: int | None = None
     company_url: str = ""
     exchange: str = ""
     source_tables: list[str] = field(default_factory=list)
@@ -56,10 +58,13 @@ def normalize_motley_fool_dashboard(
 ) -> list[MotleyFoolCandidate]:
     """Merge dashboard rows by symbol while preserving source-table provenance."""
     by_symbol: dict[str, MotleyFoolCandidate] = {}
+    service_row_counts: dict[str, int] = {}
     for row in [*new_recommendations, *rankings]:
         candidate = by_symbol.setdefault(row.symbol, MotleyFoolCandidate(symbol=row.symbol))
         if row.source_table not in candidate.source_tables:
             candidate.source_tables.append(row.source_table)
+        if row.source_table == "stock_advisor_service":
+            service_row_counts[row.symbol] = service_row_counts.get(row.symbol, 0) + 1
         candidate.company = candidate.company or row.company
         candidate.action = candidate.action or row.action
         candidate.rec_date = candidate.rec_date or row.rec_date
@@ -74,6 +79,12 @@ def normalize_motley_fool_dashboard(
             if candidate.discussion_count is not None
             else row.discussion_count
         )
+        candidate.recommendation_count = _max_present(candidate.recommendation_count, row.recommendation_count)
+
+    for symbol, count in service_row_counts.items():
+        if count > 1:
+            candidate = by_symbol[symbol]
+            candidate.recommendation_count = _max_present(candidate.recommendation_count, count)
 
     return sorted(
         by_symbol.values(),
@@ -103,8 +114,17 @@ def motley_rows_to_ideas(candidates: list[MotleyFoolCandidate]) -> list[dict]:
             notes.append(f"Reported price: {candidate.price}.")
         if candidate.discussion_count is not None:
             notes.append(f"Discussion count: {candidate.discussion_count}.")
+        if candidate.recommendation_count is not None:
+            notes.append(f"Times recommended by source: {candidate.recommendation_count}.")
         if candidate.company_url:
             notes.append(f"Motley Fool company URL: {candidate.company_url}.")
+        fresh_recommendation = bool(
+            candidate.action
+            and candidate.rec_date
+            and "new_recommendations" in candidate.source_tables
+        )
+        if fresh_recommendation:
+            notes.append("Fresh Motley Fool recommendation; prioritize research close to rec date.")
 
         idea = {
             "symbol": candidate.symbol,
@@ -112,6 +132,12 @@ def motley_rows_to_ideas(candidates: list[MotleyFoolCandidate]) -> list[dict]:
             "idea_source": "motley_fool_dashboard",
             "source_notes": notes,
         }
+        if candidate.recommendation_count is not None:
+            idea["source_recommendation_count"] = candidate.recommendation_count
+        if fresh_recommendation:
+            idea["source_fresh_recommendation"] = True
+            idea["source_priority_reason"] = "fresh_motley_fool_recommendation"
+            idea["source_priority_boost"] = 10.0
         if candidate.company_url:
             idea["motley_fool_company_url"] = candidate.company_url
             idea["source_url"] = candidate.company_url
@@ -141,6 +167,8 @@ def motley_table_payloads_to_ideas(source_key: str, table_payloads: list[dict[st
     for idea in ideas:
         idea["idea_source"] = idea_source
         idea["source_notes"].insert(1, f"Motley Fool source: {source.label}.")
+        if source_key == "stock_advisor_service":
+            idea["source_notes"].append(_stock_advisor_performance_note())
     return ideas
 
 
@@ -156,6 +184,11 @@ def default_motley_fool_sources() -> dict[str, MotleyFoolSource]:
             key="new_recommendations",
             label="New recommendations",
             url="https://www.fool.com/premium/new-recs",
+        ),
+        "stock_advisor_service": MotleyFoolSource(
+            key="stock_advisor_service",
+            label="Stock Advisor service list",
+            url="https://www.fool.com/premium/my-services/stock-advisor",
         ),
         "analyst_rankings": MotleyFoolSource(
             key="analyst_rankings",
@@ -205,13 +238,14 @@ def rows_from_table_payloads(
                         risk_type=by_header.get("type", ""),
                         service=by_header.get("service", ""),
                         discussion_count=_parse_int(row[-1] if row else None),
+                        recommendation_count=1,
                         company_url=company_url,
                         exchange=_exchange_from_company_url(company_url),
                     )
                 )
             continue
 
-        if {"#", "symbol", "price"}.issubset(set(headers)):
+        if {"#", "symbol"}.issubset(set(headers)):
             for row_index, row in enumerate(rows):
                 by_header = _row_by_header(headers, row)
                 symbol = by_header.get("symbol", "")
@@ -231,9 +265,8 @@ def rows_from_table_payloads(
                         company=by_header.get("company", ""),
                         price=by_header.get("price", ""),
                         risk_type=by_header.get("type", ""),
-                        discussion_count=_parse_int(
-                            by_header.get("times rec'd") or (row[-1] if row else None)
-                        ),
+                        recommendation_count=_parse_int(by_header.get("times rec'd")),
+                        discussion_count=_parse_int(by_header.get("discussions") or by_header.get("discussion count")),
                         company_url=company_url,
                         exchange=_exchange_from_company_url(company_url),
                     )
@@ -258,6 +291,11 @@ def _parse_int(value: Any) -> int | None:
     text = _clean_text(value).replace("+", "").replace(".", "")
     digits = "".join(char for char in text if char.isdigit())
     return int(digits) if digits else None
+
+
+def _max_present(first: int | None, second: int | None) -> int | None:
+    values = [value for value in (first, second) if value is not None]
+    return max(values) if values else None
 
 
 def _company_url_from_row(
@@ -310,3 +348,11 @@ def _clean_symbol(value: Any) -> str:
 
 def _clean_text(value: Any) -> str:
     return str(value or "").replace("\u200c", "").strip()
+
+
+def _stock_advisor_performance_note() -> str:
+    return (
+        "Stock Advisor service performance reference: +963.47% vs S&P 500 "
+        "+202.00% as of 2026-05-04, since March 2002 inception; display-only "
+        "source context, not trade authorization."
+    )

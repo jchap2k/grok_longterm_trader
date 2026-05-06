@@ -9,8 +9,8 @@ Cost savings: Grok models are ~10x cheaper than Claude while maintaining
 strong reasoning capabilities.
 
 Models used:
-- grok-4-1-fast-reasoning: Strategic decisions (replaces Sonnet)
-- grok-4-1-fast-non-reasoning: Data operations (replaces Haiku)
+- grok-4.3: Strategic decisions (replaces Sonnet)
+- grok-4.20-non-reasoning: Data operations when Grok is needed
 """
 
 import os
@@ -72,8 +72,8 @@ class GrokTradingAgent(ClaudeTradingAgent):
         Args:
             api_key: xAI API key (or set XAI_API_KEY env var)
             rules_file: Path to XML rules file
-            model: Grok model for strategic decisions (default: grok-4-1-fast-reasoning)
-            data_model: Grok model for data operations (default: grok-4-1-fast-non-reasoning)
+            model: Grok model for strategic decisions (default: grok-4.3)
+            data_model: Grok model for data operations (default: grok-4.20-non-reasoning)
             max_tokens: Maximum tokens per response
             temperature: Sampling temperature (0-1)
             broker: Trading broker instance

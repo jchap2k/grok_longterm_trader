@@ -116,6 +116,31 @@ def test_portfolio_profile_normalizes_benchmark_protection_and_tradable_capital(
     assert payload["protected_capital"] == pytest.approx(34000.0)
 
 
+def test_portfolio_profile_exposes_tax_mode_and_approved_parking_symbols():
+    roth = PortfolioProfile(
+        account_strategy_mode="roth_ira",
+        protected_symbols=["fxaix"],
+        benchmark_symbol="fxaix",
+        defensive_parking_symbol="spy",
+        low_risk_parking_symbol="sgov",
+        duration_hedge_symbol="tlt",
+        cash_symbol="cash",
+    )
+    taxable = PortfolioProfile(
+        account_strategy_mode="taxable",
+        defensive_parking_symbol="spy",
+        low_risk_parking_symbol="sgov",
+        duration_hedge_symbol="tlt",
+    )
+
+    assert roth.is_non_taxable is True
+    assert taxable.is_non_taxable is False
+    assert roth.approved_parking_symbols == ["SPY", "SGOV", "TLT"]
+    assert roth.is_approved_parking_symbol("spy") is True
+    assert roth.is_approved_parking_symbol("fxaix") is False
+    assert roth.is_approved_parking_symbol("cash") is False
+
+
 def test_defensive_policy_prefers_cash_in_extreme_vix_roth_mode():
     action = evaluate_defensive_posture(
         account_strategy_mode="roth_ira",

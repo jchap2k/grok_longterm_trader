@@ -292,30 +292,59 @@ def _deferred_research_queue_lines(deferred_research_queue: list[Mapping[str, An
 
 def _account_action_plan_lines(account_action_plan: Mapping[str, Any]) -> list[str]:
     intents = account_action_plan.get("intents") or []
-    if not isinstance(intents, list) or not intents:
+    suppressed_reasons = _account_action_suppressed_reasons(account_action_plan)
+    if (not isinstance(intents, list) or not intents) and not suppressed_reasons:
         return []
-    lines = [
-        "",
-        "## Account Action Plan Intents",
-        "",
-        "| Symbol | Intent | Order | Trade Value | Allowed | Reason |",
-        "|---|---|---|---:|---|---|",
-    ]
-    for intent in intents:
-        if not isinstance(intent, Mapping):
-            continue
-        trade_value = _format_currency(intent.get("trade_value"))
-        allowed = "yes" if bool(intent.get("allowed")) else "no"
-        lines.append(
-            "| "
-            f"{_markdown_cell(str(intent.get('symbol') or ''))} | "
-            f"{_markdown_cell(str(intent.get('intent_type') or ''))} | "
-            f"{_markdown_cell(str(intent.get('order_intent') or ''))} | "
-            f"{trade_value} | "
-            f"{allowed} | "
-            f"{_markdown_cell(str(intent.get('reason') or ''))} |"
+    lines: list[str] = []
+    if isinstance(intents, list) and intents:
+        lines.extend(
+            [
+                "",
+                "## Account Action Plan Intents",
+                "",
+                "| Symbol | Intent | Order | Trade Value | Allowed | Reason |",
+                "|---|---|---|---:|---|---|",
+            ]
         )
+        for intent in intents:
+            if not isinstance(intent, Mapping):
+                continue
+            trade_value = _format_currency(intent.get("trade_value"))
+            allowed = "yes" if bool(intent.get("allowed")) else "no"
+            lines.append(
+                "| "
+                f"{_markdown_cell(str(intent.get('symbol') or ''))} | "
+                f"{_markdown_cell(str(intent.get('intent_type') or ''))} | "
+                f"{_markdown_cell(str(intent.get('order_intent') or ''))} | "
+                f"{trade_value} | "
+                f"{allowed} | "
+                f"{_markdown_cell(str(intent.get('reason') or ''))} |"
+            )
+    if suppressed_reasons:
+        lines.extend(
+            [
+                "",
+                "## Account Action Plan Suppressions",
+                "",
+                "| Suppression | Code |",
+                "|---|---|",
+            ]
+        )
+        for reason in suppressed_reasons:
+            lines.append(f"| {_markdown_cell(_human_label(reason))} | {_markdown_cell(reason)} |")
     return lines
+
+
+def _account_action_suppressed_reasons(account_action_plan: Mapping[str, Any]) -> list[str]:
+    return [
+        str(reason).strip()
+        for reason in (account_action_plan.get("suppressed_reasons") or [])
+        if str(reason).strip()
+    ]
+
+
+def _human_label(value: str) -> str:
+    return str(value or "").replace("_", " ").replace("-", " ").title()
 
 
 def _format_currency(value: Any) -> str:

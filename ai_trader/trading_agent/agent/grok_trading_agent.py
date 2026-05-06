@@ -9,8 +9,8 @@ Cost savings: Grok models are ~10x cheaper than Claude while maintaining
 strong reasoning capabilities.
 
 Models used:
-- grok-beta (or grok-4-1-fast-reasoning): Strategic decisions
-- grok-beta (or grok-4-1-fast-non-reasoning): Data operations
+- grok-4.3: Strategic decisions
+- grok-4.20-non-reasoning: Data operations when Grok is needed
 
 Refactored Architecture:
 - BaseTradingAgent: Shared infrastructure

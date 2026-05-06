@@ -78,3 +78,37 @@ def test_paper_trading_verification_cli_writes_observed_fragment(tmp_path, capsy
 
     assert payload["paper_trading_verified"] is True
     assert observed == {"paper_trading_verified": True}
+
+
+def test_paper_trading_verification_cli_writes_long_observed_output_path(tmp_path, capsys):
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    _event(ledger, status="filled")
+    observed_dir = tmp_path
+    while len(str(observed_dir)) < 225:
+        observed_dir = observed_dir / "scheduler_prerun_snapshot_segment"
+    observed_path = observed_dir / f"paper_trading_observed_{'x' * 48}.json"
+    assert len(str(observed_dir)) < 260
+    assert len(str(observed_path)) > 260
+    args = build_parser().parse_args(
+        [
+            "--ledger-db",
+            str(ledger.db_path),
+            "--observed-output",
+            str(observed_path),
+            "--json",
+        ]
+    )
+
+    assert run_cli(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+    observed = json.loads(_read_text(observed_path))
+
+    assert payload["paper_trading_verified"] is True
+    assert observed == {"paper_trading_verified": True}
+
+
+def _read_text(path):
+    path = Path(path)
+    if sys.platform == "win32":
+        return Path("\\\\?\\" + str(path.resolve())).read_text(encoding="utf-8")
+    return path.read_text(encoding="utf-8")

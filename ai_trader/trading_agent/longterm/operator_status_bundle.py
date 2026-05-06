@@ -26,6 +26,8 @@ def build_operator_status_bundle(
     monday_operator_check: Mapping[str, Any] | None = None,
     live_readiness_bundle: Mapping[str, Any] | None = None,
     status_refresh: Mapping[str, Any] | None = None,
+    scheduler_policy: Mapping[str, Any] | None = None,
+    committee_preset_policy: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble the read-only operator artifacts needed before automation."""
     lifecycle = (
@@ -54,16 +56,26 @@ def build_operator_status_bundle(
     monday_summary = _monday_operator_check_summary(monday_operator_check)
     live_summary = _live_readiness_summary(live_readiness_bundle)
     status_summary = _status_refresh_summary(status_refresh)
+    scheduler_policy_summary = _scheduler_policy_summary(scheduler_policy)
+    committee_preset_summary = _committee_preset_policy_summary(committee_preset_policy)
     return {
         "schema_version": 1,
         "mode": "operator_status_bundle",
         "order_submission_enabled": False,
         "paper_lifecycle": lifecycle,
         "buy_promotion_summary": _buy_promotion_summary(action_plan),
+        "account_action_plan_summary": _account_action_plan_summary(action_plan),
         "monday_operator_check_summary": monday_summary,
         "live_readiness_summary": live_summary,
         "status_refresh_summary": status_summary,
-        "agent_next_step": _agent_next_step(monday_summary, status_summary),
+        "scheduler_policy_summary": scheduler_policy_summary,
+        "committee_preset_policy_summary": committee_preset_summary,
+        "agent_next_step": _agent_next_step(
+            monday_summary,
+            status_summary,
+            scheduler_policy_summary,
+            committee_preset_summary,
+        ),
         "scheduler_readiness": readiness,
         "position_report_markdown": position_report,
         "notes": [
@@ -90,9 +102,12 @@ def build_operator_status_markdown(payload: Mapping[str, Any]) -> str:
         lines.append(f"| {state} | {count} |")
     lines.extend(_agent_next_step_markdown_lines(payload.get("agent_next_step") or {}))
     lines.extend(_buy_promotion_markdown_lines(payload.get("buy_promotion_summary") or {}))
+    lines.extend(_account_action_plan_markdown_lines(payload.get("account_action_plan_summary") or {}))
     lines.extend(_monday_operator_check_markdown_lines(payload.get("monday_operator_check_summary") or {}))
     lines.extend(_live_readiness_markdown_lines(payload.get("live_readiness_summary") or {}))
     lines.extend(_status_refresh_markdown_lines(payload.get("status_refresh_summary") or {}))
+    lines.extend(_scheduler_policy_markdown_lines(payload.get("scheduler_policy_summary") or {}))
+    lines.extend(_committee_preset_policy_markdown_lines(payload.get("committee_preset_policy_summary") or {}))
     lines.extend(["", "## Scheduler Readiness", ""])
     lines.extend(readiness_markdown.splitlines()[2:])
     position_report = str(payload.get("position_report_markdown") or "").strip()
@@ -104,6 +119,8 @@ def build_operator_status_markdown(payload: Mapping[str, Any]) -> str:
 def _agent_next_step(
     monday_summary: Mapping[str, Any],
     status_summary: Mapping[str, Any],
+    scheduler_policy_summary: Mapping[str, Any],
+    committee_preset_summary: Mapping[str, Any],
 ) -> dict[str, Any]:
     blockers = [str(value) for value in (monday_summary.get("blockers") or [])]
     status_errors = int(status_summary.get("error_count") or 0)
@@ -123,6 +140,11 @@ def _agent_next_step(
     elif monday_summary.get("ready_for_review") and not monday_summary.get("submit_command_revealed"):
         state = "ready_to_reveal_submit_command"
         message = "Saved preflight artifacts are reviewable; reveal submit command only for supervised paper BUY testing."
+    elif scheduler_policy_summary.get("available"):
+        recommended_mode = str(scheduler_policy_summary.get("recommended_mode") or "unknown")
+        next_action = str(scheduler_policy_summary.get("next_safe_action") or "unknown")
+        state = f"scheduler_policy_{recommended_mode}"
+        message = f"Scheduler policy recommends {next_action.replace('_', ' ')}."
     else:
         state = "collect_preflight_artifacts"
         message = "Generate workflow smoke, smoke readiness, runbook check, and Monday operator check artifacts."
@@ -132,6 +154,10 @@ def _agent_next_step(
         "blockers": blockers,
         "status_error_count": status_errors,
         "submitted_order_count": submitted_orders,
+        "scheduler_policy_mode": str(scheduler_policy_summary.get("recommended_mode") or ""),
+        "scheduler_policy_urgency": str(scheduler_policy_summary.get("urgency") or ""),
+        "committee_recommended_preset": str(committee_preset_summary.get("recommended_preset") or ""),
+        "committee_escalation_required": bool(committee_preset_summary.get("escalation_required")),
         "order_submission_enabled": False,
     }
 
@@ -220,6 +246,39 @@ def _buy_promotion_markdown_lines(summary: Mapping[str, Any]) -> list[str]:
     return lines
 
 
+def _account_action_plan_summary(action_plan: Mapping[str, Any] | None) -> dict[str, Any]:
+    payload = action_plan or {}
+    intents = [item for item in (payload.get("intents") or []) if isinstance(item, Mapping)]
+    blocked_reasons = _normalized_list(payload.get("blocked_reasons"))
+    suppressed_reasons = _normalized_list(payload.get("suppressed_reasons"))
+    return {
+        "intent_count": len(intents),
+        "blocked_reasons": blocked_reasons,
+        "blocked_count": len(blocked_reasons),
+        "suppressed_reasons": suppressed_reasons,
+        "suppressed_count": len(suppressed_reasons),
+        "order_submission_enabled": False,
+    }
+
+
+def _account_action_plan_markdown_lines(summary: Mapping[str, Any]) -> list[str]:
+    suppressed = [str(reason) for reason in (summary.get("suppressed_reasons") or []) if str(reason).strip()]
+    if not suppressed:
+        return []
+    lines = [
+        "",
+        "## Account Plan Suppressions",
+        "",
+        "These are advisory suppressions, not broker-submit blockers.",
+        "",
+        "| Suppression | Code |",
+        "|---|---|",
+    ]
+    for reason in suppressed:
+        lines.append(f"| {_cell(_human_label(reason))} | {_cell(reason)} |")
+    return lines
+
+
 def _status_refresh_summary(payload: Mapping[str, Any] | None) -> dict[str, Any]:
     if not payload:
         return {}
@@ -254,6 +313,104 @@ def _status_refresh_markdown_lines(summary: Mapping[str, Any]) -> list[str]:
     ]
     for status, count in sorted((summary.get("status_counts") or {}).items()):
         lines.append(f"| {_cell(str(status))} | {int(count or 0)} |")
+    return lines
+
+
+def _scheduler_policy_summary(payload: Mapping[str, Any] | None) -> dict[str, Any]:
+    if not payload:
+        return {
+            "available": False,
+            "recommended_mode": "",
+            "urgency": "",
+            "reasons": [],
+            "warnings": [],
+            "blockers": [],
+            "affected_symbols": [],
+            "next_safe_action": "",
+            "order_submission_enabled": False,
+        }
+    return {
+        "available": True,
+        "mode": str(payload.get("mode") or ""),
+        "recommended_mode": str(payload.get("recommended_mode") or "unknown"),
+        "urgency": str(payload.get("urgency") or "unknown"),
+        "reasons": [str(value) for value in (payload.get("reasons") or [])],
+        "warnings": [str(value) for value in (payload.get("warnings") or [])],
+        "blockers": [str(value) for value in (payload.get("blockers") or [])],
+        "affected_symbols": [str(value).upper() for value in (payload.get("affected_symbols") or [])],
+        "next_safe_action": str(payload.get("next_safe_action") or "unknown"),
+        "order_submission_enabled": False,
+    }
+
+
+def _scheduler_policy_markdown_lines(summary: Mapping[str, Any]) -> list[str]:
+    if not summary or not summary.get("available"):
+        return []
+    lines = [
+        "",
+        "## Scheduler Policy",
+        "",
+        f"- Recommended mode: `{_cell(str(summary.get('recommended_mode') or ''))}`",
+        f"- Urgency: `{_cell(str(summary.get('urgency') or ''))}`",
+        f"- Next safe action: {_cell(str(summary.get('next_safe_action') or ''))}",
+        f"- Order submission enabled: `{str(bool(summary.get('order_submission_enabled'))).lower()}`",
+        f"- Affected symbols: {_cell(', '.join(str(value) for value in (summary.get('affected_symbols') or [])) or 'none')}",
+        "",
+        "### Scheduler Reasons",
+        "",
+    ]
+    reasons = summary.get("reasons") or []
+    lines.extend(f"- {_cell(str(reason))}" for reason in reasons) if reasons else lines.append("- none")
+    warnings = summary.get("warnings") or []
+    lines.extend(["", "### Scheduler Warnings", ""])
+    lines.extend(f"- {_cell(str(warning))}" for warning in warnings) if warnings else lines.append("- none")
+    blockers = summary.get("blockers") or []
+    lines.extend(["", "### Scheduler Blockers", ""])
+    lines.extend(f"- {_cell(str(blocker))}" for blocker in blockers) if blockers else lines.append("- none")
+    return lines
+
+
+def _committee_preset_policy_summary(payload: Mapping[str, Any] | None) -> dict[str, Any]:
+    if not payload:
+        return {
+            "available": False,
+            "recommended_preset": "",
+            "default_preset": "",
+            "escalation_required": False,
+            "escalation_reasons": [],
+            "affected_symbols": [],
+            "order_submission_enabled": False,
+        }
+    return {
+        "available": True,
+        "mode": str(payload.get("mode") or ""),
+        "recommended_preset": str(payload.get("recommended_preset") or "decision_4"),
+        "default_preset": str(payload.get("default_preset") or "decision_4"),
+        "escalation_required": bool(payload.get("escalation_required")),
+        "escalation_reasons": [str(value) for value in (payload.get("escalation_reasons") or [])],
+        "affected_symbols": [str(value).upper() for value in (payload.get("affected_symbols") or [])],
+        "order_submission_enabled": False,
+    }
+
+
+def _committee_preset_policy_markdown_lines(summary: Mapping[str, Any]) -> list[str]:
+    if not summary or not summary.get("available"):
+        return []
+    lines = [
+        "",
+        "## Committee Preset Policy",
+        "",
+        f"- Recommended preset: `{_cell(str(summary.get('recommended_preset') or ''))}`",
+        f"- Default preset: `{_cell(str(summary.get('default_preset') or ''))}`",
+        f"- Escalation required: {_yes_no(summary.get('escalation_required'))}",
+        f"- Order submission enabled: `{str(bool(summary.get('order_submission_enabled'))).lower()}`",
+        f"- Affected symbols: {_cell(', '.join(str(value) for value in (summary.get('affected_symbols') or [])) or 'none')}",
+        "",
+        "### Committee Escalation Reasons",
+        "",
+    ]
+    reasons = summary.get("escalation_reasons") or []
+    lines.extend(f"- {_cell(str(reason))}" for reason in reasons) if reasons else lines.append("- none")
     return lines
 
 
@@ -368,6 +525,16 @@ def _yes_no_unknown(value: Any) -> str:
     if value is None:
         return "unknown"
     return _yes_no(value)
+
+
+def _normalized_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _human_label(value: str) -> str:
+    return str(value or "").replace("_", " ").replace("-", " ").title()
 
 
 def _cell(value: str) -> str:

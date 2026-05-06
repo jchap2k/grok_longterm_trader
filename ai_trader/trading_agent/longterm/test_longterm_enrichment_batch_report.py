@@ -146,22 +146,17 @@ def test_motley_fool_rows_convert_to_investigation_ideas_not_buy_orders():
 
     ideas = motley_rows_to_ideas(candidates)
 
-    assert ideas == [
-        {
-            "symbol": "MOGA",
-            "company_name": "Moog",
-            "idea_source": "motley_fool_dashboard",
-            "source_notes": [
-                "Motley Fool candidate; requires independent long-term research before any action.",
-                "New recommendation action: Buy.",
-                "Recommendation date: 04/16/26.",
-                "Stock Advisor rank: 2.",
-                "Motley Fool type/risk label: C.",
-                "Reported price: $302.02.",
-                "Discussion count: 6.",
-            ],
-        }
-    ]
+    assert ideas[0]["symbol"] == "MOGA"
+    assert ideas[0]["company_name"] == "Moog"
+    assert ideas[0]["idea_source"] == "motley_fool_dashboard"
+    assert "Motley Fool candidate; requires independent long-term research before any action." in ideas[0]["source_notes"]
+    assert "New recommendation action: Buy." in ideas[0]["source_notes"]
+    assert "Recommendation date: 04/16/26." in ideas[0]["source_notes"]
+    assert "Stock Advisor rank: 2." in ideas[0]["source_notes"]
+    assert "Motley Fool type/risk label: C." in ideas[0]["source_notes"]
+    assert "Reported price: $302.02." in ideas[0]["source_notes"]
+    assert "Discussion count: 6." in ideas[0]["source_notes"]
+    assert ideas[0]["source_fresh_recommendation"] is True
 
 
 def test_default_motley_fool_sources_include_dashboard_new_recs_and_rankings():
@@ -169,9 +164,69 @@ def test_default_motley_fool_sources_include_dashboard_new_recs_and_rankings():
 
     assert sources["dashboard"].url == "https://www.fool.com/premium?watchSymbols=NASDAQ%3ACRWD"
     assert sources["new_recommendations"].url == "https://www.fool.com/premium/new-recs"
+    assert sources["stock_advisor_service"].url == "https://www.fool.com/premium/my-services/stock-advisor"
     assert sources["analyst_rankings"].url == "https://www.fool.com/premium/rankings?type=ANALYST"
     assert sources["quant_rankings"].url == "https://www.fool.com/premium/rankings?type=QUANT"
     assert sources["quant_rankings"].label == "AI rankings"
+
+
+def test_stock_advisor_service_ideas_include_display_only_performance_context():
+    ideas = motley_table_payloads_to_ideas(
+        "stock_advisor_service",
+        [
+            {
+                "title": "Stock Advisor Scorecard",
+                "headers": ["#", "Symbol", "Company", "Price", "Type", "Times Rec'd"],
+                "rows": [["1.", "AMZN", "Amazon", "$185.00", "Cautious", "3"]],
+            }
+        ],
+    )
+
+    assert ideas[0]["symbol"] == "AMZN"
+    assert ideas[0]["idea_source"] == "motley_fool_stock_advisor_service"
+    assert ideas[0]["source_recommendation_count"] == 3
+    assert "Stock Advisor service performance reference: +963.47% vs S&P 500 +202.00% as of 2026-05-04, since March 2002 inception; display-only source context, not trade authorization." in ideas[0]["source_notes"]
+    assert "source_fresh_recommendation" not in ideas[0]
+    assert "source_priority_boost" not in ideas[0]
+
+
+def test_stock_advisor_service_duplicate_rows_increase_recommendation_count():
+    ideas = motley_table_payloads_to_ideas(
+        "stock_advisor_service",
+        [
+            {
+                "title": "Stock Advisor Recommendations",
+                "headers": ["#", "Symbol", "Company", "Price", "Type"],
+                "rows": [
+                    ["1.", "AMZN", "Amazon", "$185.00", "Cautious"],
+                    ["5.", "AMZN", "Amazon", "$140.00", "Cautious"],
+                    ["6.", "MSFT", "Microsoft", "$420.00", "Moderate"],
+                ],
+            }
+        ],
+    )
+
+    by_symbol = {idea["symbol"]: idea for idea in ideas}
+    assert by_symbol["AMZN"]["source_recommendation_count"] == 2
+    assert "Times recommended by source: 2." in by_symbol["AMZN"]["source_notes"]
+    assert by_symbol["MSFT"].get("source_recommendation_count") is None
+
+
+def test_stock_advisor_service_accepts_ordered_rows_without_price_column():
+    ideas = motley_table_payloads_to_ideas(
+        "stock_advisor_service",
+        [
+            {
+                "title": "Stock Advisor Recommendations",
+                "headers": ["#", "Symbol", "Company", "Rec Date", "Service"],
+                "rows": [["12.", "MELI", "MercadoLibre", "02/10/26", "Stock Advisor"]],
+            }
+        ],
+    )
+
+    assert ideas[0]["symbol"] == "MELI"
+    assert "Stock Advisor rank: 12." in ideas[0]["source_notes"]
+    assert "Motley Fool source: Stock Advisor service list." in ideas[0]["source_notes"]
 
 
 def test_rows_from_table_payloads_extracts_dashboard_tables():
@@ -396,8 +451,28 @@ def test_motley_table_payloads_to_ideas_accepts_full_ranking_without_company():
 
     assert ideas[0]["symbol"] == "MOGA"
     assert ideas[0]["company_name"] == "MOGA"
+    assert ideas[0]["source_recommendation_count"] == 1
     assert "Stock Advisor rank: 2." in ideas[0]["source_notes"]
-    assert "Discussion count: 1." in ideas[0]["source_notes"]
+    assert "Times recommended by source: 1." in ideas[0]["source_notes"]
+
+
+def test_motley_new_recommendation_ideas_carry_fresh_priority_signal():
+    ideas = motley_table_payloads_to_ideas(
+        "new_recommendations",
+        [
+            {
+                "title": "New Recommendations",
+                "headers": ["Action", "Symbol", "Company", "Rec Date", "Type", "Service", ""],
+                "rows": [["Buy", "ADBE", "Adobe", "05/06/26", "Cautious", "Stock Advisor", "4"]],
+            }
+        ],
+    )
+
+    assert ideas[0]["symbol"] == "ADBE"
+    assert ideas[0]["source_fresh_recommendation"] is True
+    assert ideas[0]["source_priority_reason"] == "fresh_motley_fool_recommendation"
+    assert ideas[0]["source_priority_boost"] > 0
+    assert "Fresh Motley Fool recommendation; prioritize research close to rec date." in ideas[0]["source_notes"]
 
 
 def test_enrich_prices_fetches_candidate_and_benchmark_prices():

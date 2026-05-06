@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from longterm.decision_journal import LongTermDecisionJournal
 from longterm.operator_status_bundle import build_operator_status_bundle, build_operator_status_markdown
 from longterm.operator_status_bundle_cli import build_parser, run_cli
+from longterm.path_utils import write_json_artifact
 from longterm.paper_trade_ledger import PaperTradeLedger
 from longterm.portfolio_state import PortfolioState
 from research.intake import create_research_packet_from_idea
@@ -58,6 +59,7 @@ def test_operator_status_bundle_combines_lifecycle_readiness_and_position_report
     portfolio = PortfolioState(cash=5000, holdings=[{"symbol": "NVDA", "market_value": 4200}])
     action_plan = {
         "plan_id": "plan-1",
+        "suppressed_reasons": ["taxable_broad_parking_suppressed"],
         "intents": [
             {
                 "symbol": "NVDA",
@@ -105,12 +107,16 @@ def test_operator_status_bundle_combines_lifecycle_readiness_and_position_report
     assert bundle["buy_promotion_summary"]["counts"]["ACTIONABLE_BUY"] == 1
     assert bundle["buy_promotion_summary"]["counts"]["WATCHLIST_PENDING_EVIDENCE"] == 1
     assert bundle["buy_promotion_summary"]["items"][1]["symbol"] == "VEEV"
+    assert bundle["account_action_plan_summary"]["suppressed_reasons"] == ["taxable_broad_parking_suppressed"]
+    assert bundle["account_action_plan_summary"]["suppressed_count"] == 1
     assert bundle["scheduler_readiness"]["ready_for_scheduler_paper_submit"] is False
     assert "Paper outcome vs FXAIX: 10.0%" in bundle["position_report_markdown"]
     markdown = build_operator_status_markdown(bundle)
     assert "# Long-Term Operator Status Bundle" in markdown
     assert "## Buy Promotion" in markdown
     assert "| VEEV | WATCHLIST_PENDING_EVIDENCE | missing_earnings_article |  |" in markdown
+    assert "## Account Plan Suppressions" in markdown
+    assert "| Taxable Broad Parking Suppressed | taxable_broad_parking_suppressed |" in markdown
     assert "## Scheduler Readiness" in markdown
 
 
@@ -277,6 +283,57 @@ def test_operator_status_bundle_adds_agent_next_step_rollup(tmp_path):
     assert "- State: `ready_to_reveal_submit_command`" in markdown
 
 
+def test_operator_status_bundle_surfaces_scheduler_policy_next_safe_action(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    scheduler_policy = {
+        "mode": "pipeline_scheduler_policy",
+        "recommended_mode": "panic_regime_reassessment",
+        "urgency": "high",
+        "reasons": ["vix_panic_threshold"],
+        "warnings": ["active_rules_changed"],
+        "affected_symbols": ["ADBE", "MSFT"],
+        "next_safe_action": "rerun_market_regime_and_next_actions_no_submit",
+        "order_submission_enabled": False,
+    }
+
+    bundle = build_operator_status_bundle(journal, scheduler_policy=scheduler_policy)
+    markdown = build_operator_status_markdown(bundle)
+
+    assert bundle["scheduler_policy_summary"]["recommended_mode"] == "panic_regime_reassessment"
+    assert bundle["scheduler_policy_summary"]["affected_symbols"] == ["ADBE", "MSFT"]
+    assert bundle["agent_next_step"]["state"] == "scheduler_policy_panic_regime_reassessment"
+    assert "rerun market regime and next actions no submit" in bundle["agent_next_step"]["message"]
+    assert bundle["agent_next_step"]["order_submission_enabled"] is False
+    assert "## Scheduler Policy" in markdown
+    assert "- Recommended mode: `panic_regime_reassessment`" in markdown
+    assert "- Next safe action: rerun_market_regime_and_next_actions_no_submit" in markdown
+    assert "- active_rules_changed" in markdown
+
+
+def test_operator_status_bundle_surfaces_committee_preset_policy(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    committee_policy = {
+        "mode": "committee_preset_policy",
+        "recommended_preset": "decision_6",
+        "default_preset": "decision_4",
+        "escalation_required": True,
+        "escalation_reasons": ["large_position_change:NVDA", "borderline_valuation:AMZN"],
+        "affected_symbols": ["NVDA", "AMZN"],
+        "order_submission_enabled": False,
+    }
+
+    bundle = build_operator_status_bundle(journal, committee_preset_policy=committee_policy)
+    markdown = build_operator_status_markdown(bundle)
+
+    assert bundle["committee_preset_policy_summary"]["recommended_preset"] == "decision_6"
+    assert bundle["committee_preset_policy_summary"]["affected_symbols"] == ["NVDA", "AMZN"]
+    assert bundle["committee_preset_policy_summary"]["order_submission_enabled"] is False
+    assert bundle["agent_next_step"]["committee_recommended_preset"] == "decision_6"
+    assert "## Committee Preset Policy" in markdown
+    assert "- Recommended preset: `decision_6`" in markdown
+    assert "- large_position_change:NVDA" in markdown
+
+
 def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     decision_id = _record_decision(journal)
@@ -289,6 +346,8 @@ def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
     monday_check_path = tmp_path / "monday_check.json"
     live_readiness_path = tmp_path / "live_readiness_bundle.json"
     status_refresh_path = tmp_path / "paper_order_status_refresh.json"
+    scheduler_policy_path = tmp_path / "scheduler_policy.json"
+    committee_policy_path = tmp_path / "committee_preset_policy.json"
     report_path = tmp_path / "operator_status_bundle.json"
     PaperTradeLedger(ledger_path).record_execution_event(
         {
@@ -358,6 +417,31 @@ def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
         ),
         encoding="utf-8",
     )
+    scheduler_policy_path.write_text(
+        json.dumps(
+            {
+                "recommended_mode": "account_refresh_only",
+                "urgency": "low",
+                "reasons": ["account_refresh_stale"],
+                "next_safe_action": "refresh_account_and_dashboard_artifacts",
+                "order_submission_enabled": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    committee_policy_path.write_text(
+        json.dumps(
+            {
+                "recommended_preset": "decision_4",
+                "default_preset": "decision_4",
+                "escalation_required": False,
+                "escalation_reasons": [],
+                "affected_symbols": [],
+                "order_submission_enabled": False,
+            }
+        ),
+        encoding="utf-8",
+    )
     parser = build_parser()
     args = parser.parse_args(
         [
@@ -379,6 +463,10 @@ def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
             str(live_readiness_path),
             "--status-refresh",
             str(status_refresh_path),
+            "--scheduler-policy",
+            str(scheduler_policy_path),
+            "--committee-preset-policy",
+            str(committee_policy_path),
             "--report-output",
             str(report_path),
             "--json",
@@ -393,4 +481,74 @@ def test_operator_status_bundle_cli_outputs_json(tmp_path, capsys):
     assert payload["monday_operator_check_summary"]["ready_for_review"] is True
     assert payload["live_readiness_summary"]["unmet_gate_keys"] == ["paper_trading_verified"]
     assert payload["status_refresh_summary"]["submitted_order_count"] == 0
+    assert payload["scheduler_policy_summary"]["recommended_mode"] == "account_refresh_only"
+    assert payload["committee_preset_policy_summary"]["recommended_preset"] == "decision_4"
     assert json.loads(report_path.read_text(encoding="utf-8"))["mode"] == "operator_status_bundle"
+
+
+def test_operator_status_bundle_cli_reads_and_writes_long_artifact_paths(tmp_path, capsys):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    journal_path = journal.db_path
+    ledger_path = tmp_path / "paper.db"
+    portfolio_path = tmp_path / "portfolio.json"
+    portfolio_path.write_text(json.dumps({"cash": 5000, "holdings": []}), encoding="utf-8")
+    long_dir = tmp_path
+    while len(str(long_dir)) < 225:
+        long_dir = long_dir / "scheduler_prerun_snapshot_segment"
+    monday_check_path = long_dir / f"paper_monday_operator_check_{'x' * 32}.json"
+    status_refresh_path = long_dir / f"paper_order_status_refresh_{'x' * 32}.json"
+    report_path = long_dir / f"operator_status_bundle_{'x' * 32}.json"
+    assert len(str(long_dir)) < 260
+    assert len(str(monday_check_path)) > 260
+    assert len(str(report_path)) > 260
+    write_json_artifact(
+        monday_check_path,
+        {
+            "mode": "paper_monday_operator_check",
+            "ready_for_review": True,
+            "blocker_count": 0,
+            "blockers": [],
+        },
+    )
+    write_json_artifact(
+        status_refresh_path,
+        {
+            "mode": "paper_order_status_refresh",
+            "submitted_order_count": 0,
+            "refreshed_count": 0,
+            "error_count": 0,
+            "status_counts": {},
+        },
+    )
+    args = build_parser().parse_args(
+        [
+            "--journal-db",
+            str(journal_path),
+            "--portfolio-state",
+            str(portfolio_path),
+            "--paper-ledger-db",
+            str(ledger_path),
+            "--monday-operator-check",
+            str(monday_check_path),
+            "--status-refresh",
+            str(status_refresh_path),
+            "--report-output",
+            str(report_path),
+            "--json",
+        ]
+    )
+
+    assert run_cli(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+    saved = json.loads(_read_text(report_path))
+
+    assert payload["mode"] == "operator_status_bundle"
+    assert payload["monday_operator_check_summary"]["ready_for_review"] is True
+    assert saved["mode"] == "operator_status_bundle"
+
+
+def _read_text(path):
+    path = Path(path)
+    if sys.platform == "win32":
+        return Path("\\\\?\\" + str(path.resolve())).read_text(encoding="utf-8")
+    return path.read_text(encoding="utf-8")

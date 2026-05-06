@@ -22,6 +22,12 @@ from longterm.news_relevance_enrichment import (
     FakeNewsProvider,
     PolygonNewsProvider,
 )
+from longterm.perplexity_research_enrichment import (
+    DEFAULT_PERPLEXITY_API_URL,
+    DEFAULT_PERPLEXITY_MAX_TOKENS,
+    DEFAULT_PERPLEXITY_MODEL,
+    PerplexityResearchClient,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -43,6 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
     grok = parser.add_mutually_exclusive_group()
     grok.add_argument("--grok-snapshot-file", default="")
     grok.add_argument("--xai-grok", action="store_true")
+    grok.add_argument("--perplexity-research", action="store_true")
     grok.add_argument("--skip-grok", action="store_true")
 
     parser.add_argument("--facts-file", default="", help="Optional symbol-keyed free facts JSON for Grok.")
@@ -60,6 +67,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--grok-model", default=DEFAULT_GROK_MODEL)
     parser.add_argument("--grok-base-url", default=DEFAULT_XAI_BASE_URL)
     parser.add_argument("--grok-timeout-seconds", type=float, default=180.0)
+    parser.add_argument("--perplexity-api-key-env", default="PERPLEXITY_API_KEY")
+    parser.add_argument("--perplexity-model", default=DEFAULT_PERPLEXITY_MODEL)
+    parser.add_argument("--perplexity-api-url", default=DEFAULT_PERPLEXITY_API_URL)
+    parser.add_argument("--perplexity-timeout-seconds", type=float, default=120.0)
+    parser.add_argument("--perplexity-max-tokens", type=int, default=DEFAULT_PERPLEXITY_MAX_TOKENS)
+    parser.add_argument("--perplexity-search-context-size", choices=["low", "medium", "high"], default="low")
+    parser.add_argument(
+        "--perplexity-credits-purchased-to-date",
+        type=float,
+        default=None,
+        help="Optional API-console credit total, e.g. 12 if you have purchased $12 toward Tier 1.",
+    )
     parser.add_argument("--allow-unsourced-grok", action="store_true")
     return parser
 
@@ -133,6 +152,16 @@ def _grok_client(args: argparse.Namespace):
         return None
     if args.grok_snapshot_file:
         return FakeGrokResearchClient(_load_symbol_keyed_json(args.grok_snapshot_file))
+    if args.perplexity_research:
+        return PerplexityResearchClient(
+            api_key_env=args.perplexity_api_key_env,
+            model=args.perplexity_model,
+            api_url=args.perplexity_api_url,
+            timeout_seconds=args.perplexity_timeout_seconds,
+            max_tokens=args.perplexity_max_tokens,
+            search_context_size=args.perplexity_search_context_size,
+            credits_purchased_to_date_usd=args.perplexity_credits_purchased_to_date,
+        )
     if args.xai_grok:
         return XaiGrokResearchClient(
             api_key_env=args.xai_api_key_env,

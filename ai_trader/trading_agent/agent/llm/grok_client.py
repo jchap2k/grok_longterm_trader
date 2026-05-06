@@ -55,8 +55,8 @@ class GrokLLMClient:
     XAI_BASE_URL = "https://api.x.ai/v1"
 
     # Default Grok models (fallback only - always prefer broker_config.json ai_providers.grok)
-    DEFAULT_REASONING_MODEL = "grok-4-1-fast-reasoning"
-    DEFAULT_FAST_MODEL = "grok-4-1-fast-reasoning"
+    DEFAULT_REASONING_MODEL = "grok-4.3"
+    DEFAULT_FAST_MODEL = "grok-4.20-non-reasoning"
 
     def __init__(
         self,

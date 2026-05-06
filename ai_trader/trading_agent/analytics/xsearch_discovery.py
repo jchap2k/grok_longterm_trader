@@ -80,7 +80,7 @@ class XSearchDiscovery:
         api_key: xAI API key. Defaults to XAI_API_KEY env var.
         max_handles_per_call: Batch size limit for x_search API (default: 20)
         max_added_candidates: Hard cap on candidates returned (default: 8)
-        model: xAI model to use (default: grok-4-1-fast-reasoning)
+        model: xAI model to use (default: grok-4.3)
     """
 
     def __init__(
@@ -91,7 +91,7 @@ class XSearchDiscovery:
         api_key=None,
         max_handles_per_call=20,
         max_added_candidates=8,
-        model="grok-4-1-fast-reasoning",
+        model="grok-4.3",
     ):
         self.key_users = list(key_users or SWING_KEY_USERS)
         self.min_faves = min_faves

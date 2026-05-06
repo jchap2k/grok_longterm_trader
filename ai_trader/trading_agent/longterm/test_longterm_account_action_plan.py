@@ -132,6 +132,33 @@ def test_account_action_plan_suppresses_capital_needed_when_active_sell_can_fund
     assert not any(intent.intent_type == "CAPITAL_NEEDED" for intent in plan.intents)
 
 
+def test_account_action_plan_surfaces_explicit_sell_for_held_active_position(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    decision_id = _record(journal, "AAPL", recommendation="SELL", confidence=88, size=0)
+    profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
+    state = PortfolioState(
+        cash=500,
+        holdings=[{"symbol": "AAPL", "market_value": 3000}],
+        protected_symbols=["FXAIX"],
+    )
+
+    plan = AccountActionPlanBuilder().build(
+        journal,
+        profile=profile,
+        portfolio_state=state,
+    )
+
+    sell = [intent for intent in plan.intents if intent.symbol == "AAPL"][0]
+    assert sell.intent_type == "SELL"
+    assert sell.order_intent == "SELL"
+    assert sell.trade_value == 3000.0
+    assert sell.target_value == 0.0
+    assert sell.allowed is True
+    assert sell.decision_id == decision_id
+    assert sell.risk_review["intent_type"] == "SELL"
+    assert "active sleeve" in sell.reason.lower()
+
+
 def test_account_action_plan_routes_pending_evidence_buy_to_review_not_buy(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     _record(
@@ -165,7 +192,7 @@ def test_account_action_plan_includes_rebalance_intent(tmp_path):
     _record(journal, "GOOG", recommendation="HOLD", confidence=82, size=4)
     _record(journal, "AMZN", recommendation="HOLD", confidence=84, size=4)
     _record(journal, "NVDA", recommendation="BUY", confidence=92, size=8)
-    profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
+    profile = PortfolioProfile(account_strategy_mode="roth_ira", tradable_capital=34000, protected_symbols=["FXAIX"])
     state = PortfolioState(
         cash=500,
         holdings=[{"symbol": "AAPL", "market_value": 5000}],
@@ -185,6 +212,31 @@ def test_account_action_plan_includes_rebalance_intent(tmp_path):
     assert rebalance.trade_value == 3640.0
     assert rebalance.allowed is True
     assert rebalance.risk_review["intent_type"] == "REBALANCE"
+
+
+def test_account_action_plan_suppresses_broad_rebalance_for_taxable_profile(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    _record(journal, "AAPL", recommendation="HOLD", confidence=65, size=4)
+    _record(journal, "MSFT", recommendation="HOLD", confidence=80, size=4)
+    _record(journal, "GOOG", recommendation="HOLD", confidence=82, size=4)
+    _record(journal, "AMZN", recommendation="HOLD", confidence=84, size=4)
+    _record(journal, "NVDA", recommendation="BUY", confidence=92, size=8)
+    profile = PortfolioProfile(account_strategy_mode="taxable", tradable_capital=34000, protected_symbols=["FXAIX"])
+    state = PortfolioState(
+        cash=500,
+        holdings=[{"symbol": "AAPL", "market_value": 5000}],
+        protected_symbols=["FXAIX"],
+    )
+
+    plan = AccountActionPlanBuilder().build(
+        journal,
+        profile=profile,
+        portfolio_state=state,
+    )
+
+    assert not any(intent.intent_type == "REBALANCE" for intent in plan.intents)
+    assert plan.status == "blocked"
+    assert "taxable_broad_rebalance_suppressed" in plan.suppressed_reasons
 
 
 def test_account_action_plan_blocks_protected_symbol_trade(tmp_path):
@@ -215,6 +267,7 @@ def test_account_action_plan_parks_leftover_cash_in_spy_during_normal_regime(tmp
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     _record(journal, "AMZN", recommendation="BUY", confidence=78, size=2.5)
     profile = PortfolioProfile(
+        account_strategy_mode="roth_ira",
         tradable_capital=34000,
         protected_symbols=["FXAIX"],
         defensive_parking_symbol="SPY",
@@ -240,10 +293,36 @@ def test_account_action_plan_parks_leftover_cash_in_spy_during_normal_regime(tmp
     assert "idle active cash" in parking.reason
 
 
+def test_account_action_plan_suppresses_idle_cash_parking_for_taxable_profile(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    _record(journal, "AMZN", recommendation="BUY", confidence=78, size=2.5)
+    profile = PortfolioProfile(
+        account_strategy_mode="taxable",
+        tradable_capital=34000,
+        protected_symbols=["FXAIX"],
+        defensive_parking_symbol="SPY",
+    )
+    state = PortfolioState(cash=5000, protected_symbols=["FXAIX"])
+
+    plan = AccountActionPlanBuilder(
+        market_regime=MarketRegimeSnapshot(risk_regime="normal")
+    ).build(
+        journal,
+        profile=profile,
+        portfolio_state=state,
+    )
+
+    assert [intent.intent_type for intent in plan.intents] == ["BUY"]
+    assert plan.status == "ready"
+    assert "taxable_broad_parking_suppressed" in plan.suppressed_reasons
+    assert "taxable_broad_parking_suppressed" not in plan.blocked_reasons
+
+
 def test_account_action_plan_caps_parking_to_active_sleeve_budget(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     _record(journal, "AMZN", recommendation="BUY", confidence=78, size=2.5)
     profile = PortfolioProfile(
+        account_strategy_mode="roth_ira",
         total_account_value=74000,
         tradable_capital=34000,
         protected_symbols=["FXAIX"],
@@ -268,6 +347,7 @@ def test_account_action_plan_splits_idle_cash_when_uncertainty_is_elevated(tmp_p
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     _record(journal, "AMZN", recommendation="BUY", confidence=78, size=2.5)
     profile = PortfolioProfile(
+        account_strategy_mode="roth_ira",
         tradable_capital=34000,
         protected_symbols=["FXAIX"],
         defensive_parking_symbol="SPY",
@@ -294,6 +374,7 @@ def test_account_action_plan_uses_sgov_not_tlt_when_vix_spikes_with_rising_yield
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     _record(journal, "AMZN", recommendation="BUY", confidence=78, size=2.5)
     profile = PortfolioProfile(
+        account_strategy_mode="roth_ira",
         tradable_capital=34000,
         protected_symbols=["FXAIX"],
         defensive_parking_symbol="SPY",
@@ -323,6 +404,7 @@ def test_account_action_plan_caps_tlt_when_equity_panic_has_falling_yields(tmp_p
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     _record(journal, "AMZN", recommendation="BUY", confidence=78, size=2.5)
     profile = PortfolioProfile(
+        account_strategy_mode="roth_ira",
         tradable_capital=34000,
         protected_symbols=["FXAIX"],
         low_risk_parking_symbol="SGOV",

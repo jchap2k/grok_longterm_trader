@@ -18,6 +18,7 @@ def build_operator_dashboard(
     *,
     action_plan: Mapping[str, Any] | None = None,
     market_regime: Mapping[str, Any] | None = None,
+    scheduler_policy: Mapping[str, Any] | None = None,
     operator_status: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a compact control-surface summary from saved JSON artifacts."""
@@ -26,9 +27,11 @@ def build_operator_dashboard(
     intents = [dict(item) for item in action_plan.get("intents") or [] if isinstance(item, Mapping)]
     buys = [item for item in intents if _intent_type(item) in PAPER_EXECUTABLE_INTENTS and bool(item.get("allowed"))]
     parking = [item for item in intents if _intent_type(item) in PARKING_INTENTS and bool(item.get("allowed"))]
+    suppressed_reasons = _suppressed_reasons(action_plan)
     next_step = operator_status.get("agent_next_step") if isinstance(operator_status, Mapping) else {}
     next_step = next_step if isinstance(next_step, Mapping) else {}
     advisory = _agent_advisory(next_step=next_step, buys=buys, parking=parking)
+    policy = _scheduler_policy_summary(scheduler_policy)
     return {
         "schema_version": 1,
         "mode": "operator_dashboard",
@@ -37,12 +40,15 @@ def build_operator_dashboard(
         "agent_message": str(next_step.get("message") or ""),
         "agent_advisory": advisory,
         "market_regime": dict(market_regime or {}),
+        "scheduler_policy": policy,
         "buy_intent_count": len(buys),
         "parking_intent_count": len(parking),
         "paper_submit_candidates": [_symbol(item) for item in buys if _symbol(item)],
         "parking_symbols": [_symbol(item) for item in parking if _symbol(item)],
         "buy_intents": [_intent_summary(item) for item in buys],
         "parking_intents": [_intent_summary(item) for item in parking],
+        "suppressed_reasons": suppressed_reasons,
+        "suppressed_count": len(suppressed_reasons),
         "notes": [
             "Dashboard is read-only. It does not submit or modify broker orders.",
             "Parking intents are capital-deployment guidance and remain excluded from Stage 6B V1 paper submission.",
@@ -53,6 +59,7 @@ def build_operator_dashboard(
 def build_operator_dashboard_markdown(dashboard: Mapping[str, Any]) -> str:
     """Render a compact markdown dashboard."""
     regime = dashboard.get("market_regime") or {}
+    policy = dashboard.get("scheduler_policy") or {}
     lines = [
         "# Long-Term Trader Dashboard",
         "",
@@ -63,6 +70,9 @@ def build_operator_dashboard_markdown(dashboard: Mapping[str, Any]) -> str:
         f"- Market regime: `{regime.get('risk_regime') or 'unknown'}`",
         f"- VIX: `{regime.get('vix_level') if regime.get('vix_level') is not None else 'unknown'}`",
         f"- 10Y yield trend: `{regime.get('ten_year_yield_trend') or 'unknown'}`",
+        f"- Scheduler policy: `{policy.get('recommended_mode') or 'unavailable'}`",
+        f"- Next safe action: `{policy.get('next_safe_action') or 'unknown'}`",
+        f"- Suppressed broad actions: `{int(dashboard.get('suppressed_count') or 0)}`",
         "",
         "## Paper Submit Candidates",
         "",
@@ -71,6 +81,11 @@ def build_operator_dashboard_markdown(dashboard: Mapping[str, Any]) -> str:
     lines.extend(["", "## Idle/Defensive Parking", ""])
     lines.extend(_table_lines(dashboard.get("parking_intents") or []))
     lines.extend(["", "## Safety Notes", ""])
+    suppressed = dashboard.get("suppressed_reasons") or []
+    if suppressed:
+        lines.extend(["", "### Tax-Mode Suppressions", ""])
+        for reason in suppressed:
+            lines.append(f"- {_human_label(str(reason))} (`{reason}`)")
     for note in dashboard.get("notes") or []:
         lines.append(f"- {note}")
     return "\n".join(lines) + "\n"
@@ -101,6 +116,7 @@ def build_operator_dashboard_site(
     portfolio_state: Mapping[str, Any] | None = None,
     evidence_items: Iterable[Mapping[str, Any]] | None = None,
     price_history_by_symbol: Mapping[str, Any] | None = None,
+    api_usage: Mapping[str, Any] | None = None,
 ) -> dict[str, str]:
     """Build a static dashboard package with index and ticker pages."""
     action_plan = action_plan or {}
@@ -119,6 +135,8 @@ def build_operator_dashboard_site(
             portfolio_state=portfolio_state,
             symbols=symbols,
             evidence_by_symbol=evidence_by_symbol,
+            price_history_by_symbol=price_history_by_symbol,
+            api_usage=api_usage or {},
         )
     }
     for symbol in symbols:
@@ -256,6 +274,75 @@ def _advisory_display_label(state: Any) -> str:
     return value.replace("_", " ").replace("-", " ").title() if value else "Unknown"
 
 
+def _scheduler_policy_summary(policy: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Normalize advisory scheduler policy data for dashboard display."""
+    if not isinstance(policy, Mapping) or not policy:
+        return {
+            "available": False,
+            "recommended_mode": "unavailable",
+            "urgency": "unknown",
+            "reasons": [],
+            "warnings": [],
+            "blockers": [],
+            "affected_symbols": [],
+            "next_safe_action": "generate_scheduler_policy_artifact",
+            "order_submission_enabled": False,
+        }
+    return {
+        "available": True,
+        "recommended_mode": str(policy.get("recommended_mode") or "unknown"),
+        "urgency": str(policy.get("urgency") or "unknown"),
+        "reasons": [str(item) for item in (policy.get("reasons") or [])],
+        "warnings": [str(item) for item in (policy.get("warnings") or [])],
+        "blockers": [str(item) for item in (policy.get("blockers") or [])],
+        "affected_symbols": [str(item).upper() for item in (policy.get("affected_symbols") or []) if str(item).strip()],
+        "next_safe_action": str(policy.get("next_safe_action") or "unknown"),
+        "active_rules_sha256": str(policy.get("active_rules_sha256") or ""),
+        "generated_at": str(policy.get("generated_at") or ""),
+        "order_submission_enabled": False,
+    }
+
+
+def _suppressed_reasons(action_plan: Mapping[str, Any]) -> list[str]:
+    return [
+        str(reason).strip()
+        for reason in (action_plan.get("suppressed_reasons") or [])
+        if str(reason).strip()
+    ]
+
+
+def _scheduler_mode_label(value: Any) -> str:
+    text = str(value or "unavailable").strip()
+    if not text or text == "unavailable":
+        return "Unavailable"
+    return text.replace("_", " ").replace("-", " ").title()
+
+
+def _scheduler_action_label(value: Any) -> str:
+    text = str(value or "unknown").strip()
+    if not text:
+        return "unknown"
+    return text.replace("_", " ").replace("-", " ")
+
+
+def _scheduler_policy_tile(policy: Mapping[str, Any]) -> str:
+    mode = _scheduler_mode_label(policy.get("recommended_mode"))
+    urgency = _scheduler_mode_label(policy.get("urgency"))
+    next_action = _scheduler_action_label(policy.get("next_safe_action"))
+    reasons = ", ".join(_scheduler_action_label(item) for item in (policy.get("reasons") or [])) or "No reasons supplied"
+    affected = ", ".join(str(item) for item in (policy.get("affected_symbols") or [])) or "none"
+    warnings = ", ".join(_scheduler_action_label(item) for item in (policy.get("warnings") or [])) or "none"
+    return (
+        "<div class=\"status-tile scheduler-policy-tile\" id=\"scheduler-policy\">"
+        "<span>Scheduler Policy</span>"
+        f"<strong>{escape(mode)}</strong>"
+        f"<small><b>{escape(urgency)}</b> urgency. Next safe action: {escape(next_action)}.</small>"
+        f"<small>Reasons: {escape(reasons)}. Affected symbols: {escape(affected)}.</small>"
+        f"<small>Warnings: {escape(warnings)}. Advisory only; order submission remains disabled.</small>"
+        "</div>"
+    )
+
+
 def _intent_type(item: Mapping[str, Any]) -> str:
     return str(item.get("intent_type") or "").upper()
 
@@ -308,9 +395,12 @@ def _site_index_html(
     portfolio_state: Mapping[str, Any],
     symbols: list[str],
     evidence_by_symbol: Mapping[str, Mapping[str, Any]],
+    price_history_by_symbol: Mapping[str, Any] | None = None,
+    api_usage: Mapping[str, Any] | None = None,
 ) -> str:
     regime = dashboard.get("market_regime") or {}
     advisory = dashboard.get("agent_advisory") or {}
+    policy = dashboard.get("scheduler_policy") or {}
     intents = [dict(item) for item in action_plan.get("intents") or [] if isinstance(item, Mapping)]
     buy_intents = [item for item in intents if _intent_type(item) == "BUY"]
     parking_intents = [item for item in intents if _intent_type(item) in PARKING_INTENTS]
@@ -358,6 +448,7 @@ def _site_index_html(
                 <div><span>Market Regime</span><strong>{escape(str(regime.get("risk_regime") or "unknown"))}</strong></div>
                 <div><span>Paper Candidates</span><strong>{int(dashboard.get("buy_intent_count") or 0)}</strong></div>
                 <div><span>Parking</span><strong>{", ".join(escape(str(item)) for item in dashboard.get("parking_symbols") or []) or "none"}</strong></div>
+                <div><span>Scheduler</span><strong>{escape(_scheduler_mode_label(policy.get("recommended_mode")))}</strong></div>
               </div>
             </section>
             {_dashboard_tabs()}
@@ -397,8 +488,10 @@ def _site_index_html(
                 {_status_tile("Order submission", "disabled", "Read-only dashboard. Stage 6B still requires explicit supervised confirmation.")}
                 {_status_tile("Regime", regime.get("risk_regime") or "unknown", regime.get("reason") or "")}
                 {_status_tile("VIX / 10Y", f"{regime.get('vix_level') if regime.get('vix_level') is not None else 'unknown'} / {regime.get('ten_year_yield_trend') or 'unknown'}", "Used for parking posture, not automatic trading.")}
+                {_scheduler_policy_tile(policy)}
               </div>
             </section>
+            {_api_usage_panel(api_usage or {})}
             <section class="panel" id="coverage">
               <div class="section-heading">
                 <p class="eyebrow">Coverage</p>
@@ -408,7 +501,7 @@ def _site_index_html(
               <p>Coverage rows are generated from the current action plan, evidence files, and enrichment artifacts. Future versions can split this into analyst updates, latest news, and thesis-monitor notes.</p>
             </section>
             {_rankings_section(symbols=symbols, action_plan=action_plan, evidence_by_symbol=evidence_by_symbol)}
-            {_scorecards_section(symbols=symbols, evidence_by_symbol=evidence_by_symbol)}
+            {_scorecards_section(symbols=symbols, evidence_by_symbol=evidence_by_symbol, price_history_by_symbol=price_history_by_symbol or {})}
             {_evidence_gaps_section(symbols=symbols, action_plan=action_plan, evidence_by_symbol=evidence_by_symbol)}
             {_placeholder_panel(
                 section_id="foundational-core",
@@ -453,6 +546,7 @@ def _site_index_html(
                 <li><strong>{len(parking_intents)}</strong><span>parking intents</span></li>
                 <li><strong>{len(review_intents)}</strong><span>review / follow-up intents</span></li>
               </ul>
+              {_portfolio_value_panel(portfolio_state)}
               {_holdings_table(portfolio_state)}
             </section>
             <section class="panel" id="safety">
@@ -466,6 +560,8 @@ def _site_index_html(
                 {_safety_chip("Parking submit", "excluded")}
                 {_safety_chip("Rebalance submit", "hard-blocked")}
               </div>
+              {_tax_mode_suppressions_panel(dashboard.get("suppressed_reasons") or [])}
+              {_pipeline_health_panel()}
             </section>
             <section class="panel" id="research-board">
               <div class="section-heading">
@@ -494,7 +590,7 @@ def _site_index_html(
             )}
             {_reference_footer()}
             {_agent_chat_placeholder()}
-            <script>{_dashboard_search_script()}{_paginated_lists_script()}{_synced_table_scroller_script()}{_agent_chat_placeholder_script()}</script>
+            <script>{_dashboard_search_script()}{_paginated_lists_script()}{_synced_table_scroller_script()}{_portfolio_live_refresh_script()}{_api_usage_refresh_script()}{_pipeline_health_refresh_script()}{_agent_chat_placeholder_script()}</script>
           </main>
         </div>
         """,
@@ -503,24 +599,120 @@ def _site_index_html(
 
 def _dashboard_rail() -> str:
     items = [
-        ("Dashboard", "#dashboard-overview"),
-        ("Paper Candidates", "#paper-candidates"),
-        ("All Tear Sheets", "#research-board"),
-        ("Rankings", "#rankings"),
-        ("Coverage", "#coverage"),
-        ("Scorecards", "#scorecards"),
-        ("Evidence Gaps", "#evidence-gaps"),
-        ("Portfolio", "#portfolio"),
-        ("Safety", "#safety"),
-        ("Settings", "#settings"),
+        ("dashboard", "Dashboard", "#dashboard-overview"),
+        ("paper-candidates", "Paper Candidates", "#paper-candidates"),
+        ("all-tear-sheets", "All Tear Sheets", "#research-board"),
+        ("rankings", "Rankings", "#rankings"),
+        ("coverage", "Coverage", "#coverage"),
+        ("scorecards", "Scorecards", "#scorecards"),
+        ("evidence-gaps", "Evidence Gaps", "#evidence-gaps"),
+        ("portfolio", "Portfolio", "#portfolio"),
+        ("api-usage", "API Usage", "#api-usage"),
+        ("safety", "Safety", "#safety"),
+        ("settings", "Settings", "#settings"),
     ]
-    links = "".join(f"<a href=\"{href}\"><span></span>{escape(label)}</a>" for label, href in items)
+    links = "".join(
+        f"<a href=\"{href}\">{_nav_icon(icon)}<span class=\"nav-label\">{escape(label)}</span></a>"
+        for icon, label, href in items
+    )
     logo = _brand_logo_html()
     return (
         "<aside class=\"dashboard-rail\">"
         f"<div class=\"rail-brand\">{logo}</div>"
         f"<nav>{links}</nav>"
         "</aside>"
+    )
+
+
+def _nav_icon(name: str) -> str:
+    icons = {
+        "dashboard": (
+            '<rect x="4" y="4" width="6" height="6" rx="1.4"/>'
+            '<rect x="14" y="4" width="6" height="6" rx="1.4"/>'
+            '<rect x="4" y="14" width="6" height="6" rx="1.4"/>'
+            '<rect x="14" y="14" width="6" height="6" rx="1.4"/>'
+        ),
+        "paper-candidates": (
+            '<path d="M7 4.5h7.2L18 8.3V19a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 19V6A1.5 1.5 0 0 1 7 4.5Z"/>'
+            '<path d="M14 4.5V8h3.8"/>'
+            '<path d="m8.4 13 2.2 2.2 4.8-5"/>'
+        ),
+        "all-tear-sheets": (
+            '<path d="M7.5 5.5h9A1.5 1.5 0 0 1 18 7v11.5H7.5A1.5 1.5 0 0 1 6 17V7a1.5 1.5 0 0 1 1.5-1.5Z"/>'
+            '<path d="M9 8.5h6"/>'
+            '<path d="M9 12h6"/>'
+            '<path d="M9 15.5h4.2"/>'
+            '<path d="M18 8.5h1.1A1.4 1.4 0 0 1 20.5 10v9.5H9"/>'
+        ),
+        "rankings": (
+            '<path d="M5 19V9"/>'
+            '<path d="M11 19V5"/>'
+            '<path d="M17 19v-7"/>'
+            '<path d="M4 19h16"/>'
+            '<path d="m15.4 5.8 1.1-2.2 1.1 2.2 2.4.4-1.7 1.7.4 2.4-2.2-1.1-2.1 1.1.4-2.4-1.8-1.7 2.4-.4Z"/>'
+        ),
+        "coverage": (
+            '<path d="M4.5 8.5h5l1.8 2h8.2v7A1.5 1.5 0 0 1 18 19H6A1.5 1.5 0 0 1 4.5 17.5v-9Z"/>'
+            '<path d="M4.5 8.5V7A1.5 1.5 0 0 1 6 5.5h4.4l1.6 1.7"/>'
+            '<path d="M16 12.5c.8.6 1.3 1.4 1.3 2.5"/>'
+            '<path d="M14.2 14c.3.3.5.6.5 1"/>'
+        ),
+        "scorecards": (
+            '<path d="M6 18.5V10a6 6 0 0 1 12 0v8.5"/>'
+            '<path d="M8.5 17h7"/>'
+            '<path d="m12 10 3.2-3.2"/>'
+            '<circle cx="12" cy="10" r="1.6"/>'
+            '<path d="M7.3 11.2h2"/>'
+            '<path d="M14.7 11.2h2"/>'
+        ),
+        "evidence-gaps": (
+            '<circle cx="10.5" cy="10.5" r="5.5"/>'
+            '<path d="m15 15 4.5 4.5"/>'
+            '<path d="M10.5 7.5v3.6"/>'
+            '<path d="M10.5 14h.1"/>'
+            '<path d="M18 5.2v3"/>'
+            '<path d="M18 11.3h.1"/>'
+        ),
+        "portfolio": (
+            '<path d="M8.5 7V5.8A1.8 1.8 0 0 1 10.3 4h3.4a1.8 1.8 0 0 1 1.8 1.8V7"/>'
+            '<rect x="4.5" y="7" width="15" height="12.5" rx="2"/>'
+            '<path d="M4.8 11.5h14.4"/>'
+            '<path d="M12 10.8v2.4"/>'
+            '<path d="M8 16.5h2.3"/>'
+            '<path d="M13.7 16.5H16"/>'
+        ),
+        "api-usage": (
+            '<path d="M5 18.5V6.8A1.8 1.8 0 0 1 6.8 5h10.4A1.8 1.8 0 0 1 19 6.8v11.7"/>'
+            '<path d="M7.5 9h9"/>'
+            '<path d="M8.2 13.5h2.2"/>'
+            '<path d="M12 13.5h3.8"/>'
+            '<path d="M8.2 16.5h5.2"/>'
+            '<path d="M4 20h16"/>'
+            '<path d="m15.8 9 1.4-1.4 1.4 1.4"/>'
+        ),
+        "safety": (
+            '<path d="M12 3.8 18.5 6v5.2c0 4.1-2.6 7.4-6.5 9-3.9-1.6-6.5-4.9-6.5-9V6L12 3.8Z"/>'
+            '<path d="m8.8 11.8 2.1 2.1 4.4-4.6"/>'
+        ),
+        "settings": (
+            '<circle cx="12" cy="12" r="3"/>'
+            '<path d="M12 4.5v2"/>'
+            '<path d="M12 17.5v2"/>'
+            '<path d="M4.5 12h2"/>'
+            '<path d="M17.5 12h2"/>'
+            '<path d="m6.7 6.7 1.4 1.4"/>'
+            '<path d="m15.9 15.9 1.4 1.4"/>'
+            '<path d="m17.3 6.7-1.4 1.4"/>'
+            '<path d="m8.1 15.9-1.4 1.4"/>'
+        ),
+    }
+    body = icons.get(name, icons["dashboard"])
+    safe_name = "".join(ch for ch in name if ch.isalnum() or ch == "-")
+    return (
+        f'<svg class="nav-icon nav-icon-{safe_name}" viewBox="0 0 24 24" '
+        'aria-hidden="true" focusable="false" fill="none" stroke="currentColor" '
+        'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+        f"{body}</svg>"
     )
 
 
@@ -648,7 +840,6 @@ def _rankings_section(
                 "quality": analysis.get("quality"),
                 "growth": analysis.get("growth"),
                 "valuation": analysis.get("valuation"),
-                "safety": analysis.get("safety"),
                 "reason": str(intent.get("reason") or evidence.get("business_summary") or ""),
             }
         )
@@ -683,7 +874,6 @@ def _rankings_section(
             f"<td>{escape(_score_cell(item.get('quality')))}</td>"
             f"<td>{escape(_score_cell(item.get('growth')))}</td>"
             f"<td>{escape(_score_cell(item.get('valuation')))}</td>"
-            f"<td>{escape(_score_cell(item.get('safety')))}</td>"
             f"<td>{escape(_short_text(str(item['reason']), 110))}</td>"
             f"<td>{escape(str(item['score_source']))}</td>"
             "</tr>"
@@ -698,7 +888,7 @@ def _rankings_section(
         "<div class=\"pagination-shell\" data-paginated-list data-page-size=\"25\" data-pagination-label=\"ranked stocks\">"
         "<div class=\"table-scroll-top\" aria-hidden=\"true\"><div></div></div>"
         "<div class=\"table-scroll\"><table class=\"rankings-table\">"
-        "<thead><tr><th>Rank</th><th>Symbol</th><th>Operator Score</th><th>Actionability</th><th>Why Not Buy</th><th>Trade Value</th><th>Quality</th><th>Growth</th><th>Valuation</th><th>Safety</th><th>Context</th><th>Score Source</th></tr></thead>"
+        "<thead><tr><th title=\"Rank\">#</th><th>Symbol</th><th title=\"Operator Score\">Score</th><th>Action</th><th>Why Not Buy</th><th title=\"Trade Value\">Value</th><th title=\"Quality\">Qual</th><th title=\"Growth\">Grow</th><th title=\"Valuation\">Val</th><th>Context</th><th title=\"Score Source\">Source</th></tr></thead>"
         f"<tbody>{''.join(body_rows)}</tbody>"
         "</table></div>"
         f"{_pagination_controls()}"
@@ -711,6 +901,7 @@ def _scorecards_section(
     *,
     symbols: Iterable[str],
     evidence_by_symbol: Mapping[str, Mapping[str, Any]],
+    price_history_by_symbol: Mapping[str, Any],
 ) -> str:
     rows = []
     for symbol in symbols:
@@ -742,6 +933,7 @@ def _scorecards_section(
                 ),
                 "investing_type": scorecard.get("investing_type") or "n/a",
                 "max_drawdown": scorecard.get("estimated_drawdown_band") or scorecard.get("est_max_drawdown") or "n/a",
+                "historical_drawdown": _historical_max_drawdown_pct(price_history_by_symbol.get(symbol) or []),
                 "reasons": [str(item) for item in scorecard.get("score_reasons") or [] if str(item)],
             }
         )
@@ -768,6 +960,7 @@ def _scorecards_section(
                 str(item["market"]),
                 str(item["investing_type"]),
                 str(item["max_drawdown"]),
+                _drawdown_cell(item["historical_drawdown"]),
                 top_reasons,
             ]
         ).lower()
@@ -782,6 +975,7 @@ def _scorecards_section(
             f"<td>{escape(_score_cell(item.get('market')))}</td>"
             f"<td>{escape(_short_text(str(item['investing_type']), 44))}</td>"
             f"<td>{escape(_short_text(str(item['max_drawdown']), 44))}</td>"
+            f"<td>{escape(_drawdown_cell(item['historical_drawdown']))}</td>"
             f"<td>{escape(_short_text(top_reasons, 150))}</td>"
             "</tr>"
         )
@@ -795,7 +989,7 @@ def _scorecards_section(
         "<div class=\"pagination-shell\" data-paginated-list data-page-size=\"25\" data-pagination-label=\"scorecards\">"
         "<div class=\"table-scroll-top\" aria-hidden=\"true\"><div></div></div>"
         "<div class=\"table-scroll\"><table class=\"scorecards-table\">"
-        "<thead><tr><th>Symbol</th><th>Superscore</th><th>Quality</th><th>Growth</th><th>Valuation</th><th>Safety</th><th>Market Buzz</th><th>Investing Type</th><th>Max Drawdown</th><th>Top Reasons</th></tr></thead>"
+        "<thead><tr><th>Symbol</th><th title=\"Superscore\">Super</th><th title=\"Quality\">Qual</th><th title=\"Growth\">Grow</th><th title=\"Valuation\">Val</th><th title=\"Safety\">Safe</th><th title=\"Market Buzz\">Buzz</th><th title=\"Investing Type\">Type</th><th title=\"Estimated Drawdown\">Drawdown</th><th title=\"Historical Max Drawdown\">Hist DD</th><th>Top Reasons</th></tr></thead>"
         f"<tbody>{''.join(body_rows)}</tbody>"
         "</table></div>"
         f"{_pagination_controls()}"
@@ -887,7 +1081,7 @@ def _evidence_gaps_for_symbol(*, intent: Mapping[str, Any], evidence: Mapping[st
         missing.append("Missing fundamentals")
     if not isinstance(evidence.get("quality_growth_scorecard"), Mapping):
         missing.append("Missing scorecard")
-    if not isinstance(evidence.get("latest_earnings"), Mapping):
+    if not _latest_earnings_for_evidence(evidence):
         missing.append("Missing latest earnings")
     if not _article_evidence_present(evidence):
         missing.append("Missing article evidence")
@@ -911,7 +1105,7 @@ def _evidence_warnings(evidence: Mapping[str, Any]) -> list[str]:
             warnings.extend(str(item) for item in value if str(item).strip())
         elif str(value or "").strip():
             warnings.append(str(value))
-    for nested_key in ("quality_growth_scorecard", "latest_earnings", "fundamental_metrics"):
+    for nested_key in ("quality_growth_scorecard", "latest_earnings", "latest_earnings_enrichment", "fundamental_metrics"):
         nested = evidence.get(nested_key)
         if not isinstance(nested, Mapping):
             continue
@@ -1060,6 +1254,35 @@ def _score_cell(value: Any) -> str:
     return f"{score:g}" if score > 0 else "n/a"
 
 
+def _historical_max_drawdown_pct(history: Any) -> float | None:
+    if not isinstance(history, list):
+        return None
+    peak: float | None = None
+    max_drawdown = 0.0
+    for item in history:
+        if not isinstance(item, Mapping):
+            continue
+        close = _number(item.get("close") or item.get("current_price") or item.get("price"))
+        if close <= 0:
+            continue
+        if peak is None or close > peak:
+            peak = close
+            continue
+        drawdown = ((close - peak) / peak) * 100.0
+        if drawdown < max_drawdown:
+            max_drawdown = drawdown
+    return max_drawdown if peak is not None else None
+
+
+def _drawdown_cell(value: Any) -> str:
+    if value is None or value == "":
+        return "n/a"
+    try:
+        return f"{float(value):.2f}%"
+    except (TypeError, ValueError):
+        return str(value)
+
+
 def _latest_recommendation_html(buy_intents: list[Mapping[str, Any]]) -> str:
     if not buy_intents:
         return "<p>No active BUY recommendation cleared promotion review.</p>"
@@ -1085,7 +1308,7 @@ def _holdings_table(portfolio_state: Mapping[str, Any] | None) -> str:
             "<h3>Current Portfolio Holdings</h3>"
             "<table class=\"holdings-table\">"
             "<thead><tr><th>Symbol</th><th>Shares</th><th>Original Purchase Total Cost</th><th>Current Total Value</th><th>% Gain</th><th>Status</th></tr></thead>"
-            "<tbody><tr><td colspan=\"6\">No current portfolio holdings were supplied for this generated dashboard.</td></tr></tbody>"
+            "<tbody data-portfolio-holdings><tr><td colspan=\"6\">No current portfolio holdings were supplied for this generated dashboard.</td></tr></tbody>"
             "</table>"
             "</div>"
         )
@@ -1113,10 +1336,223 @@ def _holdings_table(portfolio_state: Mapping[str, Any] | None) -> str:
         "<h3>Current Portfolio Holdings</h3>"
         "<table class=\"holdings-table\">"
         "<thead><tr><th>Symbol</th><th>Shares</th><th>Original Purchase Total Cost</th><th>Current Total Value</th><th>% Gain</th><th>Status</th></tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody>"
+        f"<tbody data-portfolio-holdings>{''.join(rows)}</tbody>"
         "</table>"
         "</div>"
     )
+
+
+def _portfolio_value_panel(portfolio_state: Mapping[str, Any] | None) -> str:
+    summary = _portfolio_summary(portfolio_state or {})
+    totals = summary["totals"]
+    return (
+        "<div class=\"portfolio-live-card\" data-portfolio-summary>"
+        "<div class=\"section-heading compact-heading\">"
+        "<p class=\"eyebrow\">Portfolio Totals</p>"
+        "<h3>Current Value And Gain</h3>"
+        "</div>"
+        "<div class=\"portfolio-total-grid\">"
+        f"<div><span>Total Current Value</span><strong data-portfolio-total=\"current_total_value\">{escape(_money_cents(totals['current_total_value']))}</strong></div>"
+        f"<div><span>Total Cost</span><strong data-portfolio-total=\"original_purchase_total_cost\">{escape(_money_cents(totals['original_purchase_total_cost']))}</strong></div>"
+        f"<div><span>Total Gain</span><strong data-portfolio-total=\"gain_amount\">{escape(_signed_money(totals['gain_amount']))}</strong></div>"
+        f"<div><span>% Gain</span><strong data-portfolio-total=\"gain_percent\">{escape(_signed_percent(totals['gain_percent']))}</strong></div>"
+        f"<div><span>Cash</span><strong data-portfolio-total=\"cash\">{escape(_money_cents(totals['cash']))}</strong></div>"
+        "</div>"
+        f"<div class=\"portfolio-gain-chart\" data-portfolio-gain-chart>{_portfolio_gain_chart(summary['holdings'])}</div>"
+        "<p class=\"portfolio-live-note\">Dashboard polls the local read-only portfolio endpoint when served from localhost. Scheduler refreshes keep this fed from broker/account artifacts.</p>"
+        "<small data-portfolio-last-updated>Local artifact snapshot</small>"
+        "</div>"
+    )
+
+
+def _pipeline_health_panel() -> str:
+    return (
+        "<div class=\"pipeline-health-card\" data-pipeline-health>"
+        "<div class=\"section-heading compact-heading\">"
+        "<p class=\"eyebrow\">Pipeline Artifact Health</p>"
+        "<h3>Saved Run Integrity</h3>"
+        "</div>"
+        "<div class=\"pipeline-health-grid\">"
+        "<div><span>Status</span><strong data-pipeline-health-status>Static Snapshot</strong></div>"
+        "<div><span>Missing</span><strong data-pipeline-health-missing>n/a</strong></div>"
+        "<div><span>Malformed</span><strong data-pipeline-health-malformed>n/a</strong></div>"
+        "<div><span>Selected</span><strong data-pipeline-health-selected>n/a</strong></div>"
+        "</div>"
+        "<p data-pipeline-health-message>Serve the dashboard locally to check saved pipeline artifacts from "
+        "<code>/api/pipeline-health.json</code>.</p>"
+        "<small data-pipeline-health-updated>Static snapshot shown.</small>"
+        "</div>"
+    )
+
+
+def _tax_mode_suppressions_panel(reasons: Iterable[Any]) -> str:
+    items = [str(reason).strip() for reason in reasons if str(reason).strip()]
+    if not items:
+        return ""
+    rows = "".join(
+        "<li>"
+        f"<strong>{escape(_display_label(reason))}</strong>"
+        f"<code>{escape(reason)}</code>"
+        "</li>"
+        for reason in items
+    )
+    return (
+        "<div class=\"tax-suppression-card\">"
+        "<div class=\"section-heading compact-heading\">"
+        "<p class=\"eyebrow\">Tax-Mode Suppressions</p>"
+        "<h3>Broad Actions Held Back</h3>"
+        "</div>"
+        "<p>These are advisory suppressions, not broker-submit blockers. Stock-specific sells can still be reviewed separately.</p>"
+        f"<ul>{rows}</ul>"
+        "</div>"
+    )
+
+
+def _api_usage_panel(api_usage: Mapping[str, Any] | None) -> str:
+    usage = api_usage or {}
+    providers = [dict(item) for item in usage.get("providers") or [] if isinstance(item, Mapping)]
+    totals = usage.get("totals") if isinstance(usage.get("totals"), Mapping) else {}
+    tier = usage.get("tier_tracking") if isinstance(usage.get("tier_tracking"), Mapping) else {}
+    if not providers:
+        provider_cards = (
+            "<div class=\"usage-provider-card usage-provider-empty\">"
+            "<span>No Paid Usage Yet</span>"
+            "<strong>$0.00</strong>"
+            "<small>Run a Perplexity or Grok enrichment artifact with usage tracking to populate this panel.</small>"
+            "</div>"
+        )
+    else:
+        provider_cards = "".join(_api_usage_provider_card(provider) for provider in providers)
+    progress = max(0.0, min(100.0, _number(tier.get("progress_percent"))))
+    remaining = tier.get("estimated_remaining_to_tier_1_usd")
+    remaining_text = _money_cents(remaining) if remaining not in (None, "") else "n/a"
+    return (
+        "<section class=\"panel\" id=\"api-usage\">"
+        "<div class=\"section-heading\">"
+        "<p class=\"eyebrow\">API Usage</p>"
+        "<h2>Model Spend And Tier Progress</h2>"
+        "</div>"
+        "<p>Broad enrichment should prefer Python, Finnhub, Polygon, and cached artifacts first; paid model calls are tracked here so Perplexity and Grok 4.3 usage stays deliberate.</p>"
+        "<div class=\"api-usage-card\" data-api-usage>"
+        "<div class=\"api-usage-total-grid\">"
+        f"<div><span>Estimated Cost</span><strong data-api-usage-total=\"estimated_total_cost_usd\">{escape(_money_cents(totals.get('estimated_total_cost_usd')))}</strong></div>"
+        f"<div><span>Requests</span><strong data-api-usage-total=\"request_count\">{int(_number(totals.get('request_count')))}</strong></div>"
+        f"<div><span>Tokens</span><strong data-api-usage-total=\"total_tokens\">{int(_number(totals.get('total_tokens'))):,}</strong></div>"
+        f"<div><span>Tier 1 Remaining</span><strong data-api-usage-tier=\"remaining\">{escape(remaining_text)}</strong></div>"
+        "</div>"
+        f"<div class=\"usage-progress\" aria-label=\"Perplexity tier progress\"><i data-api-usage-progress style=\"width:{progress:.1f}%\"></i></div>"
+        "<div class=\"usage-provider-grid\" data-api-usage-providers>"
+        f"{provider_cards}"
+        "</div>"
+        f"<small data-api-usage-updated>{escape(_api_usage_status_text(usage))}</small>"
+        "</div>"
+        "</section>"
+    )
+
+
+def _api_usage_provider_card(provider: Mapping[str, Any]) -> str:
+    provider_label = _provider_display_label(provider.get("provider"))
+    model = str(provider.get("model") or "unknown")
+    cost = _money_cents(provider.get("estimated_total_cost_usd"))
+    requests = int(_number(provider.get("request_count")))
+    tokens = int(_number(provider.get("total_tokens")))
+    context = str(provider.get("search_context_size") or "").strip()
+    detail = f"{requests} requests / {tokens:,} tokens"
+    if context:
+        detail = f"{detail} / {context} context"
+    return (
+        "<div class=\"usage-provider-card\">"
+        f"<span>{escape(provider_label)}</span>"
+        f"<strong>{escape(cost)}</strong>"
+        f"<small>{escape(model)} - {escape(detail)}</small>"
+        "</div>"
+    )
+
+
+def _provider_display_label(value: Any) -> str:
+    text = str(value or "unknown").strip()
+    labels = {
+        "perplexity": "Perplexity",
+        "xai": "xAI / Grok",
+        "grok": "xAI / Grok",
+        "PerplexityResearchClient": "Perplexity",
+    }
+    return labels.get(text, _display_label(text))
+
+
+def _api_usage_status_text(usage: Mapping[str, Any]) -> str:
+    status = str(usage.get("status") or "unavailable")
+    source = str(usage.get("source_path") or "").strip()
+    if source:
+        return f"Static usage snapshot from {Path(source).name}: {_display_label(status)}."
+    return f"Static usage snapshot: {_display_label(status)}."
+
+
+def _portfolio_summary(portfolio_state: Mapping[str, Any] | None) -> dict[str, Any]:
+    protected = {
+        str(symbol).upper()
+        for symbol in _mapping_get(portfolio_state or {}, "protected_symbols", default=[]) or []
+    }
+    holdings = []
+    totals = {
+        "original_purchase_total_cost": 0.0,
+        "current_total_value": 0.0,
+        "gain_amount": 0.0,
+        "gain_percent": 0.0,
+        "cash": _number(_mapping_get(portfolio_state or {}, "cash", default=0.0)),
+    }
+    for holding in _portfolio_holdings(portfolio_state or {}):
+        symbol = _holding_symbol(holding)
+        quantity = _holding_number(holding, "quantity", "shares")
+        current_price = _holding_number(holding, "current_price")
+        current_value = _holding_number(holding, "market_value", "current_total_value", "current_value")
+        if current_value <= 0 and current_price > 0 and quantity > 0:
+            current_value = current_price * quantity
+        cost = _holding_total_cost(holding, quantity=quantity)
+        gain_amount = current_value - cost if cost > 0 else 0.0
+        gain_percent = (gain_amount / cost) * 100.0 if cost > 0 else 0.0
+        status = str(_mapping_get(holding, "status", default="") or "").strip()
+        if not status:
+            status = "Protected / core" if symbol in protected else "Active holding"
+        holdings.append(
+            {
+                "symbol": symbol,
+                "quantity": quantity,
+                "current_price": current_price,
+                "original_purchase_total_cost": cost,
+                "current_total_value": current_value,
+                "gain_amount": gain_amount,
+                "gain_percent": gain_percent,
+                "status": status,
+            }
+        )
+        totals["original_purchase_total_cost"] += cost
+        totals["current_total_value"] += current_value
+    totals["gain_amount"] = totals["current_total_value"] - totals["original_purchase_total_cost"]
+    if totals["original_purchase_total_cost"] > 0:
+        totals["gain_percent"] = (totals["gain_amount"] / totals["original_purchase_total_cost"]) * 100.0
+    holdings.sort(key=lambda item: str(item["symbol"]))
+    return {"holdings": holdings, "totals": totals}
+
+
+def _portfolio_gain_chart(holdings: list[Mapping[str, Any]]) -> str:
+    if not holdings:
+        return "<p>No holdings to chart yet.</p>"
+    max_abs = max(abs(_number(item.get("gain_percent"))) for item in holdings) or 1.0
+    rows = []
+    for item in holdings[:12]:
+        symbol = str(item.get("symbol") or "")
+        gain = _number(item.get("gain_percent"))
+        width = max(3.0, min(100.0, (abs(gain) / max_abs) * 100.0))
+        tone = "positive" if gain >= 0 else "negative"
+        rows.append(
+            "<div class=\"portfolio-gain-row\">"
+            f"<span>{escape(symbol)}</span>"
+            f"<i class=\"{tone}\" style=\"width:{width:.1f}%\"></i>"
+            f"<strong>{escape(_signed_percent(gain))}</strong>"
+            "</div>"
+        )
+    return "".join(rows)
 
 
 def _portfolio_holdings(portfolio_state: Mapping[str, Any] | None) -> list[Mapping[str, Any]]:
@@ -1270,6 +1706,182 @@ def _synced_table_scroller_script() -> str:
 """
 
 
+def _portfolio_live_refresh_script() -> str:
+    return r"""
+(function initPortfolioLiveRefresh(){
+  const summary = document.querySelector("[data-portfolio-summary]");
+  const body = document.querySelector("[data-portfolio-holdings]");
+  if (!summary || !body) return;
+  const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+  const shares = new Intl.NumberFormat("en-US", { maximumFractionDigits: 6 });
+  const signedMoney = (value) => {
+    const amount = Number(value || 0);
+    return `${amount >= 0 ? "+" : "-"}${money.format(Math.abs(amount))}`;
+  };
+  const signedPercent = (value) => {
+    const amount = Number(value || 0);
+    return `${amount >= 0 ? "+" : ""}${amount.toFixed(2)}%`;
+  };
+  const text = (value) => String(value ?? "");
+  const escapeHtml = (value) => text(value).replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[char]));
+  const chart = document.querySelector("[data-portfolio-gain-chart]");
+  const updated = document.querySelector("[data-portfolio-last-updated]");
+  function renderChart(holdings) {
+    if (!chart) return;
+    if (!holdings.length) {
+      chart.innerHTML = "<p>No holdings to chart yet.</p>";
+      return;
+    }
+    const maxAbs = Math.max(...holdings.map((item) => Math.abs(Number(item.gain_percent || 0))), 1);
+    chart.innerHTML = holdings.slice(0, 12).map((item) => {
+      const gain = Number(item.gain_percent || 0);
+      const width = Math.max(3, Math.min(100, (Math.abs(gain) / maxAbs) * 100));
+      const tone = gain >= 0 ? "positive" : "negative";
+      return `<div class="portfolio-gain-row"><span>${escapeHtml(item.symbol)}</span><i class="${tone}" style="width:${width.toFixed(1)}%"></i><strong>${signedPercent(gain)}</strong></div>`;
+    }).join("");
+  }
+  function renderHoldings(holdings) {
+    if (!holdings.length) {
+      body.innerHTML = '<tr><td colspan="6">No holdings are currently available from the live portfolio endpoint.</td></tr>';
+      return;
+    }
+    body.innerHTML = holdings.map((item) => {
+      const symbol = escapeHtml(item.symbol);
+      return `<tr><td><a href="tickers/${symbol}.html">${symbol}</a></td><td>${shares.format(Number(item.quantity || 0))}</td><td>${money.format(Number(item.original_purchase_total_cost || 0))}</td><td>${money.format(Number(item.current_total_value || 0))}</td><td>${signedPercent(item.gain_percent)}</td><td>${escapeHtml(item.status || "Active holding")}</td></tr>`;
+    }).join("");
+  }
+  function render(payload) {
+    const totals = payload.totals || {};
+    const fields = {
+      current_total_value: money.format(Number(totals.current_total_value || 0)),
+      original_purchase_total_cost: money.format(Number(totals.original_purchase_total_cost || 0)),
+      gain_amount: signedMoney(totals.gain_amount),
+      gain_percent: signedPercent(totals.gain_percent),
+      cash: money.format(Number(totals.cash || 0))
+    };
+    Object.entries(fields).forEach(([key, value]) => {
+      document.querySelectorAll(`[data-portfolio-total="${key}"]`).forEach((node) => { node.textContent = value; });
+    });
+    const holdings = Array.isArray(payload.holdings) ? payload.holdings : [];
+    renderHoldings(holdings);
+    renderChart(holdings);
+    if (updated) updated.textContent = `Updated from local portfolio endpoint: ${payload.generated_at || "now"}`;
+  }
+  async function refresh() {
+    try {
+      const response = await fetch("/api/portfolio.json", { cache: "no-store" });
+      if (!response.ok) return;
+      render(await response.json());
+    } catch (error) {
+      if (updated) updated.textContent = "Static snapshot shown; live local endpoint unavailable.";
+    }
+  }
+  refresh();
+  window.setInterval(refresh, 30000);
+})();
+"""
+
+
+def _pipeline_health_refresh_script() -> str:
+    return r"""
+(function initPipelineHealthRefresh(){
+  const card = document.querySelector("[data-pipeline-health]");
+  if (!card) return;
+  const statusNode = card.querySelector("[data-pipeline-health-status]");
+  const missingNode = card.querySelector("[data-pipeline-health-missing]");
+  const malformedNode = card.querySelector("[data-pipeline-health-malformed]");
+  const selectedNode = card.querySelector("[data-pipeline-health-selected]");
+  const messageNode = card.querySelector("[data-pipeline-health-message]");
+  const updatedNode = card.querySelector("[data-pipeline-health-updated]");
+  const titleCase = (value) => String(value || "unknown").replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
+  function render(payload) {
+    const health = payload.health || {};
+    const rollup = payload.rollup || {};
+    const selection = rollup.research_selection || {};
+    if (statusNode) statusNode.textContent = titleCase(payload.status || health.status);
+    if (missingNode) missingNode.textContent = String(health.missing_count ?? 0);
+    if (malformedNode) malformedNode.textContent = String(health.malformed_count ?? 0);
+    if (selectedNode) selectedNode.textContent = String(selection.selected_count ?? 0);
+    if (messageNode) messageNode.textContent = payload.next_safe_action ? titleCase(payload.next_safe_action) : "Pipeline health loaded.";
+    if (updatedNode) updatedNode.textContent = `Checked from local pipeline endpoint: ${payload.pipeline_status || "unknown"}`;
+    card.dataset.pipelineHealthState = String(payload.status || health.status || "unknown");
+  }
+  async function refresh() {
+    try {
+      const response = await fetch("/api/pipeline-health.json", { cache: "no-store" });
+      if (!response.ok) return;
+      render(await response.json());
+    } catch (error) {
+      if (updatedNode) updatedNode.textContent = "Static snapshot shown; live local pipeline endpoint unavailable.";
+    }
+  }
+  refresh();
+  window.setInterval(refresh, 45000);
+})();
+"""
+
+
+def _api_usage_refresh_script() -> str:
+    return r"""
+(function initApiUsageRefresh(){
+  const card = document.querySelector("[data-api-usage]");
+  if (!card) return;
+  const totalCost = card.querySelector('[data-api-usage-total="estimated_total_cost_usd"]');
+  const requestCount = card.querySelector('[data-api-usage-total="request_count"]');
+  const totalTokens = card.querySelector('[data-api-usage-total="total_tokens"]');
+  const remaining = card.querySelector('[data-api-usage-tier="remaining"]');
+  const progress = card.querySelector("[data-api-usage-progress]");
+  const providerGrid = card.querySelector("[data-api-usage-providers]");
+  const updated = card.querySelector("[data-api-usage-updated]");
+  const money = (value) => {
+    const amount = Number(value || 0);
+    return amount ? `$${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "$0.00";
+  };
+  const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+  const titleCase = (value) => String(value || "unknown").replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
+  const providerLabel = (value) => {
+    const text = String(value || "unknown");
+    if (text === "perplexity" || text === "PerplexityResearchClient") return "Perplexity";
+    if (text === "xai" || text === "grok") return "xAI / Grok";
+    return titleCase(text);
+  };
+  function providerCard(provider) {
+    const requests = Number(provider.request_count || 0);
+    const tokens = Number(provider.total_tokens || 0);
+    const context = provider.search_context_size ? ` / ${escapeHtml(provider.search_context_size)} context` : "";
+    return `<div class="usage-provider-card"><span>${escapeHtml(providerLabel(provider.provider))}</span><strong>${money(provider.estimated_total_cost_usd)}</strong><small>${escapeHtml(provider.model || "unknown")} - ${requests} requests / ${tokens.toLocaleString()} tokens${context}</small></div>`;
+  }
+  function render(payload) {
+    const totals = payload.totals || {};
+    const tier = payload.tier_tracking || {};
+    if (totalCost) totalCost.textContent = money(totals.estimated_total_cost_usd);
+    if (requestCount) requestCount.textContent = String(totals.request_count || 0);
+    if (totalTokens) totalTokens.textContent = Number(totals.total_tokens || 0).toLocaleString();
+    if (remaining) remaining.textContent = tier.estimated_remaining_to_tier_1_usd == null ? "n/a" : money(tier.estimated_remaining_to_tier_1_usd);
+    if (progress) progress.style.width = `${Math.max(0, Math.min(100, Number(tier.progress_percent || 0)))}%`;
+    if (providerGrid) {
+      const providers = Array.isArray(payload.providers) ? payload.providers : [];
+      providerGrid.innerHTML = providers.length ? providers.map(providerCard).join("") : '<div class="usage-provider-card usage-provider-empty"><span>No Paid Usage Yet</span><strong>$0.00</strong><small>Run enrichment with usage tracking to populate this panel.</small></div>';
+    }
+    if (updated) updated.textContent = `Checked from local API usage endpoint: ${titleCase(payload.status || "unknown")}.`;
+  }
+  async function refresh() {
+    try {
+      const response = await fetch("/api/api-usage.json", { cache: "no-store" });
+      if (!response.ok) return;
+      render(await response.json());
+    } catch (error) {
+      if (updated) updated.textContent = "Static snapshot shown; live local API usage endpoint unavailable.";
+    }
+  }
+  refresh();
+  window.setInterval(refresh, 45000);
+})();
+"""
+
+
 def _agent_chat_placeholder() -> str:
     return """
       <aside class="agent-chat" aria-label="Agent chat placeholder">
@@ -1376,7 +1988,8 @@ def _ticker_page_html(
     promotion = intent.get("promotion_review") if isinstance(intent.get("promotion_review"), Mapping) else {}
     scorecard = evidence.get("quality_growth_scorecard") if isinstance(evidence.get("quality_growth_scorecard"), Mapping) else {}
     fundamentals = evidence.get("fundamental_metrics") if isinstance(evidence.get("fundamental_metrics"), Mapping) else {}
-    earnings = evidence.get("latest_earnings") if isinstance(evidence.get("latest_earnings"), Mapping) else {}
+    earnings = _latest_earnings_for_evidence(evidence)
+    first_pass_scan = evidence.get("python_first_pass_scan") if isinstance(evidence.get("python_first_pass_scan"), Mapping) else {}
     articles = evidence.get("article_evidence_summaries") or evidence.get("relevant_news") or []
     return _html_shell(
         title=f"{symbol} Research Tear Sheet",
@@ -1402,10 +2015,14 @@ def _ticker_page_html(
           {_metric_tile("Confidence", promotion.get("confidence"))}
           {_metric_tile("Suggested Size", _percentish(promotion.get("suggested_size_pct")))}
           {_metric_tile("Superscore", scorecard.get("superscore"))}
+          {_metric_tile("Scan Score", first_pass_scan.get("rank_score") or first_pass_scan.get("score"))}
+          {_metric_tile("Moneyball", first_pass_scan.get("moneyball_score"))}
+          {_metric_tile("Quant", first_pass_scan.get("quant_score"))}
           {_metric_tile("Valuation Fit", promotion.get("valuation_fit_score"))}
+          {_metric_tile("Historical Max Drawdown", _drawdown_cell(_historical_max_drawdown_pct(price_history)))}
         </section>
         <section class="panel two-column">
-          {_score_panel(scorecard)}
+          {_score_panel(scorecard, first_pass_scan=first_pass_scan)}
           {_earnings_panel(earnings)}
         </section>
         <section class="panel">
@@ -1529,12 +2146,21 @@ def _html_shell(*, title: str, body: str) -> str:
       background: rgba(255,255,255,.1);
       transform: translateX(3px);
     }}
-    .dashboard-rail a span {{
-      width: 20px;
-      height: 20px;
-      border: 2px solid rgba(185,205,182,.8);
-      border-radius: 6px;
-      box-shadow: 12px 0 0 -5px rgba(185,205,182,.6), 0 12px 0 -5px rgba(185,205,182,.6);
+    .dashboard-rail .nav-icon {{
+      width: 25px;
+      height: 25px;
+      flex: 0 0 25px;
+      color: rgba(185,205,182,.88);
+      filter: drop-shadow(0 5px 8px rgba(0,0,0,.18));
+      transition: color .18s ease, transform .18s ease;
+    }}
+    .dashboard-rail a:first-child .nav-icon, .dashboard-rail a:hover .nav-icon {{
+      color: #7df0d0;
+      transform: translateX(1px) scale(1.04);
+    }}
+    .dashboard-rail .nav-label {{
+      min-width: 0;
+      overflow-wrap: anywhere;
     }}
     .dashboard-main {{ min-width: 0; padding-bottom: 34px; }}
     .dashboard-topbar {{
@@ -1811,6 +2437,137 @@ def _html_shell(*, title: str, body: str) -> str:
     .holdings-table-wrap {{ margin-top: 24px; }}
     .holdings-table-wrap h3 {{ margin: 0 0 8px; font-size: 22px; letter-spacing: -.03em; }}
     .holdings-table td[colspan] {{ color: var(--muted); font-style: italic; }}
+    .portfolio-live-card, .pipeline-health-card, .api-usage-card, .tax-suppression-card {{
+      margin-top: 22px;
+      padding: 22px;
+      border: 1px solid rgba(15,107,86,.22);
+      border-radius: 24px;
+      background:
+        radial-gradient(circle at 96% 8%, rgba(15,107,86,.14), transparent 16rem),
+        linear-gradient(145deg, rgba(255,250,240,.95), rgba(237,224,198,.62));
+    }}
+    .compact-heading h3 {{ margin: 0; font-size: 28px; letter-spacing: -.04em; }}
+    .portfolio-total-grid, .pipeline-health-grid, .api-usage-total-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }}
+    .portfolio-total-grid div, .pipeline-health-grid div, .api-usage-total-grid div {{
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: 17px;
+      background: rgba(255,250,240,.66);
+    }}
+    .portfolio-total-grid span, .pipeline-health-grid span, .api-usage-total-grid span, .usage-provider-card span {{
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      font-weight: 900;
+    }}
+    .portfolio-total-grid strong, .pipeline-health-grid strong, .api-usage-total-grid strong, .usage-provider-card strong {{
+      display: block;
+      margin-top: 8px;
+      font-size: 23px;
+      letter-spacing: -.03em;
+      overflow-wrap: anywhere;
+    }}
+    .usage-progress {{
+      height: 12px;
+      margin: 18px 0 0;
+      border: 1px solid rgba(15,107,86,.18);
+      border-radius: 999px;
+      background: rgba(255,250,240,.7);
+      overflow: hidden;
+    }}
+    .usage-progress i {{
+      display: block;
+      height: 100%;
+      width: 0%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #0f6b56, #7df0d0);
+      transition: width .35s ease;
+    }}
+    .usage-provider-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }}
+    .usage-provider-card {{
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255,250,240,.66);
+    }}
+    .usage-provider-card small {{
+      display: block;
+      margin-top: 9px;
+      color: var(--muted);
+      line-height: 1.35;
+    }}
+    .usage-provider-empty {{
+      border-style: dashed;
+    }}
+    .pipeline-health-card[data-pipeline-health-state="attention_required"] {{
+      border-color: rgba(176,75,45,.34);
+    }}
+    .tax-suppression-card p {{ margin: 12px 0 0; color: var(--muted); }}
+    .tax-suppression-card ul {{
+      display: grid;
+      gap: 10px;
+      padding: 0;
+      margin: 16px 0 0;
+      list-style: none;
+    }}
+    .tax-suppression-card li {{
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(255,250,240,.66);
+    }}
+    .tax-suppression-card code {{
+      color: var(--muted);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }}
+    .portfolio-gain-chart {{
+      display: grid;
+      gap: 9px;
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+    }}
+    .portfolio-gain-row {{
+      display: grid;
+      grid-template-columns: 70px minmax(120px, 1fr) 74px;
+      gap: 10px;
+      align-items: center;
+    }}
+    .portfolio-gain-row span, .portfolio-gain-row strong {{
+      font-weight: 900;
+      font-size: 13px;
+    }}
+    .portfolio-gain-row i {{
+      display: block;
+      height: 12px;
+      min-width: 4px;
+      border-radius: 999px;
+      background: var(--accent);
+    }}
+    .portfolio-gain-row i.negative {{ background: var(--danger); }}
+    .portfolio-live-note, [data-portfolio-last-updated] {{
+      display: block;
+      margin: 12px 0 0;
+      color: var(--muted);
+      line-height: 1.35;
+    }}
     .placeholder-panel {{
       border-style: dashed;
       background:
@@ -1864,7 +2621,7 @@ def _html_shell(*, title: str, body: str) -> str:
       padding-bottom: 8px;
     }}
     .rankings-table {{
-      min-width: 1120px;
+      min-width: 1080px;
       table-layout: fixed;
     }}
     .rankings-table th, .rankings-table td {{
@@ -1875,19 +2632,19 @@ def _html_shell(*, title: str, body: str) -> str:
       word-break: normal;
     }}
     .rankings-table th:nth-child(1), .rankings-table td:nth-child(1) {{ width: 54px; }}
-    .rankings-table th:nth-child(2), .rankings-table td:nth-child(2) {{ width: 82px; }}
-    .rankings-table th:nth-child(3), .rankings-table td:nth-child(3) {{ width: 92px; }}
-    .rankings-table th:nth-child(4), .rankings-table td:nth-child(4) {{ width: 150px; }}
-    .rankings-table th:nth-child(5), .rankings-table td:nth-child(5) {{ width: 165px; }}
+    .rankings-table th:nth-child(2), .rankings-table td:nth-child(2) {{ width: 110px; }}
+    .rankings-table th:nth-child(3), .rankings-table td:nth-child(3) {{ width: 82px; }}
+    .rankings-table th:nth-child(4), .rankings-table td:nth-child(4) {{ width: 132px; }}
+    .rankings-table th:nth-child(5), .rankings-table td:nth-child(5) {{ width: 185px; }}
     .rankings-table th:nth-child(6), .rankings-table td:nth-child(6) {{ width: 92px; }}
     .rankings-table th:nth-child(7), .rankings-table td:nth-child(7),
     .rankings-table th:nth-child(8), .rankings-table td:nth-child(8),
-    .rankings-table th:nth-child(9), .rankings-table td:nth-child(9),
-    .rankings-table th:nth-child(10), .rankings-table td:nth-child(10) {{ width: 78px; }}
-    .rankings-table th:nth-child(11), .rankings-table td:nth-child(11) {{ width: 280px; }}
-    .rankings-table th:nth-child(12), .rankings-table td:nth-child(12) {{ width: 120px; }}
+    .rankings-table th:nth-child(9), .rankings-table td:nth-child(9) {{ width: 82px; }}
+    .rankings-table th:nth-child(10), .rankings-table td:nth-child(10) {{ width: 300px; }}
+    .rankings-table th:nth-child(11), .rankings-table td:nth-child(11) {{ width: 120px; }}
     .rankings-table th:nth-child(1), .rankings-table td:nth-child(1),
-    .rankings-table th:nth-child(2), .rankings-table td:nth-child(2) {{
+    .rankings-table th:nth-child(2), .rankings-table td:nth-child(2),
+    .rankings-table th:nth-child(3), .rankings-table td:nth-child(3) {{
       position: sticky;
       z-index: 2;
       background: var(--paper-2);
@@ -1895,9 +2652,11 @@ def _html_shell(*, title: str, body: str) -> str:
     }}
     .rankings-table th:nth-child(1), .rankings-table td:nth-child(1) {{ left: 0; }}
     .rankings-table th:nth-child(2), .rankings-table td:nth-child(2) {{ left: 54px; }}
+    .rankings-table th:nth-child(3), .rankings-table td:nth-child(3) {{ left: 164px; }}
+    .rankings-table th:nth-child(3), .rankings-table td:nth-child(3) {{ z-index: 1; }}
     .rankings-table thead th:nth-child(1), .rankings-table thead th:nth-child(2) {{ z-index: 3; }}
     .scorecards-table {{
-      min-width: 1020px;
+      min-width: 1090px;
       table-layout: fixed;
     }}
     .scorecards-table th, .scorecards-table td {{
@@ -1913,10 +2672,11 @@ def _html_shell(*, title: str, body: str) -> str:
     .scorecards-table th:nth-child(4), .scorecards-table td:nth-child(4),
     .scorecards-table th:nth-child(5), .scorecards-table td:nth-child(5),
     .scorecards-table th:nth-child(6), .scorecards-table td:nth-child(6),
-    .scorecards-table th:nth-child(7), .scorecards-table td:nth-child(7) {{ width: 90px; }}
-    .scorecards-table th:nth-child(8), .scorecards-table td:nth-child(8) {{ width: 150px; }}
-    .scorecards-table th:nth-child(9), .scorecards-table td:nth-child(9) {{ width: 130px; }}
-    .scorecards-table th:nth-child(10), .scorecards-table td:nth-child(10) {{ width: 250px; }}
+    .scorecards-table th:nth-child(7), .scorecards-table td:nth-child(7) {{ width: 78px; }}
+    .scorecards-table th:nth-child(8), .scorecards-table td:nth-child(8) {{ width: 140px; }}
+    .scorecards-table th:nth-child(9), .scorecards-table td:nth-child(9) {{ width: 120px; }}
+    .scorecards-table th:nth-child(10), .scorecards-table td:nth-child(10) {{ width: 86px; }}
+    .scorecards-table th:nth-child(11), .scorecards-table td:nth-child(11) {{ width: 250px; }}
     .scorecards-table th:nth-child(1), .scorecards-table td:nth-child(1) {{
       position: sticky;
       left: 0;
@@ -2339,33 +3099,93 @@ def _metric_tile(label: str, value: Any) -> str:
     return f"<div class=\"metric-tile\"><span>{escape(label)}</span><strong>{escape(str(value if value not in (None, '') else 'n/a'))}</strong></div>"
 
 
-def _score_panel(scorecard: Mapping[str, Any]) -> str:
+def _score_panel(scorecard: Mapping[str, Any], *, first_pass_scan: Mapping[str, Any] | None = None) -> str:
     analysis = scorecard.get("analysis") if isinstance(scorecard.get("analysis"), Mapping) else {}
     if not scorecard and not analysis:
         return "<div><div class=\"section-heading\"><p class=\"eyebrow\">Scores</p><h2>Scorecard</h2></div><p>No scorecard available yet.</p></div>"
     rows = []
-    for key in ("quality", "growth", "valuation", "safety", "market_attention", "market_buzz"):
-        if key in analysis:
-            value = _number(analysis.get(key))
+    for label, value in _scorecard_bar_values(scorecard, analysis):
+        if value is not None:
+            numeric = _number(value)
             rows.append(
-                f"<li><strong>{escape(key.replace('_', ' ').title())}</strong><div class=\"bar\"><i style=\"width:{max(0, min(100, value)):.0f}%\"></i></div></li>"
+                f"<li><strong>{escape(label)}</strong><span>{numeric:g}</span><div class=\"bar\"><i style=\"width:{max(0, min(100, numeric)):.0f}%\"></i></div></li>"
             )
+    first_pass_scan = first_pass_scan or {}
+    scan_html = ""
+    if first_pass_scan:
+        scan_bits = [
+            ("Rank Score", first_pass_scan.get("rank_score") or first_pass_scan.get("score")),
+            ("Moneyball", first_pass_scan.get("moneyball_score")),
+            ("Quant", first_pass_scan.get("quant_score")),
+            ("Rank", first_pass_scan.get("rank")),
+        ]
+        scan_items = "".join(
+            f"<li><strong>{escape(label)}</strong> {escape(str(value))}</li>"
+            for label, value in scan_bits
+            if value not in (None, "")
+        )
+        reason = str(first_pass_scan.get("reason") or first_pass_scan.get("rank_reason") or "")
+        scan_html = (
+            "<div class=\"scan-card\"><h3>First-Pass Scan</h3>"
+            f"<ul>{scan_items}</ul>"
+            f"<p>{escape(_short_text(reason, 180))}</p>"
+            "</div>"
+        )
     return (
         "<div><div class=\"section-heading\"><p class=\"eyebrow\">Scores</p><h2>Scorecard</h2></div>"
         f"<p>Superscore: <strong>{escape(str(scorecard.get('superscore') or 'n/a'))}</strong></p>"
-        f"<ul class=\"score-list\">{''.join(rows) or '<li>No analysis bars available.</li>'}</ul></div>"
+        f"<ul class=\"score-list\">{''.join(rows) or '<li>No analysis bars available.</li>'}</ul>"
+        f"{scan_html}</div>"
     )
 
 
 def _earnings_panel(earnings: Mapping[str, Any]) -> str:
-    takeaways = earnings.get("key_takeaways") or earnings.get("positive_developments") or []
+    takeaways = (
+        earnings.get("key_takeaways")
+        or earnings.get("key_financial_takeaways")
+        or earnings.get("positive_developments")
+        or []
+    )
     items = "".join(f"<li>{escape(str(item))}</li>" for item in takeaways[:5])
     return (
         "<div><div class=\"section-heading\"><p class=\"eyebrow\">Earnings</p><h2>Latest Earnings</h2></div>"
-        f"<p><strong>{escape(str(earnings.get('quarter') or 'Quarter pending'))}</strong></p>"
+        f"<p><strong>{escape(_display_label(earnings.get('quarter') or 'Quarter pending'))}</strong></p>"
         f"<p>{escape(str(earnings.get('summary') or 'No earnings narrative available yet.'))}</p>"
         f"<ul class=\"article-list\">{items or '<li>No takeaways captured.</li>'}</ul></div>"
     )
+
+
+def _latest_earnings_for_evidence(evidence: Mapping[str, Any]) -> Mapping[str, Any]:
+    for key in ("latest_earnings", "latest_earnings_enrichment", "recent_earnings"):
+        value = evidence.get(key)
+        if isinstance(value, Mapping):
+            return value
+    return {}
+
+
+def _scorecard_bar_values(scorecard: Mapping[str, Any], analysis: Mapping[str, Any]) -> list[tuple[str, Any]]:
+    return [
+        ("Quality", _first_present(analysis.get("quality"), scorecard.get("quality_score"))),
+        ("Growth", _first_present(analysis.get("growth"), scorecard.get("growth_score"))),
+        ("Valuation", _first_present(analysis.get("valuation"), scorecard.get("valuation_score"))),
+        ("Safety", _first_present(analysis.get("safety"), scorecard.get("safety_score"))),
+        (
+            "Market Buzz",
+            _first_present(
+                analysis.get("market_attention"),
+                analysis.get("market_buzz"),
+                scorecard.get("market_attention_score"),
+                scorecard.get("market_buzz_score"),
+            ),
+        ),
+    ]
+
+
+def _first_present(*values: Any) -> Any:
+    for value in values:
+        if value not in (None, ""):
+            return value
+    return None
 
 
 def _fundamental_sections(fundamentals: Mapping[str, Any]) -> str:
@@ -2424,6 +3244,21 @@ def _metric_label(value: str) -> str:
     return value.replace("_", " ").title().replace("Cagr", "CAGR").replace("Eps", "EPS")
 
 
+def _display_label(value: Any) -> str:
+    text = str(value or "").strip()
+    labels = {
+        "latest_available": "Latest Available",
+        "latest_quarter": "Latest Quarter",
+        "quarter_pending": "Quarter Pending",
+    }
+    lowered = text.lower()
+    if lowered in labels:
+        return labels[lowered]
+    if "_" in text or "-" in text:
+        return text.replace("_", " ").replace("-", " ").title()
+    return text
+
+
 def _short_text(value: str, limit: int) -> str:
     value = " ".join(str(value or "").split())
     if len(value) <= limit:
@@ -2445,6 +3280,18 @@ def _money_cents(value: Any) -> str:
     except (TypeError, ValueError):
         amount = 0.0
     return f"${amount:,.2f}" if amount else "$0.00"
+
+
+def _signed_money(value: Any) -> str:
+    amount = _number(value)
+    sign = "+" if amount >= 0 else "-"
+    return f"{sign}${abs(amount):,.2f}"
+
+
+def _signed_percent(value: Any) -> str:
+    amount = _number(value)
+    sign = "+" if amount >= 0 else ""
+    return f"{sign}{amount:.2f}%"
 
 
 def _shares(value: Any) -> str:

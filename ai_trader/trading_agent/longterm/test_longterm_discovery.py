@@ -43,6 +43,33 @@ def test_discovery_merges_duplicate_symbols_and_preserves_provenance():
     assert "Premium source candidate." in top.notes
 
 
+def test_discovery_scores_fresh_repeat_source_recommendations():
+    result = DiscoveryEngine(research_score_threshold=45).build_queue(
+        [
+            {
+                "symbol": "ADBE",
+                "company_name": "Adobe",
+                "source": "motley_fool_new_recommendations",
+                "source_recommendation_count": 3,
+                "source_fresh_recommendation": True,
+                "source_priority_boost": 10,
+            },
+            {
+                "symbol": "DOCU",
+                "company_name": "DocuSign",
+                "source": "motley_fool_rankings",
+            },
+        ],
+        research_limit=2,
+    )
+
+    assert result.research_queue[0].symbol == "ADBE"
+    assert result.research_queue[0].source_recommendation_count == 3
+    assert result.research_queue[0].source_fresh_recommendation is True
+    assert result.watchlist[0].symbol == "DOCU"
+    assert result.research_queue[0].discovery_score > result.watchlist[0].discovery_score
+
+
 def test_discovery_separates_research_watchlist_and_rejected_candidates():
     result = DiscoveryEngine().build_queue(
         [

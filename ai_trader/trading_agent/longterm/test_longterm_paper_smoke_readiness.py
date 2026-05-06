@@ -113,6 +113,61 @@ def test_paper_smoke_readiness_blocks_dirty_account_and_incompatible_broker_mode
     assert "broker_capability_mismatch" in report["blockers"]
 
 
+def test_paper_smoke_readiness_can_allow_existing_paper_positions_for_ongoing_portfolio():
+    cleanliness = evaluate_paper_account_cleanliness(
+        PortfolioState(
+            cash=67641.28,
+            holdings=[{"symbol": "ADBE", "market_value": 755, "quantity": 3}],
+            protected_symbols=["FXAIX"],
+        ),
+        expected_cash=67641.28,
+    )
+    broker_capabilities = evaluate_broker_capability_match(
+        paper_broker="alpaca_paper",
+        live_broker="schwab_api",
+        required_order_model="whole_share",
+    )
+
+    report = build_paper_smoke_readiness_report(
+        account_cleanliness=cleanliness,
+        broker_capabilities=broker_capabilities,
+        scheduler_readiness={"blocker_count": 0, "warning_count": 0},
+        workflow_smoke={"ready_for_supervised_submit": True, "promotion_summary": {}},
+        allow_existing_positions=True,
+    )
+
+    assert report["ready_for_supervised_smoke"] is True
+    assert "paper_account_not_clean" not in report["blockers"]
+    assert report["allow_existing_positions"] is True
+
+
+def test_paper_smoke_readiness_still_blocks_cash_mismatch_when_existing_positions_allowed():
+    cleanliness = evaluate_paper_account_cleanliness(
+        PortfolioState(
+            cash=67000,
+            holdings=[{"symbol": "ADBE", "market_value": 755, "quantity": 3}],
+            protected_symbols=["FXAIX"],
+        ),
+        expected_cash=67641.28,
+    )
+    broker_capabilities = evaluate_broker_capability_match(
+        paper_broker="alpaca_paper",
+        live_broker="schwab_api",
+        required_order_model="whole_share",
+    )
+
+    report = build_paper_smoke_readiness_report(
+        account_cleanliness=cleanliness,
+        broker_capabilities=broker_capabilities,
+        scheduler_readiness={"blocker_count": 0, "warning_count": 0},
+        workflow_smoke={"ready_for_supervised_submit": True, "promotion_summary": {}},
+        allow_existing_positions=True,
+    )
+
+    assert report["ready_for_supervised_smoke"] is False
+    assert "paper_account_cash_mismatch" in report["blockers"]
+
+
 def test_paper_smoke_readiness_cli_outputs_json(tmp_path, capsys):
     portfolio_path = tmp_path / "portfolio.json"
     portfolio_path.write_text(
@@ -147,6 +202,42 @@ def test_paper_smoke_readiness_cli_outputs_json(tmp_path, capsys):
     assert payload["mode"] == "paper_smoke_readiness"
     assert payload["ready_for_supervised_smoke"] is True
     assert payload["workflow_smoke"]["ready_for_supervised_submit"] is True
+
+
+def test_paper_smoke_readiness_cli_allows_existing_positions_when_explicit(tmp_path, capsys):
+    portfolio_path = tmp_path / "portfolio.json"
+    portfolio_path.write_text(
+        json.dumps(
+            {
+                "cash": 67641.28,
+                "holdings": [{"symbol": "ADBE", "market_value": 755, "quantity": 3}],
+                "protected_symbols": ["FXAIX"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    workflow_path = tmp_path / "workflow.json"
+    workflow_path.write_text(json.dumps({"ready_for_supervised_submit": True, "blockers": []}), encoding="utf-8")
+
+    args = build_parser().parse_args(
+        [
+            "--portfolio-state",
+            str(portfolio_path),
+            "--expected-cash",
+            "67641.28",
+            "--workflow-smoke",
+            str(workflow_path),
+            "--required-order-model",
+            "whole_share",
+            "--allow-existing-paper-positions",
+            "--json",
+        ]
+    )
+
+    assert run_cli(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["allow_existing_positions"] is True
+    assert "paper_account_not_clean" not in payload["blockers"]
 
 
 def test_paper_smoke_readiness_cli_writes_report_output(tmp_path, capsys):

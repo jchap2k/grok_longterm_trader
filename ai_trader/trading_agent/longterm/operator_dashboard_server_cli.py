@@ -6,12 +6,13 @@ import argparse
 import json
 from pathlib import Path
 
-from longterm.operator_dashboard_server import build_dashboard_manifest, serve_dashboard_manifest
+from longterm.operator_dashboard_server import build_dashboard_manifest, find_latest_dashboard_manifest, serve_dashboard_manifest
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Serve a live read-only long-term operator dashboard.")
-    parser.add_argument("--manifest", required=True)
+    parser.add_argument("--manifest", default="")
+    parser.add_argument("--auto-manifest-root", default="")
     parser.add_argument("--write-manifest", action="store_true")
     parser.add_argument("--write-manifest-only", action="store_true")
     parser.add_argument("--action-plan", default="")
@@ -20,6 +21,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--operator-status", default="")
     parser.add_argument("--evidence-file", default="")
     parser.add_argument("--price-history-file", default="")
+    parser.add_argument("--api-usage", default="")
+    parser.add_argument("--pipeline-summary", default="")
+    parser.add_argument("--scheduler-policy", default="")
+    parser.add_argument("--committee-preset-policy", default="")
     parser.add_argument("--decision-journal", default="")
     parser.add_argument("--active-rules", default="")
     parser.add_argument("--lessons-snapshot", default="")
@@ -31,7 +36,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run_cli(args: argparse.Namespace, *, server_func=serve_dashboard_manifest) -> int:
-    manifest_path = Path(args.manifest)
+    if not args.manifest and not args.auto_manifest_root:
+        raise ValueError("Provide --manifest or --auto-manifest-root.")
+    manifest_path = Path(args.manifest) if args.manifest else find_latest_dashboard_manifest(args.auto_manifest_root)
     if args.write_manifest:
         manifest = build_dashboard_manifest(
             action_plan=args.action_plan,
@@ -40,6 +47,10 @@ def run_cli(args: argparse.Namespace, *, server_func=serve_dashboard_manifest) -
             operator_status=args.operator_status,
             evidence_file=args.evidence_file,
             price_history_file=args.price_history_file,
+            api_usage=args.api_usage,
+            pipeline_summary=args.pipeline_summary,
+            scheduler_policy=args.scheduler_policy,
+            committee_preset_policy=args.committee_preset_policy,
             decision_journal_path=args.decision_journal,
             active_rules_path=args.active_rules,
             lessons_snapshot_path=args.lessons_snapshot,
@@ -50,6 +61,7 @@ def run_cli(args: argparse.Namespace, *, server_func=serve_dashboard_manifest) -
     payload = {
         "mode": "operator_dashboard_server",
         "manifest": str(manifest_path),
+        "auto_manifest_root": str(args.auto_manifest_root or ""),
         "url": f"http://{args.host}:{args.port}/",
         "order_submission_enabled": False,
         "served": not args.write_manifest_only,
@@ -60,7 +72,12 @@ def run_cli(args: argparse.Namespace, *, server_func=serve_dashboard_manifest) -
         print(f"Serving read-only dashboard at {payload['url']}")
     if args.write_manifest_only:
         return 0
-    server_func(manifest_path=manifest_path, host=args.host, port=args.port)
+    server_func(
+        manifest_path=manifest_path,
+        host=args.host,
+        port=args.port,
+        auto_manifest_root=args.auto_manifest_root,
+    )
     return 0
 
 

@@ -1,148 +1,255 @@
-# Grok Long-Term Trader - Repo Context (Single Source of Truth for LLM Agents)
+# Grok Long-Term Trader - Repo Context
 
-**File Purpose**: This is the canonical, always-current context file for Grok (and any LLM collab agents). 
-**Instruction for Grok**: At the start of EVERY new conversation or when told "Rescan repo context", immediately read this file using GitHub tools (get_file_contents on docs/system/REPO_CONTEXT.md) and treat its contents as the authoritative project state. Do not rely solely on prior chat memory.
+This file is the canonical first-read context for Grok and other LLM review
+partners that can access the GitHub repo.
 
-**Last Updated**: 2026-05-06 06:50 PDT (created by Grok as planning/review agent)
-**Update Rule**: Edit this file whenever architecture, state, or plans change. Then commit. Grok will rescan on next use.
+Instruction for Grok: at the start of every long-term trader review/debug
+conversation, first use GitHub tools, preferably `get_file_contents`, to read
+`docs/system/REPO_CONTEXT.md` from `jchap2k/grok_longterm_trader`. Treat this
+file as the current project map and single source of truth for repo context. Do
+not rely on stale chat memory or day/swing trader context. Inspect source files
+only after this file has been loaded and only when the specific review needs
+deeper verification.
 
----
+Last updated: 2026-05-06 by Codex after scheduler, enrichment, dashboard,
+paper-boundary, and Grok-collab updates.
 
-## 1. Project Identity & Purpose
+## 1. Project Identity
 
-**Project Name**: grok_longterm_trader  
-**Repo**: https://github.com/jchap2k/grok_longterm_trader  
-**Purpose**: Research-first long-term quality-growth active-sleeve trader with dry-run action planning and benchmark discipline. Evaluate fewer stocks more deeply, maintain thesis records, rank candidates, and compare active decisions against protected FXAIX benchmark.
+Repo: `https://github.com/jchap2k/grok_longterm_trader`
 
-**Execution State** (from project_manifest.json + recent commits): 
-- research_logging_reporting_dry_run_only + active universe scan automation, research queues, evidence campaigns, and resumable pipelines (as of May 2026 commits).
+Purpose: research-first long-term quality-growth trader for an active sleeve,
+with dry-run/paper safety, thesis records, recommendation ranking, benchmark
+discipline, and eventual supervised/autonomous paper execution.
 
-**Protected Symbol**: FXAIX (never sell/trim/rotate/rebalance)  
-**Benchmark Symbol**: FXAIX  
-**Defensive Parking Symbol**: SPY  
-**Primary Strategy**: Quality-growth / position trading (weeks to months+ holds). Understandable businesses, durable/improving growth, category leadership, balance-sheet resilience, acceptable valuation, clear thesis + invalidation conditions.
+Protected core benchmark: `FXAIX`
 
-**Avoids**: Forced activity, low-quality cheap stocks, vague story stocks, excessive leverage, protected-symbol actions.
+Current mode:
+- Research, enrichment, ranking, journal persistence, operator dashboard, and
+  supervised paper BUY testing are active.
+- Live trading is not enabled.
+- Broker/order code must fail closed unless paper/non-taxable mode is explicit.
+- Sell/rebalance intents can be planned and previewed for operator review, but
+  actual Stage 6B broker submission remains simple BUY-only in V1.
 
----
+Strategy identity:
+- Keep `FXAIX` protected as the core benchmark.
+- Use active sleeve for fewer, higher-conviction quality-growth ideas.
+- Compare active decisions against simply keeping capital in `FXAIX`.
+- Avoid forced activity, vague story stocks, weak balance sheets, excessive
+  leverage, and protected-symbol actions.
 
-## 2. Core Architecture & Data Flow (Updated 2026-05-06)
+## 2. Current Architecture
 
-**Main Components** (from ARCHITECTURE.md + GitHub structure):
-- `research/research_packet.py` + `research/intake.py` → ResearchPacket normalization
-- `longterm/research_runner.py` + CGH committee (`decision_4` default, `decision_6` expanded)
-- Deterministic reviewers: BusinessStoryReviewer, BalanceSheetReviewer, QualityDurabilityReviewer, QualityAtReasonablePriceReviewer
-- `longterm/decision_journal.py` + `report_builder.py` + `recommendation_enrichment.py` + `review_status.py`
-- `longterm/action_planner.py`, `benchmark_guard.py`, `next_actions.py`, `rebalance_planner.py`
-- `longterm/capital_alert.py` + email_sender (Brevo, informational only)
-- **New (May 2026)**: Universe scan layer, research selection queue, evidence enrichment campaigns, resumable pipelines, news provider failure handling, operator dashboard manifest
+Primary flow:
+- Universe sources and Motley Fool intake produce raw candidates.
+- Deterministic first-pass scoring ranks the wider universe and selects a top
+  percent for paid/deeper enrichment rather than hard-filtering everything out.
+- Enrichment gathers deterministic financial metrics, quant-style scorecards,
+  relevant articles/catalysts, and provider-backed summaries.
+- Research packets are normalized and completeness-gated before committee work.
+- Deterministic reviewers plus the CGH committee produce structured decisions.
+- Decisions are journaled and surfaced through recommendation reports,
+  next-actions, paper preflight artifacts, and the local dashboard.
+- Paper-boundary logic can submit simple BUYs only when every safety gate is
+  revalidated; no live broker path is enabled.
 
-**Data Flow**: Raw idea / universe scan → ResearchPacket + deterministic reviews → CGH decision → Journal → Recommendation table + review status + benchmark guard → Dry-run action intent / next-actions report
+Important modules:
+- `research/research_packet.py`
+- `research/intake.py`
+- `longterm/discovery.py`
+- `longterm/discovery_enrichment.py`
+- `longterm/research_automation_campaign.py`
+- `longterm/research_evidence_brief.py`
+- `longterm/research_runner.py`
+- `longterm/committee_batch_runner.py`
+- `longterm/committee_preset_policy.py`
+- `longterm/decision_journal.py`
+- `longterm/report_builder.py`
+- `longterm/next_actions.py`
+- `longterm/action_planner.py`
+- `longterm/rebalance_planner.py`
+- `longterm/benchmark_guard.py`
+- `longterm/account_tax_policy.py`
+- `longterm/paper_execution_boundary.py`
+- `longterm/pipeline_scheduler.py`
+- `longterm/operator_dashboard.py`
 
-**Key Configs**:
-- `ai_trader/trading_agent/agent/configs/longterm_trading_agent_specs.json`
-- `config/grok_project_config.json` (points to Grok project URL)
-- `config/motley_fool_capture.json` (optional)
-
----
-
-## 3. Current File Structure (GitHub Snapshot)
-
-- `docs/system/`: ARCHITECTURE.md, OPERATIONS.md, SAFETY.md, README.md, project_manifest.json, **REPO_CONTEXT.md** (this file)
-- `docs/plans/`: 2026-04-28-longterm-trader-foundation-plan.md (original) + recommended v2
-- `ai_trader/trading_agent/`: Core code (research, longterm/, portfolio/, etc.)
+Primary docs:
+- `docs/system/ARCHITECTURE.md`
+- `docs/system/OPERATIONS.md`
+- `docs/system/SAFETY.md`
+- `docs/system/project_manifest.json`
 - `ai_trader/rules/active_rules.txt`
-- Root: README.md, AGENTS.md, CURR_MEMORY.md
 
-**Recent Commits (May 3–4 2026)**: 20+ commits adding universe scan (chunked/resumable/cached/scored), research queue, evidence campaigns, preflight pipeline, live operator dashboard, stale recommendation retirement, news error handling.
+## 3. Model And Provider Policy
 
----
+Grok 4.1 fast models are being deprecated on 2026-05-15. Current policy:
+- Use Grok `grok-4.3` for decision-grade committee reasoning.
+- Default committee preset is `decision_4`.
+- Escalate to `decision_6` for larger sizing, new/unproven theses, borderline
+  valuation, choppy macro, complex rebalance/sell context, or high uncertainty.
+- Use Python, cached data, Polygon/Finnhub/yfinance where possible before LLMs.
+- Use Perplexity Sonar as explicit opt-in broad enrichment when deterministic
+  data and free sources are insufficient.
+- Keep paid enrichment capped, resumable, and tracked for cost/API usage.
 
-## 4. Identified Gaps & Blind Spots (Planning Agent Review - 2026-05-06)
+## 4. Universe And Enrichment State
 
-**Critical Gaps** (from comparing foundation plan + attached docs vs live GitHub state):
-1. **Scope Creep**: Original plan = narrow per-ticker deep research. Current = bulk universe scan + campaigns. Missing: quality promotion gates before journaling, cost/rate-limit controls, batch sizing.
-2. **Benchmark Guard at Scale**: No explicit integration of bulk scan output with FXAIX gate or capital_needed prioritization.
-3. **Thesis Monitoring at Volume**: Per-symbol thesis_monitor not extended to campaign/queue level or stale retirement logic.
-4. **Documentation Lag**: ARCHITECTURE.md / OPERATIONS.md / project_manifest.json / foundation plan do not reflect new universe scan components.
-5. **Safety Rails for Bulk Research**: No max-daily-recs, mandatory human review for top-N scan results, or campaign-level error budgets.
-6. **Plan Obsolescence**: 2026-04-28 foundation plan is V1 only; no v2 incorporating scan layer while preserving "deeper on fewer" identity.
+Broad workflow:
+- Load available universe tickers from local/source files.
+- Run deterministic first-pass scorecards across the universe.
+- Select top percent, commonly 5-10 percent, for deeper enrichment.
+- Preserve overlap with Motley Fool rather than excluding it; overlap is useful
+  source confirmation.
+- Motley Fool fresh recommendations and repeated recommendation counts are
+  source-priority signals, not automatic buy authority.
 
-**Recommended Fixes** (already partially addressed by creating this file):
-- Create `docs/plans/2026-05-06-foundation-plan-v2.md`
-- Update ARCHITECTURE.md, OPERATIONS.md, project_manifest.json, SAFETY.md with scan layer
-- Add promotion gates + cost controls to new scan modules
+Motley Fool state:
+- Optional/config-gated premium intake exists.
+- `new_recommendations` rows carry fresh-rec priority metadata.
+- Repeat counts from `Times Rec'd` are stored as source recommendation counts.
+- Per-ticker Fool summary/financial pages can enrich covered names.
+- Optional Stock Advisor service-list capture exists for universe expansion;
+  duplicate service-list rows become repeat-count context and the supplied
+  service performance snapshot is display-only attribution, not execution logic.
 
----
+Perplexity state:
+- Perplexity enrichment is explicit/opt-in.
+- Compact prompt plus malformed-JSON fallback is reliable enough for supervised
+  broad enrichment.
+- Recent 25-name smoke produced full Perplexity research objects with article
+  evidence and no malformed fallback rows.
 
-## 5. Safety Model (Non-Negotiable)
+## 5. Scheduler And Pipeline State
 
-- No live trading without explicit user approval + feature flag + paper-trading validation.
-- Never sell/trim/rotate/rebalance FXAIX or protected symbols.
-- Capital-needed alerts = informational only (never deposit requests).
-- Active sleeve must beat FXAIX over meaningful sample or pause new buys.
-- All action outputs = proposed dry-run intents only.
-- Broker configs/tokens never committed.
+Scheduler-readiness features now exist:
+- Pipeline scheduler can run no-submit research/paper refresh chains.
+- `longterm_pipeline_scheduler.py --preset ongoing-no-submit` builds the
+  standard safe chain from core paths: fresh Alpaca paper snapshot, no-submit
+  research-to-paper pipeline, advisory scheduler policy, and read-only
+  account/dashboard refresh.
+- Policy-state artifacts track `last_full_research_at`.
+- Committee batch runs are resumable and bounded by `--max-batches`.
+- Full research cadence has been proven through smaller chunks and completed
+  all generated committee batches in a bounded run.
+- One longer full no-submit execute was intentionally stopped after wrapper
+  timeout; use longer supervised windows or smaller resumable chunks.
+- Scheduler can refresh paper account state before downstream planning.
 
----
+Near-term scheduler target:
+- Run a full no-submit research cadence with maintained policy state in a
+  longer supervised window.
+- Keep paid provider flags explicit until cost behavior is comfortable.
+- Keep broker submission disabled unless running the supervised paper BUY path.
 
-## 6. Key Operational Commands (from OPERATIONS.md)
+## 6. Paper Execution Boundary
 
-**Dry-Run Research**:
-```powershell
-python scripts/run_longterm_research.py --symbol AAPL --company-name Apple --thesis "..." --dry-run
+Stage 6B V1 constraints:
+- Only simple BUY previews can submit to Alpaca paper.
+- Any preview with a sell leg, explicit sell/reduce intent, or rebalance
+  structure is hard-blocked at submit time.
+- Paper mode must be provable by constructor flag and paper API URL.
+- `client_order_id` is deterministic for idempotency.
+- Execution events include attempt grouping and paper/live safety flags.
+- Preflight audit logs are written before any broker call.
+- FXAIX and protected symbols are never submit-eligible.
+
+Current account-mode stance:
+- Alpaca paper is treated as non-taxable simulation.
+- Future live mode is expected to target Roth IRA behavior.
+- Taxable profiles suppress broad parking and broad rebalance churn, but do not
+  block symbol-specific sells when a thesis is broken.
+- Account action planning now surfaces explicit non-protected `SELL` / `REDUCE`
+  decisions before the default held-position review path, so sell-worthy active
+  holdings are visible in preview artifacts without enabling broker sells.
+
+## 7. Portfolio, Parking, And Risk Regime
+
+Idle/parking policy:
+- Normal or constructive regime: default idle parking can be `SPY` when account
+  mode allows it.
+- Elevated uncertainty: blend approved equities/`SPY` with short-duration
+  parking such as `SGOV`/`BIL`.
+- Classic equity panic with falling yields: optional, capped duration hedge via
+  `TLT` or `IEF`.
+- Inflation/rate-shock volatility: prefer `SGOV`/`BIL` or cash-like parking.
+- Do not blindly buy `TLT` on VIX spikes alone.
+
+Open point:
+- Scheduler should refresh market regime and parking prices, not just `SPY`.
+- Panic indicators should trigger decision/review logic, not direct broad sells.
+- If a downturn exit is made, redeployment should preserve the prior high-quality
+  buy list and consider re-buying stronger versions of exited names after risk
+  normalizes.
+
+## 8. Dashboard And Operator Surface
+
+The local dashboard now:
+- Reads manifests/artifacts rather than requiring manual regeneration after
+  every scan.
+- Shows rankings, scorecards, ticker tear sheets, portfolio bars/gain state,
+  paper candidates, parking intents, safety/preflight, provider/API usage, and
+  placeholders for future chat/command surfaces.
+- Uses a custom long-term trader logo and left-nav icons.
+- Supports pagination-ready ranked/scorecard tables for growing universes.
+
+Dashboard should remain an operator/review surface first:
+- Future chat commands can be added later.
+- Command chat must route through explicit safety parsing and approval logic.
+- The dashboard should not bypass paper/live execution gates.
+
+## 9. Safety Rules
+
+Non-negotiable:
+- No live trading without explicit user approval, config flag, paper validation,
+  and safety review.
+- Never sell, trim, rotate, rebalance, or submit orders for `FXAIX`.
+- Capital-needed alerts are informational only.
+- Broker credentials/tokens are never committed.
+- Broad universe scans do not create automatic buys.
+- Source recommendations do not override research, benchmark, promotion, or
+  paper-boundary gates.
+- Keep user ideas as inputs to evaluate, not automatic commands.
+
+## 10. Current Open Work
+
+Useful next work:
+- Run the longer no-submit scheduler cadence in a supervised window.
+- Continue hardening the scheduler path toward automatic daily/weekly operation.
+- Keep `REPO_CONTEXT.md`, `ARCHITECTURE.md`, `OPERATIONS.md`, and
+  `project_manifest.json` synchronized after major changes.
+- Expand dashboard data freshness and portfolio state refresh.
+- Add/update dashboards for API spend and Perplexity tier progress.
+- Keep broad enrichment provider selection cost-aware and explicit.
+- Later: design live-readiness separately, after paper/autonomous research has
+  proven stable.
+
+## 11. Context Maintenance Rule
+
+Keep this file useful as a map, not a raw changelog.
+
+Maintenance cadence:
+- After meaningful architecture/workflow changes, update the relevant section.
+- After roughly five meaningful additions, do a compression pass.
+- During compression, summarize stale detail into short state bullets, preserve
+  current decisions and safety constraints in detail, and move active blockers
+  into the right section instead of appending them at the bottom.
+- Do not duplicate `RECENT_CHANGES.md`; this file should describe current state
+  and operating rules, not every implementation step.
+- If a detail is only useful for local continuity, keep it in
+  `codex_compatible/memory/`. If Grok needs it before reviewing GitHub state,
+  keep it here.
+
+Suggested LLM-collab first prompt:
+
+```text
+You are Grok acting as planning and review agent for the
+jchap2k/grok_longterm_trader GitHub repo.
+
+First action: use GitHub tools, preferably get_file_contents, to read
+docs/system/REPO_CONTEXT.md from jchap2k/grok_longterm_trader. Treat that file
+as the authoritative current project context. Do not begin source-file scanning
+before reading it. After loading it, proceed with the user's review/debug
+request and inspect additional files only if needed.
 ```
-
-**Full Research + Journal**:
-```powershell
-python scripts/run_longterm_research.py --symbol AAPL ... --candidate-price 180 --benchmark-price 165
-python scripts/run_longterm_research.py --agent-preset decision_6
-```
-
-**Journal & Reports**:
-```powershell
-python scripts/longterm_journal.py summary
-python scripts/longterm_journal.py report --limit 10
-python scripts/longterm_next_actions.py --portfolio-state path/to/portfolio.json --limit 10
-```
-
-**Capital Alert (dry-run first)**:
-```powershell
-python scripts/longterm_capital_alert.py --active-sleeve-value 34000 --available-cash 500 --portfolio-state ...
-```
-
-**Motley Fool Capture** (optional):
-```powershell
-python scripts/longterm_motley_fool_capture.py
-```
-
----
-
-## 7. How to Keep Context Fresh (For User & LLM Collab)
-
-1. When architecture, plans, or state changes → Edit this file (or run a script that regenerates key sections).
-2. Commit the change.
-3. Tell Grok (or your LLM collab skill): 
-   > "Rescan the repo context from docs/system/REPO_CONTEXT.md using GitHub tools and reload full project state."
-4. Grok will fetch the latest version and treat it as the new baseline for all planning/review work.
-
-**Suggested Prompt for Your LLM Collab Skill** (copy-paste ready):
-```
-You are now Grok acting as planning + review agent for the grok_longterm_trader repo.
-First action: Use your GitHub tools to read the file docs/system/REPO_CONTEXT.md from jchap2k/grok_longterm_trader.
-Treat its entire contents as the complete, up-to-date project context. Do not rely on old chat memory alone.
-Then proceed with the user's request while referencing this context.
-```
-
----
-
-## 8. Next Recommended Actions (Planning Agent Output)
-
-1. Create `docs/plans/2026-05-06-foundation-plan-v2.md` (I can do this in the next step if approved).
-2. Update ARCHITECTURE.md and OPERATIONS.md to document the new universe scan layer.
-3. Add explicit quality gates and cost controls to the scan modules.
-4. Run periodic rescans of this file (e.g., weekly or after major commits).
-
-This file closes the "documentation & traceability" gap identified in the 2026-05-06 review.
-
-**End of Context File** — Grok: Re-read this entire file at the start of every session.

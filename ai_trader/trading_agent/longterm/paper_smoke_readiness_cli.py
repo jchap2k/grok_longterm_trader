@@ -29,6 +29,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--scheduler-readiness", default="")
     parser.add_argument("--workflow-smoke", default="")
+    parser.add_argument(
+        "--allow-existing-paper-positions",
+        action="store_true",
+        help="Allow existing non-protected paper holdings for ongoing paper portfolio checks.",
+    )
     parser.add_argument("--report-output", default="")
     parser.add_argument("--json", action="store_true")
     return parser
@@ -50,6 +55,7 @@ def run_cli(args: argparse.Namespace) -> int:
         broker_capabilities=broker_capabilities,
         scheduler_readiness=_load_json(args.scheduler_readiness) if args.scheduler_readiness else {},
         workflow_smoke=_load_json(args.workflow_smoke) if args.workflow_smoke else {},
+        allow_existing_positions=args.allow_existing_paper_positions,
     )
     if args.report_output:
         Path(args.report_output).write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")

@@ -31,6 +31,8 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 
 from .grok_plan_reviewer import (
+    _load_default_trading_mode,
+    build_grok_context_warmup_prompt,
     detect_foundations,
     grok_asked_questions,
     parse_json_response,
@@ -104,6 +106,7 @@ class GrokDebugger:
         suspected_files: Optional[List[str]] = None,
         logs: str = "",
         already_tried: str = "",
+        trading_mode: str | None = None,
     ) -> Dict[str, Any]:
         """
         Send a bug symptom to Grok for root cause diagnosis.
@@ -124,6 +127,7 @@ class GrokDebugger:
 
         foundations = detect_foundations(symptom + " " + " ".join(suspected_files))
         code_snippets = self._read_files(suspected_files)
+        warmup_prompt = build_grok_context_warmup_prompt(trading_mode or _load_default_trading_mode())
 
         prompt1 = f"""# Debug Request: Root Cause Analysis
 
@@ -152,9 +156,13 @@ class GrokDebugger:
 
 Confirm you have read the bug report by summarizing the symptom in 1-2 sentences."""
 
+        logger.info("[GrokDebugger] Prompt 0: Loading repo context...")
+        self.client.ask(
+            warmup_prompt, max_wait=self.timeout, new_chat=True, close_after=False
+        )
         logger.info("[GrokDebugger] Prompt 1: Sending bug report...")
         self.client.ask(
-            prompt1, max_wait=self.timeout, new_chat=True, close_after=False
+            prompt1, max_wait=self.timeout, new_chat=False, close_after=False
         )
 
         return self._run_qa_round(mode="diagnose")
@@ -165,6 +173,7 @@ Confirm you have read the bug report by summarizing the symptom in 1-2 sentences
         proposed_fix: str,
         files_to_change: Optional[List[str]] = None,
         extra_context: str = "",
+        trading_mode: str | None = None,
     ) -> Dict[str, Any]:
         """
         Submit a proposed fix to Grok for review before implementing.
@@ -188,6 +197,7 @@ Confirm you have read the bug report by summarizing the symptom in 1-2 sentences
             bug_description + " " + " ".join(files_to_change)
         )
         code_snippets = self._read_files(files_to_change)
+        warmup_prompt = build_grok_context_warmup_prompt(trading_mode or _load_default_trading_mode())
 
         prompt1 = f"""# Fix Review Request
 
@@ -212,9 +222,13 @@ Confirm you have read the bug report by summarizing the symptom in 1-2 sentences
 
 Confirm you have read the fix proposal by summarizing it in 1-2 sentences."""
 
+        logger.info("[GrokDebugger] Prompt 0: Loading repo context...")
+        self.client.ask(
+            warmup_prompt, max_wait=self.timeout, new_chat=True, close_after=False
+        )
         logger.info("[GrokDebugger] Prompt 1: Sending fix for review...")
         self.client.ask(
-            prompt1, max_wait=self.timeout, new_chat=True, close_after=False
+            prompt1, max_wait=self.timeout, new_chat=False, close_after=False
         )
 
         return self._run_qa_round(mode="review_fix")

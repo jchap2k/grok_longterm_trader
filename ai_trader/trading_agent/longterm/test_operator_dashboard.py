@@ -18,6 +18,7 @@ from longterm.operator_dashboard_cli import build_parser, run_cli
 def test_operator_dashboard_summarizes_capital_deployment_and_next_step():
     dashboard = build_operator_dashboard(
         action_plan={
+            "suppressed_reasons": ["taxable_broad_parking_suppressed"],
             "intents": [
                 {
                     "intent_type": "BUY",
@@ -51,6 +52,8 @@ def test_operator_dashboard_summarizes_capital_deployment_and_next_step():
     assert dashboard["parking_intent_count"] == 1
     assert dashboard["paper_submit_candidates"] == ["MSFT"]
     assert dashboard["parking_symbols"] == ["SPY"]
+    assert dashboard["suppressed_reasons"] == ["taxable_broad_parking_suppressed"]
+    assert dashboard["suppressed_count"] == 1
     assert dashboard["agent_advisory"]["state"] == "ready_for_supervised_paper_review"
     assert dashboard["agent_advisory"]["submit_candidate_count"] == 1
     assert dashboard["order_submission_enabled"] is False
@@ -127,6 +130,7 @@ def test_operator_dashboard_cli_writes_json_and_html(tmp_path, capsys):
     action_plan = tmp_path / "action_plan.json"
     market_regime = tmp_path / "market_regime.json"
     operator_status = tmp_path / "operator_status.json"
+    scheduler_policy = tmp_path / "scheduler_policy.json"
     output = tmp_path / "dashboard.json"
     html_output = tmp_path / "dashboard.html"
     action_plan.write_text(
@@ -136,6 +140,17 @@ def test_operator_dashboard_cli_writes_json_and_html(tmp_path, capsys):
     market_regime.write_text(json.dumps({"risk_regime": "normal"}), encoding="utf-8")
     operator_status.write_text(
         json.dumps({"order_submission_enabled": False, "agent_next_step": {"state": "ready_to_reveal_submit_command"}}),
+        encoding="utf-8",
+    )
+    scheduler_policy.write_text(
+        json.dumps(
+            {
+                "recommended_mode": "account_refresh_only",
+                "urgency": "low",
+                "next_safe_action": "refresh_account_and_dashboard_artifacts",
+                "order_submission_enabled": False,
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -148,6 +163,8 @@ def test_operator_dashboard_cli_writes_json_and_html(tmp_path, capsys):
                 str(market_regime),
                 "--operator-status",
                 str(operator_status),
+                "--scheduler-policy",
+                str(scheduler_policy),
                 "--report-output",
                 str(output),
                 "--html-output",
@@ -161,12 +178,15 @@ def test_operator_dashboard_cli_writes_json_and_html(tmp_path, capsys):
     saved = json.loads(output.read_text(encoding="utf-8"))
     assert code == 0
     assert printed["paper_submit_candidates"] == ["MSFT"]
+    assert printed["scheduler_policy"]["recommended_mode"] == "account_refresh_only"
     assert saved["agent_state"] == "ready_to_reveal_submit_command"
+    assert saved["scheduler_policy"]["next_safe_action"] == "refresh_account_and_dashboard_artifacts"
     assert "Long-Term Trader Dashboard" in html_output.read_text(encoding="utf-8")
 
 
 def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     action_plan = {
+        "suppressed_reasons": ["taxable_broad_parking_suppressed"],
         "intents": [
             {
                 "intent_type": "BUY",
@@ -204,6 +224,14 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     dashboard = build_operator_dashboard(
         action_plan=action_plan,
         market_regime={"risk_regime": "normal", "vix_level": 17},
+        scheduler_policy={
+            "recommended_mode": "account_refresh_only",
+            "urgency": "low",
+            "reasons": ["account_refresh_stale"],
+            "affected_symbols": [],
+            "next_safe_action": "refresh_account_and_dashboard_artifacts",
+            "order_submission_enabled": False,
+        },
         operator_status={"agent_next_step": {"state": "ready_to_reveal_submit_command"}},
     )
     site = build_operator_dashboard_site(
@@ -262,7 +290,11 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
             }
         ],
         price_history_by_symbol={
-            "MSFT": [{"date": "2026-01-01", "close": 100}, {"date": "2026-01-02", "close": 112}],
+            "MSFT": [
+                {"date": "2026-01-01", "close": 100},
+                {"date": "2026-01-02", "close": 112},
+                {"date": "2026-01-03", "close": 84},
+            ],
             "NVDA": [{"date": "2026-01-01", "close": 90}, {"date": "2026-01-02", "close": 95}],
         },
     )
@@ -274,6 +306,10 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     assert "Autonomous Research Surface" in site["index.html"]
     assert "Motley-Fool-style research surface" not in site["index.html"]
     assert "Paper Review Ready" in site["index.html"]
+    assert "Scheduler Policy" in site["index.html"]
+    assert "Account Refresh Only" in site["index.html"]
+    assert "refresh account and dashboard artifacts" in site["index.html"]
+    assert "Advisory only" in site["index.html"]
     assert "Agent Desk" in site["index.html"]
     assert "Ask Or Draft A Command" in site["index.html"]
     assert "Send disabled until agent chat is wired" in site["index.html"]
@@ -284,6 +320,17 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     assert "Why is MSFT a buy?" in site["index.html"]
     assert "dashboard-shell" in site["index.html"]
     assert "dashboard-rail" in site["index.html"]
+    assert 'class="nav-icon nav-icon-dashboard"' in site["index.html"]
+    assert 'class="nav-icon nav-icon-paper-candidates"' in site["index.html"]
+    assert 'class="nav-icon nav-icon-all-tear-sheets"' in site["index.html"]
+    assert 'class="nav-icon nav-icon-rankings"' in site["index.html"]
+    assert 'class="nav-icon nav-icon-coverage"' in site["index.html"]
+    assert 'class="nav-icon nav-icon-scorecards"' in site["index.html"]
+    assert 'class="nav-icon nav-icon-evidence-gaps"' in site["index.html"]
+    assert 'class="nav-icon nav-icon-portfolio"' in site["index.html"]
+    assert 'class="nav-icon nav-icon-safety"' in site["index.html"]
+    assert 'class="nav-icon nav-icon-settings"' in site["index.html"]
+    assert "nav-icon-fallback" not in site["index.html"]
     assert "Long-Term Trader Agent logo" in site["index.html"]
     assert "data:image/svg+xml;base64," in site["index.html"]
     assert "Autonomous long-term research" not in site["index.html"]
@@ -362,7 +409,8 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     assert "Ranked Stock List" in site["index.html"]
     assert "Operator Action View" in site["index.html"]
     assert "Operator Score" in site["index.html"]
-    assert "Actionability" in site["index.html"]
+    assert "Action" in site["index.html"]
+    assert "Actionability</th>" not in site["index.html"]
     assert "<th>Intent</th>" not in site["index.html"]
     assert "Why Not Buy" in site["index.html"]
     assert "Scorecards below remain the broad evidence matrix" in site["index.html"]
@@ -395,6 +443,11 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     assert ">Open</a>" not in site["index.html"]
     assert "Universe Scorecards" in site["index.html"]
     assert "Superscore" in site["index.html"]
+    assert ">Super</th>" in site["index.html"]
+    assert ">Qual</th>" in site["index.html"]
+    assert ">Drawdown</th>" in site["index.html"]
+    assert ">Hist DD</th>" in site["index.html"]
+    assert "-25.00%" in site["index.html"]
     assert "Investing Type" in site["index.html"]
     assert "Max Drawdown" in site["index.html"]
     assert "Aggressive Growth" in site["index.html"]
@@ -409,6 +462,16 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     assert "Capital Deployment / Parking" in site["index.html"]
     assert "Portfolio Snapshot" in site["index.html"]
     assert "Current Portfolio Holdings" in site["index.html"]
+    assert "Portfolio Totals" in site["index.html"]
+    assert "Total Current Value" in site["index.html"]
+    assert "Total Gain" in site["index.html"]
+    assert "portfolio-gain-chart" in site["index.html"]
+    assert "data-portfolio-summary" in site["index.html"]
+    assert "initPortfolioLiveRefresh" in site["index.html"]
+    assert 'fetch("/api/portfolio.json"' in site["index.html"]
+    assert 'data-portfolio-total="current_total_value"' in site["index.html"]
+    assert 'data-portfolio-total="gain_percent"' in site["index.html"]
+    assert 'data-portfolio-holdings' in site["index.html"]
     assert "Original Purchase Total Cost" in site["index.html"]
     assert "Current Total Value" in site["index.html"]
     assert "% Gain" in site["index.html"]
@@ -422,6 +485,13 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     assert "+30.77%" in site["index.html"]
     assert "No current portfolio holdings were supplied for this generated dashboard." not in site["index.html"]
     assert "Safety &amp; Preflight" in site["index.html"]
+    assert "Tax-Mode Suppressions" in site["index.html"]
+    assert "Taxable Broad Parking Suppressed" in site["index.html"]
+    assert "taxable_broad_parking_suppressed" in site["index.html"]
+    assert "Pipeline Artifact Health" in site["index.html"]
+    assert "data-pipeline-health-status" in site["index.html"]
+    assert "initPipelineHealthRefresh" in site["index.html"]
+    assert 'fetch("/api/pipeline-health.json"' in site["index.html"]
     assert "Research Board" in site["index.html"]
     assert "Order submission" in site["index.html"]
     assert "ACTIONABLE_BUY" in site["index.html"]
@@ -435,6 +505,8 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     assert "chart-tooltip" in site["tickers/MSFT.html"]
     assert "initInteractiveCharts" in site["tickers/MSFT.html"]
     assert "\"close\": 112.0" in site["tickers/MSFT.html"]
+    assert "Historical Max Drawdown" in site["tickers/MSFT.html"]
+    assert "-25.00%" in site["tickers/MSFT.html"]
     assert "Q3 FY2026" in site["tickers/MSFT.html"]
     assert "3-Yr Revenue Growth" in site["tickers/MSFT.html"]
     assert "Microsoft is a cloud and productivity platform." in site["tickers/MSFT.html"]
@@ -544,6 +616,68 @@ def test_operator_dashboard_cli_writes_static_site(tmp_path, capsys):
     index_html = (site_dir / "index.html").read_text(encoding="utf-8")
     assert "$800.00" in index_html
     assert "+23.88%" in index_html
+
+
+def test_operator_dashboard_ticker_page_shows_python_scorecard_and_earnings_alias():
+    site = build_operator_dashboard_site(
+        dashboard={"agent_advisory": {"state": "ready_for_supervised_paper_review"}},
+        action_plan={
+            "intents": [
+                {
+                    "intent_type": "BUY",
+                    "symbol": "ADBE",
+                    "allowed": True,
+                    "trade_value": 750,
+                    "promotion_review": {"confidence": 72, "valuation_fit_score": 88},
+                }
+            ]
+        },
+        evidence_items=[
+            {
+                "symbol": "ADBE",
+                "business_summary": "Adobe is a creative and document cloud platform.",
+                "quality_growth_scorecard": {
+                    "superscore": 78.5,
+                    "quality_score": 100.0,
+                    "growth_score": 57.0,
+                    "valuation_score": 100.0,
+                    "safety_score": 68.0,
+                    "market_attention_score": 56.6,
+                    "investing_type": "Moderate Compounder",
+                    "score_reasons": ["strong gross margin", "reasonable P/E"],
+                },
+                "python_first_pass_scan": {
+                    "rank_score": 76.6,
+                    "moneyball_score": 74.1,
+                    "quant_score": 82.3,
+                    "rank": 23,
+                    "reason": "Advanced by relative top 10.0% Python scan.",
+                },
+                "latest_earnings_enrichment": {
+                    "quarter": "latest_available",
+                    "summary": "AI-driven earnings growth and resilient subscription revenue supported the thesis.",
+                    "key_financial_takeaways": ["Revenue: $23.77B (+10.53%)"],
+                },
+            }
+        ],
+    )
+
+    html = site["tickers/ADBE.html"]
+    assert "Superscore" in html
+    assert "78.5" in html
+    assert "Quality" in html
+    assert "100" in html
+    assert "Growth" in html
+    assert "57" in html
+    assert "First-Pass Scan" in html
+    assert "Moneyball" in html
+    assert "74.1" in html
+    assert "Quant" in html
+    assert "82.3" in html
+    assert "latest_available" not in html
+    assert "Latest Available" in html
+    assert "AI-driven earnings growth" in html
+    assert "Revenue: $23.77B" in html
 
 
 def test_operator_dashboard_cli_can_fetch_price_history_for_site(tmp_path, capsys):

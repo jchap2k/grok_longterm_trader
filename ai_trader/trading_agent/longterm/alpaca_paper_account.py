@@ -108,6 +108,11 @@ def paper_account_snapshot_to_portfolio_state(snapshot: PaperAccountSnapshot) ->
                 "symbol": position.symbol,
                 "market_value": position.market_value,
                 "quantity": position.quantity,
+                "current_price": position.current_price,
+                "avg_entry_price": position.avg_entry_price,
+                "original_purchase_total_cost": round(position.quantity * position.avg_entry_price, 2),
+                "unrealized_pnl": position.unrealized_pnl,
+                "unrealized_pnl_percent": position.unrealized_pnl_percent,
             }
             for position in snapshot.positions
         ],

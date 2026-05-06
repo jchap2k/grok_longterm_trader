@@ -40,7 +40,7 @@ def run_evidence_enrichment_pipeline(
     decision journal, change rankings, build paper previews, or call a broker.
     """
     selected = [dict(idea) for idea in (ideas[:limit] if limit is not None else ideas)]
-    stage_modes: dict[str, str] = {}
+    stage_modes: dict[str, Any] = {}
     enriched: list[dict[str, Any]] = selected
 
     if fundamentals_by_symbol is not None:
@@ -94,8 +94,12 @@ def run_evidence_enrichment_pipeline(
             allow_unsourced=allow_unsourced_grok,
         )
         stage_modes["grok"] = "enabled"
+        stage_modes["research_model_provider"] = grok_client.__class__.__name__
+        stage_modes["research_model_usage"] = _usage_summary(grok_client)
     else:
         stage_modes["grok"] = "skipped"
+        stage_modes["research_model_provider"] = "none"
+        stage_modes["research_model_usage"] = {}
 
     enriched = [_with_evidence_brief(idea) for idea in enriched]
     summary = _summary(
@@ -124,7 +128,7 @@ def _summary(
     *,
     input_count: int,
     enriched: list[Mapping[str, Any]],
-    stage_modes: Mapping[str, str],
+    stage_modes: Mapping[str, Any],
 ) -> dict[str, Any]:
     evidence_count = sum(1 for idea in enriched if idea.get("evidence_brief"))
     article_evidence_count = sum(
@@ -142,8 +146,17 @@ def _summary(
         "latest_earnings_mode": stage_modes.get("latest_earnings", "skipped"),
         "scorecard_mode": stage_modes.get("scorecard", "skipped"),
         "grok_mode": stage_modes.get("grok", "skipped"),
+        "research_model_provider": stage_modes.get("research_model_provider", "none"),
+        "research_model_usage": stage_modes.get("research_model_usage", {}),
         "symbols": [_symbol(idea) for idea in enriched if _symbol(idea)],
     }
+
+
+def _usage_summary(client: Any) -> dict[str, Any]:
+    summary = getattr(client, "usage_summary", None)
+    if not callable(summary):
+        return {}
+    return dict(summary())
 
 
 def _normalize_symbol_mapping(

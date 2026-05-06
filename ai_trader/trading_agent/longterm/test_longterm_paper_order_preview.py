@@ -214,6 +214,82 @@ def test_paper_order_preview_whole_share_blocks_missing_price_and_sub_one_share(
     assert "whole_share_quantity_below_one" in by_symbol["NVDA"]["blocked_reasons"]
 
 
+def test_paper_order_preview_builds_explicit_sell_preview_for_active_holding():
+    profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
+    state = PortfolioState(
+        cash=500,
+        protected_symbols=["FXAIX"],
+        holdings=[{"symbol": "AAPL", "market_value": 3000}],
+    )
+    plan = {
+        "plan_id": "plan-sell",
+        "intents": [
+            {
+                "symbol": "AAPL",
+                "intent_type": "SELL",
+                "order_intent": "SELL",
+                "trade_value": 3000,
+                "target_value": 0,
+                "allowed": True,
+                "reason": "Non-protected holding can be reduced inside active sleeve.",
+                "decision_id": "decision-aapl-sell",
+                "risk_review": {"allowed": True, "risk_level": "medium", "intent_type": "SELL"},
+            }
+        ],
+    }
+
+    preview = build_paper_order_preview(plan, portfolio_state=state, profile=profile)
+
+    assert preview["preview_count"] == 1
+    row = preview["previews"][0]
+    assert row["symbol"] == "AAPL"
+    assert row["side"] == "sell"
+    assert row["order_type"] == "market_notional_preview"
+    assert row["notional"] == 3000.0
+    assert row["requested_notional"] == 3000.0
+    assert row["allowed"] is True
+    assert row["decision_id"] == "decision-aapl-sell"
+    assert row["intent_type"] == "SELL"
+
+
+def test_paper_order_preview_blocks_explicit_sell_for_protected_or_insufficient_holding():
+    profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
+    state = PortfolioState(
+        cash=500,
+        protected_symbols=["FXAIX"],
+        holdings=[{"symbol": "AAPL", "market_value": 1000}, {"symbol": "FXAIX", "market_value": 34000}],
+    )
+    plan = {
+        "plan_id": "plan-sell-blocked",
+        "intents": [
+            {
+                "symbol": "AAPL",
+                "intent_type": "SELL",
+                "order_intent": "SELL",
+                "trade_value": 3000,
+                "allowed": True,
+                "decision_id": "decision-aapl-sell",
+            },
+            {
+                "symbol": "FXAIX",
+                "intent_type": "SELL",
+                "order_intent": "SELL",
+                "trade_value": 1000,
+                "allowed": True,
+                "decision_id": "decision-fxaix-sell",
+            },
+        ],
+    }
+
+    preview = build_paper_order_preview(plan, portfolio_state=state, profile=profile)
+    by_symbol = {row["symbol"]: row for row in preview["previews"]}
+
+    assert by_symbol["AAPL"]["allowed"] is False
+    assert "Insufficient AAPL value to sell $3,000.00." in by_symbol["AAPL"]["blocked_reasons"]
+    assert by_symbol["FXAIX"]["allowed"] is False
+    assert "protected" in "; ".join(by_symbol["FXAIX"]["blocked_reasons"]).lower()
+
+
 def test_paper_order_preview_splits_rebalance_into_sell_and_buy_legs():
     profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
     state = PortfolioState(
@@ -337,6 +413,128 @@ def test_paper_order_preview_excludes_parking_intents_without_blocking_simple_bu
     assert by_symbol["SPY"]["side"] == "none"
     assert by_symbol["SPY"]["order_type"] == "excluded_v1"
     assert "planning-only parking intent" in by_symbol["SPY"]["reason"].lower()
+
+
+def test_paper_order_preview_allows_roth_parking_whole_share_buy_without_promotion():
+    profile = PortfolioProfile(account_strategy_mode="roth_ira", protected_symbols=["FXAIX"], defensive_parking_symbol="SPY")
+    state = PortfolioState(cash=5000, protected_symbols=["FXAIX"])
+    plan = {
+        "plan_id": "plan-parking",
+        "intents": [
+            {
+                "symbol": "SPY",
+                "intent_type": "PARK_IDLE_CASH",
+                "order_intent": "BUY",
+                "trade_value": 4150,
+                "allowed": True,
+                "decision_id": "parking-plan-parking-SPY",
+                "reason": "Normal regime parking.",
+                "parking_execution": True,
+            },
+        ],
+    }
+
+    preview = build_paper_order_preview(
+        plan,
+        portfolio_state=state,
+        profile=profile,
+        order_model="whole_share",
+        price_map={"SPY": 500.0},
+    )
+
+    row = preview["previews"][0]
+    assert preview["allowed_count"] == 1
+    assert preview["no_order_count"] == 0
+    assert row["symbol"] == "SPY"
+    assert row["side"] == "buy"
+    assert row["intent_type"] == "PARK_IDLE_CASH"
+    assert row["order_type"] == "market_quantity_preview"
+    assert row["quantity"] == 8
+    assert row["notional"] == 4000.0
+    assert row["decision_id"] == "parking-plan-parking-SPY"
+    assert row["buy_promotion_decision"] == ""
+    assert row["promotion_review"] == {}
+
+
+def test_paper_order_preview_allows_roth_defensive_parking_whole_share_buys():
+    profile = PortfolioProfile(
+        account_strategy_mode="roth_ira",
+        protected_symbols=["FXAIX"],
+        defensive_parking_symbol="SPY",
+        low_risk_parking_symbol="SGOV",
+        duration_hedge_symbol="TLT",
+    )
+    state = PortfolioState(cash=10000, protected_symbols=["FXAIX"])
+    plan = {
+        "plan_id": "plan-defensive",
+        "intents": [
+            {
+                "symbol": "SGOV",
+                "intent_type": "PARK_DEFENSIVE_CASH",
+                "order_intent": "BUY",
+                "trade_value": 7000,
+                "allowed": True,
+                "decision_id": "parking-plan-defensive-SGOV",
+                "parking_execution": True,
+            },
+            {
+                "symbol": "TLT",
+                "intent_type": "PARK_DEFENSIVE_CASH",
+                "order_intent": "BUY",
+                "trade_value": 3000,
+                "allowed": True,
+                "decision_id": "parking-plan-defensive-TLT",
+                "parking_execution": True,
+            },
+        ],
+    }
+
+    preview = build_paper_order_preview(
+        plan,
+        portfolio_state=state,
+        profile=profile,
+        order_model="whole_share",
+        price_map={"SGOV": 100.0, "TLT": 80.0},
+    )
+
+    by_symbol = {row["symbol"]: row for row in preview["previews"]}
+    assert preview["allowed_count"] == 2
+    assert by_symbol["SGOV"]["quantity"] == 70
+    assert by_symbol["TLT"]["quantity"] == 37
+    assert by_symbol["SGOV"]["intent_type"] == "PARK_DEFENSIVE_CASH"
+    assert by_symbol["TLT"]["intent_type"] == "PARK_DEFENSIVE_CASH"
+
+
+def test_paper_order_preview_blocks_taxable_parking_even_when_symbol_is_approved():
+    profile = PortfolioProfile(account_strategy_mode="taxable", protected_symbols=["FXAIX"], defensive_parking_symbol="SPY")
+    state = PortfolioState(cash=5000, protected_symbols=["FXAIX"])
+    plan = {
+        "plan_id": "plan-taxable",
+        "intents": [
+            {
+                "symbol": "SPY",
+                "intent_type": "PARK_IDLE_CASH",
+                "order_intent": "BUY",
+                "trade_value": 4150,
+                "allowed": True,
+                "decision_id": "parking-plan-taxable-SPY",
+                "parking_execution": True,
+            },
+        ],
+    }
+
+    preview = build_paper_order_preview(
+        plan,
+        portfolio_state=state,
+        profile=profile,
+        order_model="whole_share",
+        price_map={"SPY": 500.0},
+    )
+
+    row = preview["previews"][0]
+    assert row["side"] == "buy"
+    assert row["allowed"] is False
+    assert "taxable_parking_execution_blocked" in row["blocked_reasons"]
 
 
 def test_paper_order_preview_cli_outputs_markdown_and_json(tmp_path, capsys):

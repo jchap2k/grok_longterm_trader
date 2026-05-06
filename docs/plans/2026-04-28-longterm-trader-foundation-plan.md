@@ -119,7 +119,12 @@ Default CGH decision preset:
 Expanded CGH decision preset:
 - `decision_6`: adds ValuationEdgeAnalyst and PortfolioManager
 
-Use `decision_4` for V1 unless the decision is high-value, borderline, or portfolio-impacting enough to justify extra cost.
+Use `decision_4` for V1 unless the decision is high-value, borderline, or
+portfolio-impacting enough to justify extra cost. On Grok 4.3, the 4-agent
+committee should remain the routine default. Escalate to `decision_6` for large
+position sizing decisions, new or unproven theses, borderline valuation, choppy
+macro regimes, or cases where rebalancing/capital allocation needs the added
+`ValuationEdgeAnalyst` and `PortfolioManager` views.
 
 Likely later reviewers:
 - `CapitalAllocationReviewer`

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 
 from longterm.decision_journal import LongTermDecisionJournal
 from longterm.operator_status_bundle import build_operator_status_bundle, build_operator_status_markdown
+from longterm.path_utils import read_json_artifact, write_json_artifact
 from longterm.paper_trade_ledger import PaperTradeLedger
 from longterm.portfolio_state import PortfolioState
 
@@ -23,6 +23,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--monday-operator-check", default=None)
     parser.add_argument("--live-readiness-bundle", default=None)
     parser.add_argument("--status-refresh", default=None)
+    parser.add_argument("--scheduler-policy", default=None)
+    parser.add_argument("--committee-preset-policy", default=None)
     parser.add_argument("--report-output", default=None)
     parser.add_argument("--json", action="store_true")
     return parser
@@ -39,9 +41,11 @@ def run_cli(args: argparse.Namespace) -> int:
         monday_operator_check=_load_json(args.monday_operator_check) if args.monday_operator_check else None,
         live_readiness_bundle=_load_json(args.live_readiness_bundle) if args.live_readiness_bundle else None,
         status_refresh=_load_json(args.status_refresh) if args.status_refresh else None,
+        scheduler_policy=_load_json(args.scheduler_policy) if args.scheduler_policy else None,
+        committee_preset_policy=_load_json(args.committee_preset_policy) if args.committee_preset_policy else None,
     )
     if args.report_output:
-        Path(args.report_output).write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        write_json_artifact(args.report_output, payload)
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
@@ -53,8 +57,8 @@ def main(argv: list[str] | None = None) -> int:
     return run_cli(build_parser().parse_args(argv))
 
 
-def _load_json(path: str | Path) -> dict:
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+def _load_json(path: str) -> dict:
+    payload = read_json_artifact(path)
     if not isinstance(payload, dict):
         raise ValueError(f"Expected JSON object in {path}.")
     return payload

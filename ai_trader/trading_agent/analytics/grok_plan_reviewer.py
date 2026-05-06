@@ -176,6 +176,64 @@ def extract_files_from_text(text: str) -> list:
     return result
 
 
+def build_grok_context_warmup_prompt(trading_mode: str = "swing") -> str:
+    """Build the first prompt that orients Grok before review/debug details."""
+    trading_mode = str(trading_mode or "swing").strip().lower()
+    if trading_mode == "longterm":
+        return (
+            "First action: use your GitHub tools, preferably get_file_contents, "
+            "to read docs/system/REPO_CONTEXT.md from the GitHub repository "
+            "jchap2k/grok_longterm_trader. Treat the entire file as the "
+            "authoritative, current project context for the long-term trader. "
+            "Do not rely on stale chat memory or the day/swing trader context. "
+            "Do not begin source-file scanning before reading this context file; "
+            "after reading it, only inspect additional source files if the review "
+            "or debug request requires deeper verification. Reply with a brief "
+            "confirmation that includes the repo name, the context file path, "
+            "2-3 loaded architectural facts, and any open safety/data blockers "
+            "called out by the context file."
+        )
+
+    if trading_mode == "swing":
+        mode_label = "swing trading"
+        review_files = (
+            "GROK__SWING_REGIME_FILTER.md, "
+            "GROK__SWING_FORCESWING_SIGNAL.md, "
+            "GROK__SWING_SWING_EXIT_ENGINE.md, "
+            "GROK__SWING_STOCK_SELECTION.md, "
+            "GROK__SWING_TRADING_DECISION_PROMPTS.md, "
+            "GROK__SWING_BACKTEST_HARNESS.md, "
+            "GROK__SWING_SCHEDULER.md, "
+            "GROK__SWING_READINESS_ASSESSMENT.md"
+        )
+        arch_doc = "DAY_TRADER_TO_SWING_TRADER_CHANGES.md"
+    else:
+        mode_label = "day trading"
+        review_files = (
+            "GROK_4.2_SCHEDULER_ORCHESTRATION.md, "
+            "GROK_4.2_TRADING_DECISION_PROMPTS.md, "
+            "GROK_4.2_TRADE_ENTRY_TRACKING.md, "
+            "GROK_4.2_TRADE_EXIT_ARCHITECTURE.md, "
+            "GROK_4.2_LESSON_LEARNING_SYSTEM.md, "
+            "GROK_4.2_RISK_MANAGEMENT.md, "
+            "GROK_4.2_POSITION_MANAGEMENT.md, "
+            "GROK_4.2_READINESS_ASSESSMENT.md"
+        )
+        arch_doc = "IMPLEMENTATION_COMPLETE.md"
+
+    return (
+        f"Before we begin a plan review, please review your source documents for this "
+        f"project. We are doing {mode_label}. "
+        f"Please load and review these specific files from the project data sources: "
+        f"(1) {arch_doc} for the full architecture context, "
+        f"(2) active_rules.txt for the current trading rules and conviction rubric, "
+        f"(3) these architecture review docs (if available): {review_files}. "
+        f"Reply with a brief confirmation: trading mode, 2-3 key architectural facts "
+        f"you have loaded, and any known open CRITICAL-DATA blockers you are tracking "
+        f"for this project. This ensures you are oriented correctly before reviewing."
+    )
+
+
 class GrokPlanReviewer:
     """
     Automated plan review using Grok 4.20 via browser automation.
@@ -441,59 +499,10 @@ not mention them explicitly.
 
 Confirm you have read the plan and context by summarizing the plan in 2-3 sentences."""
 
-        # Prompt 0: Context warm-up -- forces Grok to load the right project sources
-        # before the plan arrives. Without this, Grok may answer from stale context
-        # or the wrong repo (day trader vs swing trader).
-        # Each trading_mode has its own file list so Grok reads the correct review set.
-        if trading_mode == "longterm":
-            mode_label = "long-term trading"
-            review_files = (
-                "docs/system/README.md, "
-                "docs/system/ARCHITECTURE.md, "
-                "docs/system/OPERATIONS.md, "
-                "docs/system/SAFETY.md, "
-                "docs/system/project_manifest.json, "
-                "ai_trader/rules/active_rules.txt, "
-                "docs/plans/2026-04-28-longterm-trader-foundation-plan.md"
-            )
-            arch_doc = "docs/system/ARCHITECTURE.md"
-        elif trading_mode == "swing":
-            mode_label = "swing trading"
-            review_files = (
-                "GROK__SWING_REGIME_FILTER.md, "
-                "GROK__SWING_FORCESWING_SIGNAL.md, "
-                "GROK__SWING_SWING_EXIT_ENGINE.md, "
-                "GROK__SWING_STOCK_SELECTION.md, "
-                "GROK__SWING_TRADING_DECISION_PROMPTS.md, "
-                "GROK__SWING_BACKTEST_HARNESS.md, "
-                "GROK__SWING_SCHEDULER.md, "
-                "GROK__SWING_READINESS_ASSESSMENT.md"
-            )
-            arch_doc = "DAY_TRADER_TO_SWING_TRADER_CHANGES.md"
-        else:
-            mode_label = "day trading"
-            review_files = (
-                "GROK_4.2_SCHEDULER_ORCHESTRATION.md, "
-                "GROK_4.2_TRADING_DECISION_PROMPTS.md, "
-                "GROK_4.2_TRADE_ENTRY_TRACKING.md, "
-                "GROK_4.2_TRADE_EXIT_ARCHITECTURE.md, "
-                "GROK_4.2_LESSON_LEARNING_SYSTEM.md, "
-                "GROK_4.2_RISK_MANAGEMENT.md, "
-                "GROK_4.2_POSITION_MANAGEMENT.md, "
-                "GROK_4.2_READINESS_ASSESSMENT.md"
-            )
-            arch_doc = "IMPLEMENTATION_COMPLETE.md"
-        prompt0 = (
-            f"Before we begin a plan review, please review your source documents for this "
-            f"project. We are doing {mode_label}. "
-            f"Please load and review these specific files from the project data sources: "
-            f"(1) {arch_doc} for the full architecture context, "
-            f"(2) active_rules.txt for the current trading rules and conviction rubric, "
-            f"(3) these architecture review docs (if available): {review_files}. "
-            f"Reply with a brief confirmation: trading mode, 2-3 key architectural facts "
-            f"you have loaded, and any known open CRITICAL-DATA blockers you are tracking "
-            f"for this project. This ensures you are oriented correctly before reviewing."
-        )
+        # Prompt 0: Context warm-up. For long-term work, Grok now has GitHub
+        # access and should read docs/system/REPO_CONTEXT.md before scanning
+        # source files. This avoids stale day/swing-trader context.
+        prompt0 = build_grok_context_warmup_prompt(trading_mode)
 
         logger.info("[GrokPlanReview] Prompt 0: Asking Grok to review source documents...")
         print("[GrokReview] Prompt 0: Loading Grok context...", flush=True)

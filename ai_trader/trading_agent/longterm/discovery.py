@@ -43,6 +43,10 @@ class DiscoveryCandidate:
     return_on_capital_pct: float | None = None
     gross_margin_pct: float | None = None
     price_trend_6m_pct: float | None = None
+    source_recommendation_count: int | None = None
+    source_fresh_recommendation: bool = False
+    source_priority_boost: float | None = None
+    source_priority_reason: str = ""
     valuation_label: str = ""
     category_leader: bool = False
     existing_watchlist: bool = False
@@ -142,6 +146,18 @@ class DiscoveryEngine:
             metric_note = _enrichment_metric_note(candidate)
             if metric_note:
                 source_notes.append(metric_note)
+            source_signal_note = _source_signal_note(candidate)
+            if source_signal_note:
+                source_notes.append(source_signal_note)
+            source_fields: dict[str, Any] = {}
+            if candidate.source_recommendation_count is not None:
+                source_fields["source_recommendation_count"] = candidate.source_recommendation_count
+            if candidate.source_fresh_recommendation:
+                source_fields["source_fresh_recommendation"] = True
+            if candidate.source_priority_reason:
+                source_fields["source_priority_reason"] = candidate.source_priority_reason
+            if candidate.source_priority_boost is not None:
+                source_fields["source_priority_boost"] = candidate.source_priority_boost
             ideas.append(
                 {
                     "symbol": candidate.symbol,
@@ -157,6 +173,7 @@ class DiscoveryEngine:
                     "primary_growth_driver": "Requires research.",
                     "industry_context": "Requires research.",
                     "balance_sheet_assessment": "Requires research.",
+                    **source_fields,
                 }
             )
         return ideas
@@ -199,6 +216,10 @@ def _merge_candidate(first: DiscoveryCandidate, second: DiscoveryCandidate) -> D
         return_on_capital_pct=_max_present(first.return_on_capital_pct, second.return_on_capital_pct),
         gross_margin_pct=_max_present(first.gross_margin_pct, second.gross_margin_pct),
         price_trend_6m_pct=_max_present(first.price_trend_6m_pct, second.price_trend_6m_pct),
+        source_recommendation_count=_max_present(first.source_recommendation_count, second.source_recommendation_count),
+        source_fresh_recommendation=first.source_fresh_recommendation or second.source_fresh_recommendation,
+        source_priority_boost=_max_present(first.source_priority_boost, second.source_priority_boost),
+        source_priority_reason=first.source_priority_reason or second.source_priority_reason,
         valuation_label=first.valuation_label or second.valuation_label,
         category_leader=first.category_leader or second.category_leader,
         existing_watchlist=first.existing_watchlist or second.existing_watchlist,
@@ -220,6 +241,7 @@ def _score_candidate(candidate: DiscoveryCandidate) -> float:
     score += 8.0 if candidate.existing_watchlist else 0.0
     score += _market_cap_score(candidate.market_cap)
     score += _valuation_score(candidate.valuation_label)
+    score += _source_signal_score(candidate)
     score -= _debt_penalty(candidate.debt_to_equity)
     if candidate.source_rank is not None:
         score += max(0.0, 8.0 - min(float(candidate.source_rank), 20.0) * 0.4)
@@ -314,6 +336,17 @@ def _valuation_score(label: str) -> float:
     return 0.0
 
 
+def _source_signal_score(candidate: DiscoveryCandidate) -> float:
+    score = 0.0
+    if candidate.source_recommendation_count is not None:
+        score += min(8.0, max(0.0, float(candidate.source_recommendation_count)) * 2.0)
+    if candidate.source_fresh_recommendation:
+        score += 6.0
+    if candidate.source_priority_boost is not None:
+        score += min(12.0, max(0.0, float(candidate.source_priority_boost)))
+    return score
+
+
 def _debt_penalty(value: float | None) -> float:
     if value is None:
         return 0.0
@@ -348,6 +381,19 @@ def _enrichment_metric_note(candidate: DiscoveryCandidate) -> str:
     if not parts:
         return ""
     return f"Discovery metrics: {'; '.join(parts)}."
+
+
+def _source_signal_note(candidate: DiscoveryCandidate) -> str:
+    parts = []
+    if candidate.source_recommendation_count is not None:
+        parts.append(f"source recommendations {candidate.source_recommendation_count}")
+    if candidate.source_fresh_recommendation:
+        parts.append("fresh source recommendation")
+    if candidate.source_priority_reason:
+        parts.append(f"priority reason {candidate.source_priority_reason}")
+    if candidate.source_priority_boost is not None:
+        parts.append(f"priority boost {_format_number(candidate.source_priority_boost)}")
+    return f"Source signal: {'; '.join(parts)}." if parts else ""
 
 
 def _format_number(value: float | int) -> str:

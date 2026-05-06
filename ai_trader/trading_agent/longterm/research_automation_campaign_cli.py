@@ -22,6 +22,11 @@ from longterm.extended_universe_scan_cli import (
     _write_json,
     _write_jsonl,
 )
+from longterm.perplexity_research_enrichment import (
+    DEFAULT_PERPLEXITY_API_URL,
+    DEFAULT_PERPLEXITY_MAX_TOKENS,
+    DEFAULT_PERPLEXITY_MODEL,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -56,6 +61,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--news-cache-path", default="")
     parser.add_argument("--skip-grok", action="store_true")
     parser.add_argument("--xai-grok", action="store_true")
+    parser.add_argument("--perplexity-research", action="store_true")
+    parser.add_argument("--perplexity-api-key-env", default="PERPLEXITY_API_KEY")
+    parser.add_argument("--perplexity-model", default=DEFAULT_PERPLEXITY_MODEL)
+    parser.add_argument("--perplexity-api-url", default=DEFAULT_PERPLEXITY_API_URL)
+    parser.add_argument("--perplexity-timeout-seconds", type=float, default=120.0)
+    parser.add_argument("--perplexity-max-tokens", type=int, default=DEFAULT_PERPLEXITY_MAX_TOKENS)
+    parser.add_argument("--perplexity-search-context-size", choices=["low", "medium", "high"], default="low")
+    parser.add_argument(
+        "--perplexity-credits-purchased-to-date",
+        type=float,
+        default=None,
+        help="Optional API-console credit total, e.g. 12 if you have purchased $12 toward Tier 1.",
+    )
     parser.add_argument("--selection-top-percent", type=float, default=20.0)
     parser.add_argument("--selection-min-count", type=int, default=10)
     parser.add_argument("--selection-max-count", type=int, default=50)
@@ -66,6 +84,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run_cli(args: argparse.Namespace, *, fetch_metrics=fetch_yfinance_fundamental_metrics) -> int:
+    _validate_research_provider_mode(args)
     campaign_dir = Path(args.campaign_dir)
     campaign_dir.mkdir(parents=True, exist_ok=True)
     state = _load_state(campaign_dir) if args.resume else _initial_state(campaign_dir)
@@ -218,7 +237,32 @@ def _run_evidence_stage(args: argparse.Namespace, campaign_dir: Path, state: dic
         evidence_args.extend(["--max-batches", str(args.max_evidence_batches)])
     if args.polygon_news:
         evidence_args.extend(["--polygon-news", "--news-cache-path", news_cache])
-    if args.xai_grok:
+    if args.perplexity_research:
+        evidence_args.extend(
+            [
+                "--perplexity-research",
+                "--perplexity-api-key-env",
+                args.perplexity_api_key_env,
+                "--perplexity-model",
+                args.perplexity_model,
+                "--perplexity-api-url",
+                args.perplexity_api_url,
+                "--perplexity-timeout-seconds",
+                str(args.perplexity_timeout_seconds),
+                "--perplexity-max-tokens",
+                str(args.perplexity_max_tokens),
+                "--perplexity-search-context-size",
+                args.perplexity_search_context_size,
+            ]
+        )
+        if args.perplexity_credits_purchased_to_date is not None:
+            evidence_args.extend(
+                [
+                    "--perplexity-credits-purchased-to-date",
+                    str(args.perplexity_credits_purchased_to_date),
+                ]
+            )
+    elif args.xai_grok:
         evidence_args.append("--xai-grok")
     else:
         evidence_args.append("--skip-grok")
@@ -275,6 +319,23 @@ def _run_selection_stage(args: argparse.Namespace, campaign_dir: Path, state: di
         event_type = "research_queue_empty"
     _write_state(campaign_dir, state)
     _record_event(campaign_dir, event_type, summary)
+
+
+def _validate_research_provider_mode(args: argparse.Namespace) -> None:
+    selected = [
+        name
+        for name, enabled in (
+            ("skip-grok", bool(getattr(args, "skip_grok", False))),
+            ("xai-grok", bool(getattr(args, "xai_grok", False))),
+            ("perplexity-research", bool(getattr(args, "perplexity_research", False))),
+        )
+        if enabled
+    ]
+    if len(selected) > 1:
+        raise ValueError(
+            "Choose at most one research provider mode: "
+            "--skip-grok, --xai-grok, or --perplexity-research."
+        )
 
 
 def _write_scan_outputs(campaign_dir: Path, result) -> None:

@@ -2,14 +2,14 @@
 Grok API Backend for Simulator - mirrors production grok_client.py pattern.
 
 Uses OpenAI SDK pointed at xAI endpoint, same as the live trading agent.
-Model: grok-4-1-fast-reasoning (same as production reasoning model)
+Model: grok-4.3 (same as production reasoning model)
 
 When --backend grok is used:
 - Trade evaluation (per-trade conviction scoring) uses Grok
 - Lesson analysis (EOD pattern discovery) uses Grok
 - This matches production exactly: same model makes decisions AND learns from them
 
-Cost: ~$0.02 per simulation run (~70K tokens at $0.20/$0.50 per M)
+Cost: higher than retired 4.1 fast models; use selectively for decision-grade simulation.
 Speed: ~7 min per run vs ~65 min with local Ollama/DeepSeek
 """
 
@@ -20,7 +20,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 # Match production model name from broker_config.json
-GROK_MODEL = "grok-4-1-fast-reasoning"
+GROK_MODEL = "grok-4.3"
 XAI_BASE_URL = "https://api.x.ai/v1"
 GROK_TIMEOUT = 60.0  # seconds - API is fast, no need for 180s Ollama timeout
 

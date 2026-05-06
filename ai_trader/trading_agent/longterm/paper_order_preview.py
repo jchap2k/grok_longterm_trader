@@ -70,6 +70,7 @@ def build_paper_order_preview(
                 plan_id=plan_id,
                 benchmark_reason=benchmark_reason,
                 portfolio_state=portfolio_state,
+                profile=profile,
                 protected_symbols=protected,
                 order_model=normalized_order_model,
                 price_map=normalized_price_map,
@@ -129,6 +130,7 @@ def _previews_for_intent(
     plan_id: str,
     benchmark_reason: str,
     portfolio_state: PortfolioState,
+    profile: PortfolioProfile,
     protected_symbols: set[str],
     order_model: str,
     price_map: Mapping[str, float],
@@ -137,6 +139,19 @@ def _previews_for_intent(
     if intent_type == "BUY":
         return [
             _buy_preview(
+                intent,
+                index=index,
+                plan_id=plan_id,
+                benchmark_reason=benchmark_reason,
+                portfolio_state=portfolio_state,
+                protected_symbols=protected_symbols,
+                order_model=order_model,
+                price_map=price_map,
+            )
+        ]
+    if intent_type in {"SELL", "REDUCE"}:
+        return [
+            _sell_preview(
                 intent,
                 index=index,
                 plan_id=plan_id,
@@ -159,12 +174,26 @@ def _previews_for_intent(
             price_map=price_map,
         )
     if _is_v1_excluded_parking_intent(intent_type):
+        if not bool(intent.get("parking_execution")):
+            return [
+                _excluded_v1_preview(
+                    intent,
+                    index=index,
+                    plan_id=plan_id,
+                    benchmark_reason=benchmark_reason,
+                )
+            ]
         return [
-            _excluded_v1_preview(
+            _parking_preview(
                 intent,
                 index=index,
                 plan_id=plan_id,
                 benchmark_reason=benchmark_reason,
+                portfolio_state=portfolio_state,
+                profile=profile,
+                protected_symbols=protected_symbols,
+                order_model=order_model,
+                price_map=price_map,
             )
         ]
     return [
@@ -231,6 +260,59 @@ def _buy_preview(
         benchmark_reason=benchmark_reason,
         blocked=blocked,
         promotion_review=promotion_review,
+    )
+
+
+def _sell_preview(
+    intent: Mapping[str, Any],
+    *,
+    index: int,
+    plan_id: str,
+    benchmark_reason: str,
+    portfolio_state: PortfolioState,
+    protected_symbols: set[str],
+    order_model: str,
+    price_map: Mapping[str, float],
+) -> PaperOrderPreview:
+    symbol = _symbol(intent)
+    requested_notional = _intent_notional(intent)
+    blocked = _common_blocks(intent, symbol, protected_symbols)
+    order_type = "market_notional_preview"
+    notional = requested_notional
+    quantity: int | None = None
+    estimated_price = 0.0
+    holding_value = portfolio_state.holding_value(symbol)
+    if holding_value < requested_notional:
+        blocked.append(f"Insufficient {symbol} value to sell ${requested_notional:,.2f}.")
+    if order_model == "whole_share":
+        order_type = "market_quantity_preview"
+        estimated_price = float(price_map.get(symbol) or 0.0)
+        if estimated_price <= 0:
+            blocked.append("missing_price_for_whole_share_preview")
+            notional = 0.0
+            quantity = 0
+        else:
+            quantity = int(floor(requested_notional / estimated_price))
+            notional = round(quantity * estimated_price, 2)
+            if quantity < 1:
+                blocked.append("whole_share_quantity_below_one")
+            if notional > holding_value:
+                blocked.append(f"Insufficient {symbol} value to sell ${notional:,.2f}.")
+    return _preview(
+        intent,
+        preview_id=f"{plan_id or 'plan'}-{index:03d}-sell",
+        plan_id=plan_id,
+        symbol=symbol,
+        side="sell",
+        order_type=order_type,
+        notional=notional,
+        requested_notional=requested_notional,
+        quantity=quantity,
+        estimated_price=estimated_price,
+        allowed=not blocked,
+        reason=_reason(intent, blocked),
+        benchmark_reason=benchmark_reason,
+        blocked=blocked,
     )
 
 
@@ -340,6 +422,67 @@ def _excluded_v1_preview(
     )
 
 
+def _parking_preview(
+    intent: Mapping[str, Any],
+    *,
+    index: int,
+    plan_id: str,
+    benchmark_reason: str,
+    portfolio_state: PortfolioState,
+    profile: PortfolioProfile,
+    protected_symbols: set[str],
+    order_model: str,
+    price_map: Mapping[str, float],
+) -> PaperOrderPreview:
+    symbol = _symbol(intent)
+    requested_notional = _intent_notional(intent)
+    blocked = _common_blocks(intent, symbol, protected_symbols)
+    if not profile.is_non_taxable:
+        blocked.append("taxable_parking_execution_blocked")
+    if not profile.is_approved_parking_symbol(symbol):
+        blocked.append("parking_symbol_not_approved")
+    if str(intent.get("order_intent") or "").upper() != "BUY":
+        blocked.append("parking_order_intent_not_buy")
+    order_type = "market_notional_preview"
+    notional = requested_notional
+    quantity: int | None = None
+    estimated_price = 0.0
+    if order_model == "whole_share":
+        order_type = "market_quantity_preview"
+        estimated_price = float(price_map.get(symbol) or 0.0)
+        if estimated_price <= 0:
+            blocked.append("missing_price_for_whole_share_preview")
+            notional = 0.0
+            quantity = 0
+        else:
+            quantity = int(floor(requested_notional / estimated_price))
+            notional = round(quantity * estimated_price, 2)
+            if quantity < 1:
+                blocked.append("whole_share_quantity_below_one")
+    cash_shortfall = max(0.0, round(notional - portfolio_state.cash, 2))
+    if cash_shortfall > 0:
+        blocked.append(f"Insufficient cash for preview; short ${cash_shortfall:,.2f}.")
+    return _preview(
+        intent,
+        preview_id=f"{plan_id or 'plan'}-{index:03d}-parking-buy",
+        plan_id=plan_id,
+        symbol=symbol,
+        side="buy",
+        order_type=order_type,
+        notional=notional,
+        requested_notional=requested_notional,
+        quantity=quantity,
+        estimated_price=estimated_price,
+        allowed=not blocked,
+        reason=_reason(intent, blocked),
+        cash_shortfall=cash_shortfall,
+        benchmark_reason=benchmark_reason,
+        blocked=blocked,
+        promotion_review={},
+        decision_id_override=str(intent.get("decision_id") or _parking_decision_id(plan_id, symbol)),
+    )
+
+
 def _no_order_preview(
     intent: Mapping[str, Any],
     *,
@@ -385,6 +528,7 @@ def _preview(
     transaction_id: str = "",
     cash_shortfall: float = 0.0,
     promotion_review: Mapping[str, Any] | None = None,
+    decision_id_override: str = "",
 ) -> PaperOrderPreview:
     risk = dict(intent.get("risk_review") or {})
     promotion = dict(promotion_review or _promotion_review_from_intent(intent))
@@ -401,7 +545,7 @@ def _preview(
         size_variance=round(float(notional or 0.0) - float(requested_notional if requested_notional is not None else notional or 0.0), 2),
         allowed=bool(allowed),
         reason=reason,
-        decision_id=str(intent.get("decision_id") or ""),
+        decision_id=str(decision_id_override or intent.get("decision_id") or ""),
         intent_type=str(intent.get("intent_type") or ""),
         paired_symbol=paired_symbol,
         source_symbol=source_symbol,
@@ -472,6 +616,10 @@ def _reason(intent: Mapping[str, Any], blocked: list[str]) -> str:
 
 def _is_v1_excluded_parking_intent(intent_type: str) -> bool:
     return intent_type in {"PARK_IDLE_CASH", "PARK_DEFENSIVE_CASH"}
+
+
+def _parking_decision_id(plan_id: str, symbol: str) -> str:
+    return f"parking-{plan_id or 'plan'}-{symbol}"
 
 
 def _promotion_review_from_intent(intent: Mapping[str, Any]) -> dict[str, Any]:

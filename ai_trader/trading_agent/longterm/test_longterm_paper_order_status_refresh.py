@@ -204,6 +204,35 @@ def test_status_refresh_cli_writes_report_output_with_injected_broker(tmp_path, 
     assert saved["status_counts"]["filled"] == 1
 
 
+def test_status_refresh_cli_writes_long_report_output_path(tmp_path, capsys):
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    _submitted_event(ledger)
+    broker = FakeStatusBroker({"order-1": _order()})
+    report_dir = tmp_path
+    while len(str(report_dir)) < 225:
+        report_dir = report_dir / "scheduler_prerun_snapshot_segment"
+    report_path = report_dir / f"paper_order_status_refresh_{'x' * 48}.json"
+    assert len(str(report_dir)) < 260
+    assert len(str(report_path)) > 260
+
+    args = build_parser().parse_args(
+        [
+            "--ledger-db",
+            str(ledger.db_path),
+            "--report-output",
+            str(report_path),
+            "--json",
+        ]
+    )
+
+    assert run_cli(args, broker_factory=lambda: broker) == 0
+    printed = json.loads(capsys.readouterr().out)
+    saved = json.loads(_read_text(report_path))
+
+    assert printed["status_counts"]["filled"] == 1
+    assert saved["status_counts"]["filled"] == 1
+
+
 def test_status_refresh_cli_skips_broker_connection_when_no_submitted_orders(tmp_path, capsys):
     ledger = PaperTradeLedger(tmp_path / "paper.db")
     report_path = tmp_path / "empty_status_refresh.json"
@@ -228,3 +257,10 @@ def test_status_refresh_cli_skips_broker_connection_when_no_submitted_orders(tmp
     assert printed["submitted_order_count"] == 0
     assert printed["refreshed_count"] == 0
     assert saved["submitted_order_count"] == 0
+
+
+def _read_text(path):
+    path = Path(path)
+    if sys.platform == "win32":
+        return Path("\\\\?\\" + str(path.resolve())).read_text(encoding="utf-8")
+    return path.read_text(encoding="utf-8")

@@ -15,18 +15,18 @@ class TokenTracker:
     """
     Track LLM API token usage and calculate costs across multiple providers.
 
-    Pricing per million tokens (as of 2026-03):
+    Pricing per million tokens (updated 2026-05-05):
 
     Anthropic Claude (Sonnet):
     - Input: $3.00 per million
     - Output: $15.00 per million
 
-    xAI Grok (verified 2026-03-16 from xAI pricing page):
-    - grok-4-fast-reasoning / grok-4-1-fast-reasoning: $0.20 input / $0.50 output  <- what we use
-    - grok-4-fast-non-reasoning:                        $0.20 input / $0.50 output
-    - grok-code-fast-1:                                 $0.20 input / $1.50 output
-    - grok-4.20-beta-0309-reasoning (full):             $2.00 input / $6.00 output  <- 10x more expensive
-    - grok-4.20-multi-agent-beta-0309 (full):           $2.00 input / $6.00 output
+    xAI Grok:
+    - grok-4.3: $1.25 input / $2.50 output
+    - grok-4-1-fast-* models retire on 2026-05-15 and should not be defaults
+
+    Perplexity Sonar:
+    - sonar: $1 input / $1 output plus request/search-context fees
     """
 
     # Pricing per million tokens by provider
@@ -36,24 +36,39 @@ class TokenTracker:
             'output': 15.00
         },
         'grok': {
-            'input': 0.20,   # grok-4-1-fast-reasoning - default, verified 2026-03-16
-            'output': 0.50
+            'input': 1.25,
+            'output': 2.50
+        },
+        'perplexity': {
+            'input': 1.00,
+            'output': 1.00
         },
         'anthropic': {  # Alias for claude
             'input': 3.00,
             'output': 15.00
         },
         'xai': {  # Alias for grok
-            'input': 0.20,
-            'output': 0.50
+            'input': 1.25,
+            'output': 2.50
         },
-        # Per-model pricing (xAI, verified 2026-03-16)
+        # Per-model pricing (xAI)
+        'grok-4.3': {'input': 1.25, 'output': 2.50},
+        'grok-4.20-reasoning': {'input': 1.25, 'output': 2.50},
+        'grok-4.20-non-reasoning': {'input': 1.25, 'output': 2.50},
+        'grok-4.20-multi-agent': {'input': 1.25, 'output': 2.50},
+        # Deprecated on 2026-05-15; retained only for historical log accounting.
         'grok-4-fast-reasoning': {'input': 0.20, 'output': 0.50},
         'grok-4-1-fast-reasoning': {'input': 0.20, 'output': 0.50},
         'grok-4-fast-non-reasoning': {'input': 0.20, 'output': 0.50},
+        'grok-4-1-fast-non-reasoning': {'input': 0.20, 'output': 0.50},
         'grok-code-fast-1': {'input': 0.20, 'output': 1.50},
         'grok-4.20-beta-0309-reasoning': {'input': 2.00, 'output': 6.00},
-        'grok-4.20-multi-agent-beta-0309': {'input': 2.00, 'output': 6.00}
+        'grok-4.20-multi-agent-beta-0309': {'input': 2.00, 'output': 6.00},
+        # Perplexity direct Sonar API token pricing; request fees are tracked separately.
+        'sonar': {'input': 1.00, 'output': 1.00},
+        'sonar-pro': {'input': 3.00, 'output': 15.00},
+        'sonar-reasoning-pro': {'input': 2.00, 'output': 8.00},
+        'sonar-deep-research': {'input': 2.00, 'output': 8.00}
     }
 
     # Legacy constants for backward compatibility

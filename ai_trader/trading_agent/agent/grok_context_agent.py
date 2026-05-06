@@ -6,7 +6,7 @@ it to fast model throughout the day for consistency and cost efficiency.
 
 Architecture:
 1. Morning: grok-4-0709 analyzes regime → generates Daily Context Summary
-2. Intraday: grok-4-1-fast-reasoning gets summary prepended to all prompts
+2. Intraday: configured Grok fast/data model gets summary prepended to all prompts
 3. Result: Fast model knows morning strategy, constraints, and market thesis
 
 Author: Claude Code + Grok outline
@@ -47,7 +47,7 @@ class GrokContextAgent:
 
         # Model selection
         self.morning_model = config.get("thinking_model", "grok-4-0709")
-        self.fast_model = config.get("fast_model", "grok-4-1-fast-reasoning")
+        self.fast_model = config.get("fast_model", "grok-4.20-non-reasoning")
 
         # Cache file for recovery
         cache_dir = Path(__file__).parent.parent.parent / "ai_trader_data"
@@ -352,7 +352,7 @@ Max Positions: {max_positions}
 
         Rules:
         - Before 9:30 AM ET: Use grok-4-0709 (morning analysis)
-        - After 9:30 AM ET: Use grok-4-1-fast-reasoning (with context)
+        - After 9:30 AM ET: Use configured fast/data model (with context)
 
         Returns:
             Model name to use
@@ -367,7 +367,7 @@ Max Positions: {max_positions}
             logger.debug("Before market open - using morning model (grok-4-0709)")
             return self.morning_model
         else:
-            logger.debug("After market open - using fast model (grok-4-1-fast-reasoning)")
+            logger.debug("After market open - using configured fast model")
             return self.fast_model
 
     def query_model(self, prompt: str, model_name: Optional[str] = None) -> str:

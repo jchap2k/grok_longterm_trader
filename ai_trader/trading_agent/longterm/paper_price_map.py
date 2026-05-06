@@ -56,6 +56,30 @@ def build_price_map_from_action_plan(
     )
 
 
+def build_price_map_from_explicit_map(
+    action_plan: Mapping[str, Any],
+    *,
+    price_map: Mapping[str, Any],
+    protected_symbols: set[str] | None = None,
+) -> PriceMapResult:
+    """Normalize a supplied price map against the symbols required by a plan."""
+    protected = {symbol.upper() for symbol in (protected_symbols or set())}
+    symbols = _symbols_for_price_map(action_plan, protected_symbols=protected)
+    normalized = _normalize_price_map(price_map)
+    prices = {symbol: normalized[symbol] for symbol in symbols if symbol in normalized}
+    return PriceMapResult(
+        mode="paper_price_map",
+        symbols_requested=symbols,
+        price_map=prices,
+        missing_symbols=[symbol for symbol in symbols if symbol not in prices],
+        errors={},
+        notes=[
+            "Explicit supplied price map. No quote provider or broker connection was opened.",
+            "Use this output as --price-map for whole-share paper previews.",
+        ],
+    )
+
+
 def build_price_map_markdown(result: Mapping[str, Any]) -> str:
     lines = [
         "# Paper Preview Price Map",
@@ -82,9 +106,15 @@ def _symbols_for_price_map(
     symbols: list[str] = []
     for intent in action_plan.get("intents") or []:
         intent_type = str(intent.get("intent_type") or "").upper()
-        if intent_type not in {"BUY", "REBALANCE"}:
+        is_stage6b_parking = (
+            intent_type in {"PARK_IDLE_CASH", "PARK_DEFENSIVE_CASH"}
+            and bool(intent.get("parking_execution"))
+            and str(intent.get("order_intent") or "").upper() == "BUY"
+        )
+        if intent_type not in {"BUY", "REBALANCE"} and not is_stage6b_parking:
             continue
-        for key in ("symbol", "source_symbol"):
+        keys = ("symbol",) if is_stage6b_parking else ("symbol", "source_symbol")
+        for key in keys:
             symbol = str(intent.get(key) or "").upper().strip()
             if symbol and symbol not in protected_symbols and symbol not in symbols:
                 symbols.append(symbol)
@@ -99,4 +129,22 @@ def _quote_price(quote: Any) -> float:
     return float(raw or 0.0)
 
 
-__all__ = ["PriceMapResult", "build_price_map_from_action_plan", "build_price_map_markdown"]
+def _normalize_price_map(price_map: Mapping[str, Any]) -> dict[str, float]:
+    normalized: dict[str, float] = {}
+    for symbol, value in price_map.items():
+        key = str(symbol or "").upper().strip()
+        try:
+            price = float(value)
+        except (TypeError, ValueError):
+            continue
+        if key and price > 0:
+            normalized[key] = round(price, 4)
+    return normalized
+
+
+__all__ = [
+    "PriceMapResult",
+    "build_price_map_from_action_plan",
+    "build_price_map_from_explicit_map",
+    "build_price_map_markdown",
+]

@@ -14,11 +14,53 @@ python scripts/run_longterm_research.py --symbol AAPL --company-name Apple --the
 python scripts/run_longterm_research.py --symbol AAPL --company-name Apple --thesis "Services and ecosystem durability." --business-summary "Consumer technology platform." --candidate-price 180 --benchmark-price 165
 ```
 
-Use the expanded committee when a decision is high-value or borderline:
+The default committee is `decision_4` to control Grok 4.3 cost. It is the
+normal path for routine add, hold, review, and high-conviction/low-risk
+decisions because the stronger 4.3 model plus `ThesisCritic` and
+`DecisionIntegrator` provide enough guardrails for most research.
+
+Use the expanded `decision_6` committee only when the extra depth is worth the
+cost and latency:
+
+| Decision context | Recommended preset | Why |
+|---|---|---|
+| Routine add, hold, or review | `decision_4` | Fastest and cheapest; enough for normal monitoring. |
+| Large position size above roughly 5-10% of the active sleeve | `decision_6` | Adds valuation and portfolio-allocation rigor. |
+| New or unproven thesis | `decision_6` | Extra challenge reduces first-thesis blind spots. |
+| Borderline valuation or unclear edge | `decision_6` | `ValuationEdgeAnalyst` adds useful pushback. |
+| Choppy macro, Fed pivot/recession risk, or unusual uncertainty | `decision_6` | More perspectives reduce regime mistakes. |
+| Very high conviction and low operational risk | `decision_4` | Strong model plus critic is usually sufficient. |
+
+Manual expanded-committee example:
 
 ```powershell
 python scripts/run_longterm_research.py --symbol AAPL --agent-preset decision_6
 ```
+
+Before spending the wider committee, the scheduler/operator can generate an
+advisory-only preset artifact from saved context. This helper does not call
+Grok, does not alter recommendations, and does not submit orders; it simply
+recommends whether the next committee pass should stay on `decision_4` or
+escalate to `decision_6`.
+
+```powershell
+python scripts/longterm_committee_preset_policy.py --action-plan path\to\account_action_plan.json --market-regime path\to\market_regime.json --research-items path\to\research_queue_selected.json --active-sleeve-value 100000 --report-output path\to\committee_preset_policy.json --json
+```
+
+## Account Tax Mode
+
+Set `account_strategy_mode` explicitly in the portfolio profile before relying
+on parking or rebalance guidance. `roth_ira`, `paper`, `paper_non_taxable`, and
+other non-taxable modes can treat broad SPY/SGOV/TLT parking and dry-run
+rebalance review as non-taxable planning surfaces. `taxable` and unspecified
+profiles suppress broad idle-cash parking and broad rebalance churn in
+`account_action_plan` before any Stage 6B preview or execution boundary sees
+the plan.
+
+This tax-mode guard does not ban symbol-specific sells. If a stock thesis is
+broken, weakening, or otherwise clearly sell-worthy, that should be represented
+as a research/review decision with explicit symbol-level rationale rather than a
+generic "sell everything to cash" or frequent tax-inefficient rebalance.
 
 ## Journal Commands
 
@@ -200,7 +242,7 @@ python scripts/longterm_extended_universe_first_pass.py --source-url https://www
 
 For unattended overnight-style work, use the research automation campaign
 wrapper. It advances a campaign folder through universe preparation,
-fundamentals cache fill, Python first-pass ranking, optional skip-Grok evidence
+fundamentals cache fill, Python first-pass ranking, optional evidence
 campaigning, and a deterministic committee research queue. It writes
 `campaign_state.json` plus append-only `campaign_events.jsonl` so the command
 can be resumed safely.
@@ -212,9 +254,18 @@ python scripts/longterm_research_automation_campaign.py --source-url https://www
 ```
 
 Default behavior is dry-run and research-only. The automation command does not
-submit paper or live orders. Grok remains explicit via `--xai-grok`; if neither
-`--xai-grok` nor `--skip-grok` is supplied, the automation uses skip-Grok
-evidence enrichment as the safer default.
+submit paper or live orders. Paid synthesis remains explicit: use
+`--perplexity-research` for broad Sonar-backed catalyst/article enrichment, or
+`--xai-grok` only for smaller high-value enrichment batches. If no research
+provider flag is supplied, the automation uses skip-Grok evidence enrichment as
+the safer free/cached default.
+
+Example explicit Perplexity campaign run after the Python first-pass scan is
+ready:
+
+```powershell
+python scripts/longterm_research_automation_campaign.py --source-url https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt --source nasdaq_listed --campaign-dir path\to\research_campaign --resume --run-until research_queue_ready --max-fundamental-fetches 500 --polygon-news --perplexity-research --perplexity-search-context-size low --perplexity-credits-purchased-to-date 12 --evidence-batch-size 10 --max-evidence-batches 1 --selection-top-percent 20 --selection-min-count 10 --selection-max-count 50 --rate-limit-batch-size 5 --rate-limit-pause-seconds 69 --campaign-batch-pause-seconds 69
+```
 
 When the campaign reaches `research_queue_ready`, the selected committee queue
 is written under `research_selection\`:
@@ -377,10 +428,9 @@ five with a little more than one minute of pause, cached, and resumable; a
 recurring spend.
 
 If Polygon's free tier is too restrictive or its structured feed is thin for
-long-tail names, a Perplexity-style answer API can be added later as another
-`NewsProvider`. It should return article candidates with title, URL, date,
-source, and snippet, then let this same deterministic relevance scorer filter
-noise before Grok synthesis.
+long-tail names, use Perplexity Sonar for broad research enrichment and reserve
+Grok 4.3 for final committee decisions. Perplexity should still return
+source-backed article/catalyst context, not unsourced rankings.
 
 Offline/snapshot mode for development:
 
@@ -388,7 +438,15 @@ Offline/snapshot mode for development:
 python scripts/longterm_grok_research_enrichment.py --idea-batch path\to\research_ideas.earnings_enriched.json --facts-file path\to\finnhub_facts.json --snapshot-file path\to\grok_snapshots.json --output path\to\research_ideas.grok_enriched.json
 ```
 
-Live xAI mode, when `XAI_API_KEY` is configured:
+Live Perplexity mode, when `PERPLEXITY_API_KEY` is configured. This is the
+preferred broad-enrichment mode after the Grok 4.1 fast deprecation:
+
+```powershell
+python scripts/longterm_grok_research_enrichment.py --idea-batch path\to\research_ideas.earnings_enriched.json --facts-file path\to\finnhub_facts.json --perplexity-research --output path\to\research_ideas.research_enriched.json --limit 25
+```
+
+Live xAI mode, when `XAI_API_KEY` is configured. Reserve this for smaller,
+high-value enrichment batches or direct decision support:
 
 ```powershell
 python scripts/longterm_grok_research_enrichment.py --idea-batch path\to\research_ideas.earnings_enriched.json --facts-file path\to\finnhub_facts.json --output path\to\research_ideas.grok_enriched.json --limit 5
@@ -642,6 +700,12 @@ intentionally blocks Schwab API live compatibility; use
 `--required-order-model whole_share` only when the planned smoke/live path has
 been adapted to whole-share sizing.
 
+For the first clean-account smoke, leave account cleanliness strict. After the
+paper account intentionally holds positions from a supervised test, add
+`--allow-existing-paper-positions` only when the exported cash still matches the
+expected baseline. This converts known existing paper holdings into an explicit
+ongoing-portfolio warning instead of a blocker; cash mismatch still blocks.
+
 Generate an ordered Monday paper-trading runbook:
 
 ```powershell
@@ -673,6 +737,7 @@ action plan:
 ```powershell
 python scripts/longterm_research_to_paper_pipeline.py --output-dir path\to\pipeline_artifacts --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --price-map path\to\price_map.json --skip-price-map --print-plan-only --json
 python scripts/longterm_research_to_paper_pipeline.py --output-dir path\to\pipeline_artifacts --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --price-map path\to\price_map.json --skip-price-map --expected-cash 74000 --summary-output path\to\pipeline_artifacts\pipeline_summary.json --json
+python scripts/longterm_research_to_paper_pipeline.py --output-dir path\to\pipeline_artifacts --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --expected-cash-from-portfolio-state --allow-existing-paper-positions --summary-output path\to\pipeline_artifacts\pipeline_summary.json --json
 ```
 
 The pipeline wrapper is the scheduler-ready command seam. It composes existing
@@ -685,20 +750,196 @@ submit command and rejects any planned stage containing `--submit-paper-orders`.
 Use `--print-plan-only` when wiring a scheduler or reviewing the exact command
 order without executing any stage.
 
+The optional `--allow-existing-paper-positions` flag is for ongoing paper
+portfolio refreshes after known paper buys exist. It is intentionally not the
+default because the initial supervised paper-smoke path should prove the account
+is clean before first submission.
+For ongoing paper scheduler runs, pair it with
+`--expected-cash-from-portfolio-state` so the runbook/readiness cash check uses
+the fresh `cash` field from the account snapshot instead of yesterday's hardcoded
+cash number. Do not combine that flag with explicit `--expected-cash`; the CLI
+fails closed when both cash sources are supplied.
+
 The same wrapper can optionally prepend existing research/planning stages before
 the paper preflight. This is still no-submit orchestration: committee batches run
 through `run_longterm_cycle.py`, a final empty idea-batch cycle refreshes account
 planning from the journal, and then the normal paper-readiness stages run:
 
 ```powershell
-python scripts/longterm_research_to_paper_pipeline.py --output-dir path\to\pipeline_artifacts --committee-batch-dir path\to\committee_batches --final-planning-refresh --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --market-regime-file path\to\market_regime.json --motley-fool-config path\to\disabled_fool_config.json --active-sleeve-value 74000 --available-cash 74000 --skip-price-map --expected-cash 74000 --json
+python scripts/longterm_research_to_paper_pipeline.py --output-dir path\to\pipeline_artifacts --committee-batch-dir path\to\committee_batches --final-planning-refresh --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --market-regime-file path\to\market_regime.json --motley-fool-config path\to\disabled_fool_config.json --planning-capital-from-portfolio-state --skip-price-map --expected-cash-from-portfolio-state --allow-existing-paper-positions --json
 ```
 
 Use this expanded form only when the saved committee batch files and portfolio
-snapshot are already prepared. It does not perform broad-universe discovery,
+snapshot are already prepared. `--planning-capital-from-portfolio-state`
+derives final-planning available cash from `portfolio.cash` and active sleeve
+value from cash plus non-protected holdings, so `FXAIX`/protected holdings stay
+outside active deployment sizing. It does not perform broad-universe discovery,
 fundamentals cache filling, Polygon/Grok enrichment, or broker submission by
-itself; those remain upstream artifacts until the scheduler design explicitly
-adds them as separate safe stages.
+itself; use the upstream research-campaign bridge below when the scheduler needs
+to prepare those research batches first.
+
+The wrapper can also prepend a broad-universe research campaign stage. This is
+the scheduler-friendly bridge for overnight research preparation: it runs the
+existing research automation campaign through `research_queue_ready`, then
+splits the selected research queue into committee batch files. The generated
+`committee_batch_dir` is recorded in `pipeline_summary.json`; run the wrapper
+again with that directory via `--committee-batch-dir` when you are ready to spend
+committee/LLM calls.
+
+```powershell
+python scripts/longterm_research_to_paper_pipeline.py --output-dir path\to\pipeline_artifacts --research-source-url https://example.com/listings.txt --research-source nasdaq_trader --research-campaign-dir path\to\research_campaign --research-resume --research-run-until research_queue_ready --research-watchlist-limit 305 --research-top-percent 10 --research-max-fundamental-fetches 500 --polygon-news --skip-grok --research-rate-limit-batch-size 5 --research-rate-limit-pause-seconds 69 --research-batch-size 5 --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --price-map path\to\price_map.json --skip-price-map --print-plan-only --json
+```
+
+For paid broad enrichment in that same no-submit bridge, replace `--skip-grok`
+with `--perplexity-research` and pass the same Perplexity cost controls used by
+the automation command:
+
+```powershell
+python scripts/longterm_research_to_paper_pipeline.py --output-dir path\to\pipeline_artifacts --research-source-url https://example.com/listings.txt --research-source nasdaq_trader --research-campaign-dir path\to\research_campaign --research-resume --research-run-until research_queue_ready --research-watchlist-limit 305 --research-top-percent 10 --research-max-fundamental-fetches 500 --polygon-news --perplexity-research --perplexity-search-context-size low --perplexity-credits-purchased-to-date 12 --research-rate-limit-batch-size 5 --research-rate-limit-pause-seconds 69 --research-batch-size 5 --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --price-map path\to\price_map.json --skip-price-map --print-plan-only --json
+```
+
+This upstream bridge still does not submit orders. `--xai-grok` and
+`--perplexity-research` must be explicit; otherwise the campaign can run in
+cheaper provider-free or cached modes. The batch split reads
+`research_campaign\research_selection\research_queue_selected.json` and writes
+committee-ready batch files under `research_campaign\committee_batches`.
+
+If you want one scheduler command to continue from selected queue into committee
+research, add `--run-generated-committee-batches`. This inserts a no-submit
+runner stage after the batch split. The runner discovers generated batch files
+at runtime, executes `run_longterm_cycle.py` once per batch in sorted order,
+writes `generated_committee_batches\committee_batch_run_summary.json`, and uses
+artifact-based `--resume` by default so scheduler retries do not rerun already
+completed batch cycles from the same output directory.
+The committee runner writes that summary incrementally after each completed
+batch, so a timeout or interrupted long research cadence can resume from the
+last persisted passed batch instead of starting over.
+For scheduler-sized bites, add `--generated-committee-max-batches N`. A partial
+run exits cleanly with `status=partial`, records `remaining_count`, and the
+durable scheduler policy state does not mark `last_full_research_at` until the
+generated committee summary reaches `status=completed` with no remaining
+batches.
+
+```powershell
+python scripts/longterm_research_to_paper_pipeline.py --output-dir path\to\pipeline_artifacts --research-source-file path\to\nasdaqtrader.txt --research-source nasdaq_trader --research-campaign-dir path\to\research_campaign --research-resume --research-run-until research_queue_ready --run-generated-committee-batches --generated-committee-max-batches 1 --final-planning-refresh --market-regime-file path\to\market_regime.json --planning-capital-from-portfolio-state --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --price-map path\to\price_map.json --skip-price-map --expected-cash-from-portfolio-state --allow-existing-paper-positions --json
+```
+
+Use `--no-generated-committee-resume` only when intentionally rebuilding a
+fresh output directory or after manually clearing the previous runner summary.
+
+Inspect an existing pipeline summary without rerunning any stage:
+
+```powershell
+python scripts/longterm_pipeline_health.py --pipeline-summary path\to\pipeline_artifacts\pipeline_summary.json --report-output path\to\pipeline_artifacts\pipeline_artifact_health.json --require-artifact paper_preview --require-artifact workflow_smoke --json
+```
+
+The health command is read-only. It reloads the `artifact_paths` recorded in
+`pipeline_summary.json`, builds scheduler/dashboard counts for research
+selection, committee batches, action-plan intents, paper preview, workflow
+smoke, and operator status, then reports missing or malformed files. A `ready`
+report means the saved artifacts are coherent enough for dashboard/scheduler
+inspection; it is not authorization to submit orders.
+
+Run the same no-submit pipeline as a bounded recurring scheduler loop:
+
+```powershell
+$snapshot = "python scripts/longterm_alpaca_paper_snapshot.py --portfolio-state-output {portfolio_state}"
+$pipeline = "python scripts/longterm_research_to_paper_pipeline.py --output-dir {pipeline_output_dir} --research-source-file path\to\nasdaqtrader.txt --research-source nasdaq_trader --research-campaign-dir path\to\research_campaign --research-resume --research-run-until research_queue_ready --run-generated-committee-batches --generated-committee-max-batches 1 --final-planning-refresh --market-regime-file path\to\market_regime.json --planning-capital-from-portfolio-state --action-plan path\to\account_action_plan.json --portfolio-state {portfolio_state} --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --allow-existing-paper-positions --expected-cash-from-portfolio-state --json"
+$policy = "python scripts/longterm_pipeline_scheduler_policy.py --rules-path {rules_path} --policy-state {scheduler_policy_state} --state-output {scheduler_policy_state} --market-regime path\to\market_regime.json --journal-db path\to\journal.db --pipeline-scheduler-summary {scheduler_summary} --pipeline-summary {pipeline_summary} --report-output {scheduler_policy} --json"
+$refresh = "python scripts/longterm_paper_account_refresh.py --journal-db path\to\journal.db --action-plan path\to\account_action_plan.json --paper-ledger-db path\to\paper_ledger.db --pipeline-summary {pipeline_summary} --output-dir {account_refresh_output_dir} --dashboard-manifest-output path\to\dashboard_manifest.json --json"
+python scripts/longterm_pipeline_scheduler.py --run-once --output-dir path\to\pipeline_scheduler_runs --rules-path path\to\active_rules.txt --pre-pipeline-refresh-command-template $snapshot --pipeline-command-template $pipeline --scheduler-policy-command-template $policy --account-refresh-command-template $refresh --json
+python scripts/longterm_pipeline_scheduler.py --max-runs 3 --interval-seconds 3600 --output-dir path\to\pipeline_scheduler_runs --rules-path path\to\active_rules.txt --pre-pipeline-refresh-command-template $snapshot --pipeline-command-template $pipeline --scheduler-policy-command-template $policy --account-refresh-command-template $refresh --json
+```
+
+For the standard ongoing paper-review loop, prefer the built-in safe preset so
+the operator does not have to hand-maintain four long command templates:
+
+```powershell
+python scripts/longterm_pipeline_scheduler.py --preset ongoing-no-submit --run-once --output-dir path\to\pipeline_scheduler_runs --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --profile-config path\to\roth_ira_profile.json --market-regime-file path\to\market_regime.json --final-planning-refresh --planning-capital-from-portfolio-state --expected-cash-from-portfolio-state --allow-existing-paper-positions --json
+python scripts/longterm_pipeline_scheduler.py --preset ongoing-no-submit --max-runs 3 --interval-seconds 3600 --output-dir path\to\pipeline_scheduler_runs --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --profile-config path\to\roth_ira_profile.json --market-regime-file path\to\market_regime.json --final-planning-refresh --planning-capital-from-portfolio-state --expected-cash-from-portfolio-state --allow-existing-paper-positions --json
+```
+
+The preset expands to the same safe stages as the manual template path: a fresh
+Alpaca paper snapshot into `{portfolio_state}`, the no-submit
+research-to-paper pipeline, the advisory scheduler-policy report, and a
+read-only paper-account/dashboard refresh. It writes per-run
+`dashboard_manifest.json` and `operator_dashboard_site` artifacts so the local
+dashboard can refresh from the latest saved run. The preset still rejects
+submit-capable fragments and never adds `--submit-paper-orders` or
+`--confirm-paper-submit`.
+
+The recurring pipeline scheduler is a thin command orchestrator, not a new
+trading authority. It validates the command templates before running them,
+requires `--journal-db`, `--portfolio-state`, and the active rules file, injects
+`--summary-output` plus `--rules-path` when omitted, writes isolated
+`run_001`, `run_002`, ... folders, captures stdout/stderr, can optionally run a
+pre-pipeline snapshot command that writes `{portfolio_state}` as
+`run_00N\paper_portfolio_state.json`, writes `pipeline_artifact_health.json`
+after each pipeline run, can optionally run the read-only scheduler-policy
+command with the generated pipeline summary, and can then run the read-only
+paper-account/dashboard refresh command. When a scheduler policy command is
+supplied, the scheduler writes `{scheduler_policy}` as
+`run_00N\scheduler_policy.json` and automatically passes that artifact to
+`longterm_paper_account_refresh.py --scheduler-policy` unless the refresh
+template already provides one. It rejects submit-capable fragments such as
+`--submit-paper-orders`, `SUPERVISED_PAPER`, paper execution scripts, and shell
+chaining separators. `order_submission_enabled` remains `false`; any future
+paper submit remains a separate supervised Stage 6B command path.
+
+Scheduler templates can also use `{scheduler_summary}` for the top-level
+`pipeline_scheduler_summary.json` path and `{scheduler_policy_state}` for a
+stable durable policy-state file in the scheduler output directory. That lets
+the policy command read/write cadence memory across repeated runs without
+hardcoding paths; on the first run, a missing optional policy-state or scheduler
+summary file is treated as empty state. Templates can also use
+`{dashboard_manifest}` and `{dashboard_site_output_dir}` for per-run dashboard
+refresh output. Use `{portfolio_state}` in the pipeline template whenever
+`--pre-pipeline-refresh-command-template` is supplied, so final-planning and
+expected-cash checks read the fresh per-run paper snapshot.
+
+When the scheduled no-submit path is refreshing an already-populated paper
+portfolio, add `--allow-existing-paper-positions` to the pipeline command
+template and `--expected-cash-from-portfolio-state` so cash cleanliness follows
+the fresh paper snapshot. Add `--planning-capital-from-portfolio-state` whenever
+the same command also performs `--final-planning-refresh`, so dry-run planning
+sizes active deployment from the current non-protected paper sleeve instead of a
+stale constant. Let the pipeline generate a fresh price map unless you have a
+complete explicit map for both stock candidates and parking symbols. In ongoing
+paper mode, the workflow smoke treats duplicate-only execution audit rows as
+already-handled submissions so idempotency remains enforced without making
+post-submit refresh cycles fail. Other execution blockers remain blockers.
+
+Build an advisory scheduler cadence policy before choosing which safe command
+class to run:
+
+```powershell
+python scripts/longterm_pipeline_scheduler_policy.py --rules-path path\to\active_rules.txt --policy-state path\to\scheduler_policy_state.json --state-output path\to\scheduler_policy_state.json --market-regime path\to\market_regime.json --journal-db path\to\journal.db --pipeline-scheduler-summary path\to\pipeline_scheduler_runs\pipeline_scheduler_summary.json --pipeline-summary path\to\current_pipeline_summary.json --report-output path\to\scheduler_policy.json --json
+```
+
+This policy artifact is read-only and advisory. It never submits orders and does
+not switch scheduler commands by itself. It recommends one of:
+`account_refresh_only`, `no_submit_preflight`, `full_research_cycle`,
+`thesis_review_refresh`, `benchmark_reassessment`, or
+`panic_regime_reassessment`. Panic output means reassess regime/next-actions in
+dry-run mode; it is not liquidation authority.
+
+The policy requires an explicit active rules file and records its SHA-256. If a
+previous `scheduler_policy_state.json` contains a different
+`active_rules_sha256`, the output warns with `active_rules_changed`. Optional
+journal input reuses the existing `ReviewStatusBuilder` and benchmark guard so
+stale/broken theses or FXAIX-underperformance can raise cadence urgency before
+new research or buys.
+
+When `--pipeline-scheduler-summary` is supplied, the policy can infer the latest
+successful no-submit preflight and account-refresh timestamps from completed
+scheduler runs. A separate `--policy-state` file is still useful for
+`last_full_research_at` and for detecting active-rules hash changes across
+runs; if no full-research timestamp is available, the policy conservatively
+treats research cadence as stale once account/preflight freshness is satisfied.
+Use `--state-output` to persist the next policy-state file. The policy updates
+`last_full_research_at` only when the supplied `--pipeline-summary` shows a
+completed committee-research stage, or when `--mark-full-research-complete` is
+explicitly supplied for a known full-research command.
 
 Check saved pre-submit runbook artifacts:
 
@@ -712,6 +953,17 @@ paper-smoke readiness artifact is missing, malformed, not ready, promotion
 blocked, or older than the promotion-aware schema v2 contract. The saved check
 includes the workflow plan ID, canonical action-plan hash, buy-promotion
 summary, and generation timestamp.
+
+Build the final read-only operator check from the saved runbook chain:
+
+```powershell
+python scripts/longterm_paper_monday_check.py --runbook path\to\paper_runbook.json --workflow-smoke path\to\paper_workflow_smoke.json --paper-smoke-readiness path\to\paper_smoke_readiness.json --runbook-check path\to\paper_runbook_check.json --report-output path\to\paper_monday_operator_check.json --json
+python scripts/longterm_paper_monday_check.py --runbook path\to\paper_runbook.json --workflow-smoke path\to\paper_workflow_smoke.json --paper-smoke-readiness path\to\paper_smoke_readiness.json --runbook-check path\to\paper_runbook_check.json --allow-existing-paper-positions --report-output path\to\paper_monday_operator_check.json --json
+```
+
+Use the second form only for an ongoing paper portfolio where existing paper
+holdings are expected and the smoke-readiness artifact already confirms cash is
+within tolerance.
 
 After any supervised paper submit, save the read-only order-status refresh
 artifact:
@@ -782,17 +1034,19 @@ python scripts/longterm_paper_order_preview.py --portfolio-state path\to\portfol
 python scripts/longterm_paper_order_preview.py --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --order-model whole_share --price-map path\to\price_map.json --record-preview --ledger-db path\to\paper_ledger.db --json
 ```
 
-The preview converts `BUY` intents into buy-notional preview rows, `REBALANCE`
-intents into paired sell/buy preview rows, and `REVIEW` / `BLOCKED` /
-`CAPITAL_NEEDED` intents into `no_order` rows. It carries decision IDs, risk
-metadata, blocked reasons, cash shortfall, and rebalance transaction IDs. It
-does not import Alpaca and cannot submit orders.
+The preview converts `BUY` intents into buy-notional preview rows, explicit
+`SELL` / `REDUCE` intents into sell-preview rows, `REBALANCE` intents into
+paired sell/buy preview rows, and `REVIEW` / `BLOCKED` / `CAPITAL_NEEDED`
+intents into `no_order` rows. It carries decision IDs, risk metadata, blocked
+reasons, cash shortfall, sell holding-value validation, and rebalance
+transaction IDs. It does not import Alpaca and cannot submit orders.
 
 Use `--order-model whole_share` with an explicit JSON price map when the paper
 workflow should mirror a whole-share live broker such as Schwab API. The preview
-floors BUY quantities to whole shares, records the requested notional, estimated
-price, executable quantity, estimated notional, and size variance, and blocks
-rows when the price is missing or the target value cannot buy at least one share.
+floors BUY and SELL quantities to whole shares, records the requested notional,
+estimated price, executable quantity, estimated notional, and size variance, and
+blocks rows when the price is missing or the target value cannot buy/sell at
+least one share.
 The price map is caller-supplied on purpose; this command does not make hidden
 market-data calls.
 
@@ -882,7 +1136,9 @@ Stage 6B is deliberately narrow:
   or blocked promotion evidence stops the submit CLI before any Alpaca paper
   state refresh.
 - `--submit-paper-orders` blocks when the Alpaca paper market clock is closed, so market BUY smoke orders are not left pending after hours.
-- Rebalance, sell, and sell-to-fund-buy previews are hard-blocked with `rebalance_blocked_v1`.
+- Rebalance, explicit sell/reduce, and sell-to-fund-buy previews are
+  previewable for operator review but hard-blocked at the submit boundary with
+  `rebalance_blocked_v1`.
 - It revalidates protected symbols, actionable buy-promotion state, benchmark guard, thesis/review status, decision confidence/recommendation, preview freshness, cash, active-rules hash, and duplicate submission state immediately before paper submission.
 - A stock BUY missing `ACTIONABLE_BUY` promotion is blocked with `missing_buy_promotion_review` or `buy_promotion_not_actionable`, even if a stale or hand-edited action plan otherwise looks executable.
 - The real submit path refreshes Alpaca paper account state before broker calls; the portfolio JSON remains useful for audit/dry-run mode.
@@ -992,22 +1248,25 @@ remains visible as a warning.
 Build the full read-only operator status bundle:
 
 ```powershell
-python scripts/longterm_operator_status_bundle.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --paper-ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --price-map path\to\prices.json --feedback-summary path\to\feedback_summary.json --monday-operator-check path\to\paper_monday_operator_check.json --live-readiness-bundle path\to\live_readiness_bundle.json --status-refresh path\to\paper_order_status_refresh.json --report-output path\to\operator_status_bundle.json
-python scripts/longterm_operator_status_bundle.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --paper-ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --monday-operator-check path\to\paper_monday_operator_check.json --live-readiness-bundle path\to\live_readiness_bundle.json --status-refresh path\to\paper_order_status_refresh.json --report-output path\to\operator_status_bundle.json --json
+python scripts/longterm_operator_status_bundle.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --paper-ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --price-map path\to\prices.json --feedback-summary path\to\feedback_summary.json --monday-operator-check path\to\paper_monday_operator_check.json --live-readiness-bundle path\to\live_readiness_bundle.json --status-refresh path\to\paper_order_status_refresh.json --scheduler-policy path\to\scheduler_policy.json --report-output path\to\operator_status_bundle.json
+python scripts/longterm_operator_status_bundle.py --journal-db path\to\journal.db --portfolio-state path\to\portfolio.json --paper-ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --monday-operator-check path\to\paper_monday_operator_check.json --live-readiness-bundle path\to\live_readiness_bundle.json --status-refresh path\to\paper_order_status_refresh.json --scheduler-policy path\to\scheduler_policy.json --report-output path\to\operator_status_bundle.json --json
 ```
 
 The bundle combines paper lifecycle, buy-promotion state, optional Monday
 artifact status, optional live-readiness evidence, optional paper status-refresh
-state, advisory scheduler readiness, and position intelligence into one
+state, optional scheduler-policy cadence guidance, advisory scheduler readiness,
+and position intelligence into one
 operator surface. It is intended for manual review before any later scheduler
 automation design and keeps order submission disabled. Its `agent_next_step`
 rollup is guidance only; it can tell the operator/agent what to review next, but
-it never authorizes broker submission.
+it never authorizes broker submission. If a scheduler policy artifact is
+supplied, the bundle carries the recommended safe command class and next safe
+action forward for dashboard/operator review.
 
 Build a compact dashboard from saved artifacts:
 
 ```powershell
-python scripts/longterm_operator_dashboard.py --action-plan path\to\account_action_plan.json --market-regime path\to\market_regime.json --operator-status path\to\operator_status_bundle.json --report-output path\to\operator_dashboard.json --html-output path\to\operator_dashboard.html --json
+python scripts/longterm_operator_dashboard.py --action-plan path\to\account_action_plan.json --market-regime path\to\market_regime.json --operator-status path\to\operator_status_bundle.json --scheduler-policy path\to\scheduler_policy.json --report-output path\to\operator_dashboard.json --html-output path\to\operator_dashboard.html --json
 ```
 
 Build a static dashboard site with ticker detail pages:
@@ -1021,7 +1280,10 @@ operator surface. It summarizes paper-ready stock BUY candidates, idle/defensive
 parking guidance, current market regime, and a machine-readable
 `agent_advisory` state such as `ready_for_supervised_paper_review`,
 `parking_only_review`, `blocked_preflight`, or `research_more`. It does not
-submit or authorize orders. The visual hero renders those machine states as
+submit or authorize orders. When supplied, the scheduler policy appears as an
+advisory-only card in the Command Center with recommended mode, urgency, next
+safe action, reasons, warnings, and affected symbols. The visual hero renders
+those machine states as
 short human labels such as `Paper Review Ready` so the JSON remains precise
 while the dashboard stays readable. The static site uses an original premium
 research dashboard style inspired by the layout concepts at
@@ -1093,17 +1355,46 @@ Serve a read-only localhost dashboard from a manifest instead of regenerating
 static files after each artifact refresh:
 
 ```powershell
-python scripts/longterm_operator_dashboard_server.py --manifest path\to\dashboard_manifest.json --write-manifest --write-manifest-only --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --market-regime path\to\market_regime.json --operator-status path\to\operator_status_bundle.json --evidence-file path\to\research_queue_reconciled.json --price-history-file path\to\price_history.json --decision-journal path\to\journal.db --active-rules ai_trader\rules\active_rules.txt --campaign-id campaign_name --json
+python scripts/longterm_operator_dashboard_server.py --manifest path\to\dashboard_manifest.json --write-manifest --write-manifest-only --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --market-regime path\to\market_regime.json --operator-status path\to\operator_status_bundle.json --evidence-file path\to\research_queue_reconciled.json --price-history-file path\to\price_history.json --pipeline-summary path\to\pipeline_summary.json --scheduler-policy path\to\scheduler_policy.json --decision-journal path\to\journal.db --active-rules ai_trader\rules\active_rules.txt --campaign-id campaign_name --json
 python scripts/longterm_operator_dashboard_server.py --manifest path\to\dashboard_manifest.json --host 127.0.0.1 --port 8765 --json
+python scripts/longterm_operator_dashboard_server.py --auto-manifest-root path\to\campaign_or_latest_artifact_root --host 127.0.0.1 --port 8765 --json
 ```
 
 The manifest records artifact paths, campaign ID, decision-journal path, active
 rules path/hash, and `order_submission_enabled=false`. The server resolves
-`/`, `/tickers/<SYMBOL>.html`, `/api/summary.json`, `/api/manifest.json`, and
-`/health` directly from the latest saved files. It is an artifact viewer only:
-it does not call Alpaca, run research, call an LLM, reveal submit commands, or
-write ledgers. Protected symbols such as `FXAIX` may appear as holdings, but the
-server filters them out of actionable dashboard candidate lists.
+`/`, `/tickers/<SYMBOL>.html`, `/api/summary.json`, `/api/manifest.json`,
+`/api/portfolio.json`, `/api/pipeline-health.json`,
+`/api/scheduler-policy.json`, and `/health` directly from the latest saved
+files. In `--auto-manifest-root` mode it recursively discovers
+the newest valid dashboard manifest under the artifact root on each request, so
+scheduler refreshes can keep the dashboard current by writing the stable
+`latest_operator_surface` artifacts. It is an artifact viewer only: it does not
+call Alpaca, run research, call an LLM, reveal submit commands, or write
+ledgers. Protected symbols such as `FXAIX` may appear as holdings, but the
+server filters them out of actionable dashboard candidate lists. The browser-side
+portfolio card polls `/api/portfolio.json`, and the safety card polls
+`/api/pipeline-health.json`; account/current-price freshness, scheduler-policy
+freshness, and pipeline artifact freshness still come from the Python
+refresh/scheduler layer, not from browser-side broker credentials.
+
+After a supervised paper submit or account-state change, refresh the read-only
+account/status/dashboard artifacts from the current Alpaca paper account:
+
+```powershell
+python scripts/longterm_paper_account_refresh.py --profile-config path\to\profile.json --journal-db path\to\journal.db --action-plan path\to\account_action_plan.json --paper-ledger-db path\to\paper_ledger.db --output-dir path\to\paper_account_refresh --market-regime path\to\market_regime.json --evidence-file path\to\research_queue_reconciled.json --price-history-file path\to\price_history.json --pipeline-summary path\to\pipeline_summary.json --scheduler-policy path\to\scheduler_policy.json --status-refresh-file path\to\paper_order_status_refresh.json --dashboard-manifest-output path\to\dashboard_account_refresh_manifest.json --dashboard-site-output-dir path\to\operator_dashboard_site_account_refresh --json
+```
+
+This command is read-only. It reads the Alpaca paper account, preserves
+`avg_entry_price`, original purchase total cost, current price, and unrealized
+P/L in the portfolio snapshot, writes a fresh operator status bundle and
+dashboard manifest/site, and marks `FXAIX` plus profile protected symbols as
+protected. It reuses the supplied action plan as-is and does not regenerate
+recommendations, next actions, journal outcomes, status-refresh events, or broker
+orders. When `--pipeline-summary` is supplied, the refreshed dashboard manifest
+also powers `/api/pipeline-health.json` and the Safety / Preflight artifact
+health card. When `--scheduler-policy` is supplied, the refreshed status bundle,
+manifest, localhost API, and dashboard Command Center all carry the advisory
+next safe scheduler action without enabling order submission.
 
 Build a Monday launch packet that combines the dashboard, filtered Stage 6B
 candidate plan, Monday operator check, optional workflow-smoke whole-share
@@ -1202,6 +1493,7 @@ Capture one source:
 
 ```powershell
 python scripts/longterm_motley_fool_capture.py --source new_recommendations
+python scripts/longterm_motley_fool_capture.py --source stock_advisor_service
 python scripts/longterm_motley_fool_capture.py --source analyst_rankings
 python scripts/longterm_motley_fool_capture.py --source quant_rankings
 python scripts/longterm_motley_fool_capture.py --source dashboard
@@ -1210,13 +1502,24 @@ python scripts/longterm_motley_fool_capture.py --source dashboard
 The capture uses the logged-in Chrome profile at `~/.grok3api_chrome_profile`.
 Use one capture process at a time for that profile. The default full capture runs
 the pages sequentially so the profile is not opened by multiple Playwright
-sessions at once.
+sessions at once. The optional `stock_advisor_service` source targets the full
+Stock Advisor service page for universe expansion and repeat-count context; it
+is not part of the default full capture because fresh `new_recommendations`
+remain the higher-priority recurring source.
 
 Captured Motley Fool ideas include `motley_fool_company_url` / `source_url`
 when the premium table exposes a per-company link. Some Fool tables use numeric
 company URLs such as `https://www.fool.com/premium/company/202816`; later
 enrichment can navigate those URLs and let Fool resolve the detailed financials
 page before summarizing the ticker context.
+
+Stock Advisor service-list rows may include the same symbol multiple times. The
+intake path merges those rows by symbol, increments `source_recommendation_count`
+for repeated service-list appearances, and preserves the Stock Advisor
+long-run performance snapshot as display-only source context. This context is
+useful for operator attribution, but it is not an execution signal and does not
+bypass enrichment, promotion review, benchmark/account checks, or paper
+eligibility.
 
 Enrich captured company URLs before sending thin source rows into the research
 committee:

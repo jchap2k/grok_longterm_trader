@@ -93,6 +93,12 @@ def test_alpaca_paper_reader_converts_account_to_portfolio_state():
     assert state.holding_value("FXAIX") == 3600.0
     assert state.active_market_value == 1850.0
     assert state.protected_market_value == 3600.0
+    apple = next(holding for holding in state.holdings if holding.symbol == "AAPL")
+    assert apple.avg_entry_price == 150.0
+    assert apple.original_purchase_total_cost == 1500.0
+    assert apple.current_price == 185.0
+    assert apple.unrealized_pnl == 350.0
+    assert apple.unrealized_pnl_percent == 23.3
 
 
 def test_alpaca_broker_preserves_fractional_position_quantities(monkeypatch):

@@ -14,7 +14,7 @@ from datetime import date
 from typing import Any, Mapping, Protocol
 
 
-DEFAULT_GROK_MODEL = "grok-4-1-fast-reasoning"
+DEFAULT_GROK_MODEL = "grok-4.3"
 DEFAULT_XAI_BASE_URL = "https://api.x.ai/v1"
 
 
@@ -145,16 +145,46 @@ def enrich_ideas_with_grok_research(
     """Enrich a batch of research ideas with symbol-keyed free facts."""
     facts = {_normalize_symbol(symbol): dict(value) for symbol, value in (free_facts_by_symbol or {}).items()}
     selected = ideas[:limit] if limit is not None else ideas
-    return [
-        enrich_idea_with_grok_research(
-            idea,
-            client=client,
-            free_facts=facts.get(_normalize_symbol(str(idea.get("symbol") or "")), {}),
-            as_of_date=as_of_date,
-            allow_unsourced=allow_unsourced,
-        )
-        for idea in selected
-    ]
+    enriched: list[dict[str, Any]] = []
+    for idea in selected:
+        symbol = _normalize_symbol(str(idea.get("symbol") or ""))
+        try:
+            enriched.append(
+                enrich_idea_with_grok_research(
+                    idea,
+                    client=client,
+                    free_facts=facts.get(symbol, {}),
+                    as_of_date=as_of_date,
+                    allow_unsourced=allow_unsourced,
+                )
+            )
+        except Exception as exc:  # pragma: no cover - provider failures vary
+            enriched.append(_with_research_model_failure(idea, symbol=symbol, exc=exc))
+    return enriched
+
+
+def _with_research_model_failure(
+    idea: Mapping[str, Any],
+    *,
+    symbol: str,
+    exc: Exception,
+) -> dict[str, Any]:
+    payload = dict(idea)
+    payload["symbol"] = symbol or _normalize_symbol(str(payload.get("symbol") or ""))
+    warnings = list(payload.get("enrichment_warnings") or [])
+    warnings.append(
+        {
+            "stage": "grok_research",
+            "symbol": payload["symbol"],
+            "error": str(exc),
+        }
+    )
+    payload["enrichment_warnings"] = warnings
+    payload["source_notes"] = _merge_notes(
+        payload.get("source_notes"),
+        [f"research_model_failed: grok_research for {payload['symbol']}: {exc}."],
+    )
+    return payload
 
 
 def normalize_grok_research_result(
@@ -195,7 +225,7 @@ def normalize_grok_research_result(
         "symbol": symbol,
         "company_name": str(raw.get("company_name") or idea.get("company_name") or ""),
         "as_of_date": str(raw.get("as_of_date") or as_of_date or date.today().isoformat()),
-        "source_type": "grok_research_enrichment",
+        "source_type": str(raw.get("source_type") or "grok_research_enrichment"),
         "business_summary": str(raw.get("business_summary") or ""),
         "earnings_summary": dict(raw.get("earnings_summary") or {}),
         "article_evidence_summaries": article_summaries,

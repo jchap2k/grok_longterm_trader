@@ -145,6 +145,33 @@ def test_enrich_ideas_with_grok_research_uses_symbol_keyed_free_facts():
     assert enriched[0]["grok_research_enrichment"]["free_facts"]["revenue"] == "$742B"
 
 
+def test_enrich_ideas_with_grok_research_records_provider_failures_and_continues():
+    class FlakyClient:
+        def enrich(self, idea, *, free_facts=None, as_of_date=None):
+            symbol = idea["symbol"].upper()
+            if symbol == "BROKEN":
+                raise ValueError("malformed provider JSON")
+            return _raw_enrichment(symbol=symbol)
+
+    enriched = enrich_ideas_with_grok_research(
+        [
+            {"symbol": "AMZN", "company_name": "Amazon"},
+            {"symbol": "BROKEN", "company_name": "Broken Co"},
+            {"symbol": "NVDA", "company_name": "Nvidia"},
+        ],
+        client=FlakyClient(),
+        as_of_date="2026-05-02",
+    )
+
+    assert [item["symbol"] for item in enriched] == ["AMZN", "BROKEN", "NVDA"]
+    assert "grok_research_enrichment" in enriched[0]
+    assert "grok_research_enrichment" not in enriched[1]
+    assert "grok_research_enrichment" in enriched[2]
+    assert any("research_model_failed" in note for note in enriched[1]["source_notes"])
+    assert enriched[1]["enrichment_warnings"][0]["stage"] == "grok_research"
+    assert "malformed provider JSON" in enriched[1]["enrichment_warnings"][0]["error"]
+
+
 def test_prompt_asks_for_source_backed_catalysts_not_motley_fool_impersonation():
     messages = build_grok_research_messages(
         {

@@ -104,8 +104,8 @@ def create_trading_agent(
         from .grok_trading_agent import GrokTradingAgent
 
         grok_config = providers_config.get("grok", {})
-        reasoning_model = grok_config.get("reasoning_model", "grok-4-1-fast-reasoning")
-        fast_model = grok_config.get("fast_model", "grok-4-1-fast-non-reasoning")
+        reasoning_model = grok_config.get("reasoning_model", "grok-4.3")
+        fast_model = grok_config.get("fast_model", "grok-4.20-non-reasoning")
         thinking_model = grok_config.get("thinking_model")  # Optional deep reasoning model
         use_thinking_for_regime = grok_config.get("use_thinking_for_morning_regime", False)
 

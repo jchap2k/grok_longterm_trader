@@ -331,7 +331,7 @@ class LongTermDecisionJournal:
             symbol = record["symbol"]
             if symbol in latest_by_symbol:
                 continue
-            if str(record.get("recommendation") or "").upper() not in {"BUY", "ADD", "HOLD"}:
+            if str(record.get("recommendation") or "").upper() not in {"BUY", "ADD", "HOLD", "REDUCE", "SELL"}:
                 latest_by_symbol[symbol] = {}
                 continue
             decision = json.loads(record.get("decision_json") or "{}")
@@ -369,7 +369,7 @@ class LongTermDecisionJournal:
                 dict(item)
                 for item in rows
                 if item["symbol"] == symbol
-                and str(item["recommendation"]).upper() in {"BUY", "ADD", "HOLD"}
+                and str(item["recommendation"]).upper() in {"BUY", "ADD", "HOLD", "REDUCE", "SELL"}
             ]
             record["times_recommended"] = len(symbol_history)
             record["repeat_recommendation_count"] = len(symbol_history)
@@ -1120,6 +1120,8 @@ def _recommendation_ranking_score(row: Mapping[str, Any]) -> float:
         "BUY": 10.0,
         "ADD": 8.0,
         "HOLD": 0.0,
+        "REDUCE": 6.0,
+        "SELL": 8.0,
     }.get(action, 0.0)
     confidence = float(row.get("confidence") or 0.0)
     size = float(row.get("suggested_size_pct") or 0.0)

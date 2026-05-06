@@ -19,6 +19,7 @@ from longterm.evidence_enrichment_pipeline_cli import (
     _load_symbol_keyed_json,
     _news_provider,
 )
+from longterm.perplexity_research_enrichment import DEFAULT_PERPLEXITY_MAX_TOKENS
 from longterm.grok_research_enrichment import DEFAULT_GROK_MODEL, DEFAULT_XAI_BASE_URL
 from longterm.extended_universe_scan_cli import _write_json, _write_jsonl
 
@@ -40,6 +41,7 @@ def build_parser() -> argparse.ArgumentParser:
     grok = parser.add_mutually_exclusive_group()
     grok.add_argument("--grok-snapshot-file", default="")
     grok.add_argument("--xai-grok", action="store_true")
+    grok.add_argument("--perplexity-research", action="store_true")
     grok.add_argument("--skip-grok", action="store_true")
 
     parser.add_argument("--facts-file", default="", help="Optional symbol-keyed free facts JSON for Grok.")
@@ -64,6 +66,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--grok-model", default=DEFAULT_GROK_MODEL)
     parser.add_argument("--grok-base-url", default=DEFAULT_XAI_BASE_URL)
     parser.add_argument("--grok-timeout-seconds", type=float, default=180.0)
+    parser.add_argument("--perplexity-api-key-env", default="PERPLEXITY_API_KEY")
+    parser.add_argument("--perplexity-model", default="sonar")
+    parser.add_argument("--perplexity-api-url", default="https://api.perplexity.ai/chat/completions")
+    parser.add_argument("--perplexity-timeout-seconds", type=float, default=120.0)
+    parser.add_argument("--perplexity-max-tokens", type=int, default=DEFAULT_PERPLEXITY_MAX_TOKENS)
+    parser.add_argument("--perplexity-search-context-size", choices=["low", "medium", "high"], default="low")
+    parser.add_argument(
+        "--perplexity-credits-purchased-to-date",
+        type=float,
+        default=None,
+        help="Optional API-console credit total, e.g. 12 if you have purchased $12 toward Tier 1.",
+    )
     parser.add_argument("--allow-unsourced-grok", action="store_true")
     return parser
 
@@ -151,6 +165,7 @@ def run_cli(args: argparse.Namespace, *, sleep=time.sleep) -> int:
         "batches_dir": str(batches_dir),
         "combined_output": str(output_dir / "campaign_enriched.json"),
         "combined_jsonl_output": str(output_dir / "campaign_enriched.jsonl"),
+        "research_model_usage": _usage_summary(grok_client),
         "batch_summaries": batch_summaries,
     }
     _write_json(output_dir / "campaign_summary.json", summary)
@@ -185,6 +200,13 @@ def _load_list(path: str | Path) -> list[dict[str, Any]]:
     if not isinstance(payload, list):
         raise ValueError("Batch output must contain a JSON list.")
     return [dict(item) for item in payload if isinstance(item, Mapping)]
+
+
+def _usage_summary(client: Any) -> dict[str, Any]:
+    summary = getattr(client, "usage_summary", None)
+    if not callable(summary):
+        return {}
+    return dict(summary())
 
 
 __all__ = ["build_parser", "main", "run_cli"]

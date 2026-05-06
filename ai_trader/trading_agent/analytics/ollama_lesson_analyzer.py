@@ -55,7 +55,7 @@ class OllamaLessonAnalyzer:
 
         logger.info("OllamaLessonAnalyzer initialized")
         logger.info(f"  Backend: {self.backend}")
-        logger.info(f"  Model: {ollama_model if self.backend == 'ollama' else 'grok-4-1-fast-reasoning'}")
+        logger.info(f"  Model: {ollama_model if self.backend == 'ollama' else 'grok-4.3'}")
         logger.info(f"  Database: {learning_db_path}")
 
     def analyze_simulated_trades(self, min_confidence: float = 0.70) -> List[Dict[str, Any]]:

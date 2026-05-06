@@ -15,11 +15,25 @@ class Holding:
     symbol: str
     market_value: float = 0.0
     quantity: float = 0.0
+    current_price: float = 0.0
+    avg_entry_price: float = 0.0
+    original_purchase_total_cost: float = 0.0
+    unrealized_pnl: float = 0.0
+    unrealized_pnl_percent: float = 0.0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "symbol", self.symbol.upper())
         object.__setattr__(self, "market_value", float(self.market_value or 0.0))
         object.__setattr__(self, "quantity", float(self.quantity or 0.0))
+        object.__setattr__(self, "current_price", float(self.current_price or 0.0))
+        object.__setattr__(self, "avg_entry_price", float(self.avg_entry_price or 0.0))
+        object.__setattr__(
+            self,
+            "original_purchase_total_cost",
+            float(self.original_purchase_total_cost or 0.0),
+        )
+        object.__setattr__(self, "unrealized_pnl", float(self.unrealized_pnl or 0.0))
+        object.__setattr__(self, "unrealized_pnl_percent", float(self.unrealized_pnl_percent or 0.0))
 
 
 @dataclass

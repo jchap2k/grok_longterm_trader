@@ -16,6 +16,7 @@ def build_paper_monday_check(
     paper_smoke_readiness: str | Path,
     runbook_check: str | Path,
     status_refresh: str | Path | None = None,
+    allow_existing_positions: bool = False,
 ) -> dict[str, Any]:
     """Summarize saved Monday paper artifacts without calling brokers."""
     runbook_payload = _load_json(runbook)
@@ -42,8 +43,14 @@ def build_paper_monday_check(
         blockers.append("paper_smoke_readiness_not_ready")
     if not bool(check_payload.get("ready_for_supervised_submit")):
         blockers.append("runbook_check_not_ready")
+    cash_within_tolerance = bool(account_cleanliness.get("cash_within_tolerance", False))
     if account_cleanliness and not bool(account_cleanliness.get("clean")):
-        blockers.append("paper_account_not_clean")
+        if allow_existing_positions and cash_within_tolerance:
+            pass
+        elif allow_existing_positions and not cash_within_tolerance:
+            blockers.append("paper_account_cash_mismatch")
+        else:
+            blockers.append("paper_account_not_clean")
     if not action_plan_hash:
         blockers.append("action_plan_hash_missing")
     if int(status_payload.get("error_count") or 0):
@@ -80,6 +87,7 @@ def build_paper_monday_check(
         "action_plan_hash_present": bool(action_plan_hash),
         "submit_command_revealed": submit_revealed,
         "manual_submit_review_required": submit_revealed,
+        "allow_existing_positions": bool(allow_existing_positions),
         "account_clean": bool(account_cleanliness.get("clean")) if account_cleanliness else None,
         "leftover_position_count": int(account_cleanliness.get("position_count") or 0),
         "leftover_symbols": list(account_cleanliness.get("unexpected_symbols") or []),
@@ -111,6 +119,7 @@ def build_paper_monday_check_markdown(payload: Mapping[str, Any]) -> str:
         f"- Action-plan hash present: {'yes' if payload.get('action_plan_hash_present') else 'no'}",
         f"- Submit command revealed: {'yes' if payload.get('submit_command_revealed') else 'no'}",
         f"- Manual submit review required: {'yes' if payload.get('manual_submit_review_required') else 'no'}",
+        f"- Existing positions allowed: {'yes' if payload.get('allow_existing_positions') else 'no'}",
         f"- Account clean: {_yes_no_unknown(payload.get('account_clean'))}",
         f"- Leftover symbols: {', '.join(payload.get('leftover_symbols') or []) or 'none'}",
         "",

@@ -14,6 +14,7 @@ TEMPLATE = """\
 research_evidence_brief_v1 | SYMBOL
 Fundamentals: factual provider metrics aligned to quality, growth, valuation, and balance-sheet rules.
 Scorecard: deterministic non-Fool quality-growth scorecard, not proprietary Fool data.
+Source signal: source recency/repeat context, never automatic trading authority.
 Latest earnings: source-filtered earnings context with confidence and thesis developments.
 Primary news: primary-company articles only, with source, impact, relevance, and subject score.
 Article evidence: snippet-grounded Grok summaries of the primary articles when present.
@@ -45,6 +46,10 @@ def build_research_evidence_brief(
     scorecard = _scorecard_section(idea.get("quality_growth_scorecard"))
     if scorecard:
         sections.append(f"Scorecard: {scorecard}")
+
+    source_signal = _source_signal_section(idea)
+    if source_signal:
+        sections.append(f"Source signal: {source_signal}")
 
     earnings = _earnings_section(idea.get("latest_earnings_enrichment"))
     if earnings:
@@ -108,6 +113,16 @@ def _scorecard_section(value: Any) -> str:
     reasons = _list_items(value.get("score_reasons"), limit=DEFAULT_MAX_LIST_ITEMS)
     if reasons:
         parts.append(f"reasons {', '.join(reasons)}")
+    return _join_parts(parts)
+
+
+def _source_signal_section(idea: Mapping[str, Any]) -> str:
+    parts = [
+        _metric("recommendations", idea.get("source_recommendation_count")),
+        _metric("fresh recommendation", _yes_no(idea.get("source_fresh_recommendation"))),
+        _metric("reason", idea.get("source_priority_reason")),
+        _metric("priority boost", idea.get("source_priority_boost")),
+    ]
     return _join_parts(parts)
 
 
@@ -234,6 +249,10 @@ def _mapping(value: Any) -> Mapping[str, Any]:
 def _metric(label: str, value: Any) -> str:
     cleaned = _clean(value)
     return f"{label} {cleaned}" if cleaned else ""
+
+
+def _yes_no(value: Any) -> str:
+    return "yes" if bool(value) else ""
 
 
 def _list_items(value: Any, *, limit: int) -> list[str]:

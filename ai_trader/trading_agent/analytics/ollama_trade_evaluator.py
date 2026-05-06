@@ -113,7 +113,7 @@ class OllamaTradeEvaluator:
 
         logger.info(f"OllamaTradeEvaluator initialized")
         logger.info(f"  Backend: {self.backend}")
-        logger.info(f"  Model: {ollama_model if self.backend == 'ollama' else 'grok-4-1-fast-reasoning'}")
+        logger.info(f"  Model: {ollama_model if self.backend == 'ollama' else 'grok-4.3'}")
         logger.info(f"  Lessons loaded: {len(self.lessons)}")
 
     def _load_rules(self) -> str:

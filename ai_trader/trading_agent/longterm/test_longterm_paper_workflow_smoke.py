@@ -199,6 +199,73 @@ def test_paper_workflow_smoke_blocks_when_price_map_missing_symbol(tmp_path):
     assert "execution_audit_blocked_items" in report["blockers"]
 
 
+def test_paper_workflow_smoke_can_use_explicit_empty_price_map(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = _record_decision(journal)
+
+    report = build_paper_workflow_smoke_report(
+        _action_plan(decision_id),
+        journal=journal,
+        ledger=ledger,
+        profile=PortfolioProfile(protected_symbols=["FXAIX"]),
+        portfolio_state=PortfolioState(cash=5000, protected_symbols=["FXAIX"]),
+        quote_provider=FakeQuoteProvider({"NVDA": 193.5}),
+        explicit_price_map={},
+    )
+
+    assert report["ready_for_supervised_submit"] is False
+    assert report["price_map"]["price_map"] == {}
+    assert report["price_map"]["missing_symbols"] == ["NVDA"]
+    assert "price_map_missing_symbols" in report["blockers"]
+    assert "preview_blocked_rows" in report["blockers"]
+
+
+def test_paper_workflow_smoke_can_treat_duplicate_submissions_as_already_handled(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = _record_decision(journal)
+    ledger.record_execution_event(
+        {
+            "decision_id": decision_id,
+            "preview_id": "plan-smoke-001-buy",
+            "plan_id": "plan-smoke",
+            "broker_order_id": "paper-existing-1",
+            "symbol": "NVDA",
+            "side": "buy",
+            "notional": 967.5,
+            "status": "submitted",
+            "client_order_id": "existing-client-order",
+        }
+    )
+
+    blocked_report = build_paper_workflow_smoke_report(
+        _action_plan(decision_id),
+        journal=journal,
+        ledger=ledger,
+        profile=PortfolioProfile(protected_symbols=["FXAIX"]),
+        portfolio_state=PortfolioState(cash=5000, protected_symbols=["FXAIX"]),
+        quote_provider=FakeQuoteProvider({"NVDA": 193.5}),
+    )
+    allowed_report = build_paper_workflow_smoke_report(
+        _action_plan(decision_id),
+        journal=journal,
+        ledger=ledger,
+        profile=PortfolioProfile(protected_symbols=["FXAIX"]),
+        portfolio_state=PortfolioState(cash=5000, protected_symbols=["FXAIX"]),
+        quote_provider=FakeQuoteProvider({"NVDA": 193.5}),
+        allow_existing_submissions=True,
+    )
+
+    assert blocked_report["ready_for_supervised_submit"] is False
+    assert "execution_audit_blocked_items" in blocked_report["blockers"]
+    assert allowed_report["ready_for_supervised_submit"] is True
+    assert allowed_report["allow_existing_submissions"] is True
+    assert allowed_report["already_submitted_count"] == 1
+    assert allowed_report["unresolved_execution_blocked_count"] == 0
+    assert "execution_audit_blocked_items" not in allowed_report["blockers"]
+
+
 def test_paper_workflow_smoke_cli_outputs_json(tmp_path, capsys):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     decision_id = _record_decision(journal)
@@ -229,6 +296,91 @@ def test_paper_workflow_smoke_cli_outputs_json(tmp_path, capsys):
 
     assert payload["ready_for_supervised_submit"] is True
     assert payload["order_submission_enabled"] is False
+
+
+def test_paper_workflow_smoke_cli_allows_existing_submissions(tmp_path, capsys):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    decision_id = _record_decision(journal)
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    ledger.record_execution_event(
+        {
+            "decision_id": decision_id,
+            "preview_id": "plan-smoke-001-buy",
+            "plan_id": "plan-smoke",
+            "broker_order_id": "paper-existing-1",
+            "symbol": "NVDA",
+            "side": "buy",
+            "notional": 967.5,
+            "status": "submitted",
+        }
+    )
+    profile_path = tmp_path / "profile.json"
+    portfolio_path = tmp_path / "portfolio.json"
+    action_plan_path = tmp_path / "action_plan.json"
+    profile_path.write_text(json.dumps({"protected_symbols": ["FXAIX"]}), encoding="utf-8")
+    portfolio_path.write_text(json.dumps({"cash": 5000, "protected_symbols": ["FXAIX"]}), encoding="utf-8")
+    action_plan_path.write_text(json.dumps(_action_plan(decision_id)), encoding="utf-8")
+    args = build_parser().parse_args(
+        [
+            "--journal-db",
+            str(journal.db_path),
+            "--ledger-db",
+            str(ledger.db_path),
+            "--profile-config",
+            str(profile_path),
+            "--portfolio-state",
+            str(portfolio_path),
+            "--action-plan",
+            str(action_plan_path),
+            "--allow-existing-submissions",
+            "--json",
+        ]
+    )
+
+    assert run_cli(args, quote_provider_factory=lambda: FakeQuoteProvider({"NVDA": 193.5})) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["ready_for_supervised_submit"] is True
+    assert payload["already_submitted_count"] == 1
+
+
+def test_paper_workflow_smoke_cli_uses_explicit_price_map_without_quote_provider(tmp_path, capsys):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    decision_id = _record_decision(journal)
+    profile_path = tmp_path / "profile.json"
+    portfolio_path = tmp_path / "portfolio.json"
+    action_plan_path = tmp_path / "action_plan.json"
+    price_map_path = tmp_path / "price_map.json"
+    profile_path.write_text(json.dumps({"protected_symbols": ["FXAIX"]}), encoding="utf-8")
+    portfolio_path.write_text(json.dumps({"cash": 5000, "protected_symbols": ["FXAIX"]}), encoding="utf-8")
+    action_plan_path.write_text(json.dumps(_action_plan(decision_id)), encoding="utf-8")
+    price_map_path.write_text(json.dumps({"NVDA": 193.5}), encoding="utf-8")
+    args = build_parser().parse_args(
+        [
+            "--journal-db",
+            str(journal.db_path),
+            "--ledger-db",
+            str(tmp_path / "paper.db"),
+            "--profile-config",
+            str(profile_path),
+            "--portfolio-state",
+            str(portfolio_path),
+            "--action-plan",
+            str(action_plan_path),
+            "--price-map",
+            str(price_map_path),
+            "--json",
+        ]
+    )
+
+    def fail_if_called():
+        raise AssertionError("explicit --price-map should not open a quote provider")
+
+    assert run_cli(args, quote_provider_factory=fail_if_called) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["ready_for_supervised_submit"] is True
+    assert payload["price_map"]["price_map"] == {"NVDA": 193.5}
 
 
 def test_paper_workflow_smoke_cli_keeps_json_stdout_clean_when_provider_is_chatty(tmp_path, capsys):

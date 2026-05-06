@@ -174,6 +174,112 @@ def test_research_automation_campaign_forwards_evidence_campaign_pause(tmp_path,
     assert printed["evidence"]["campaign_batch_pause_seconds"] == 69.0
 
 
+def test_research_automation_campaign_can_forward_perplexity_research_mode(tmp_path, monkeypatch, capsys):
+    import longterm.research_automation_campaign_cli as cli
+
+    campaign_dir = tmp_path / "campaign"
+    captured = {}
+
+    def fake_loader(url, *, source):
+        return [
+            {"symbol": "AAA", "company_name": "AAA Corp", "source": source},
+            {"symbol": "BBB", "company_name": "BBB Corp", "source": source},
+        ]
+
+    def fake_evidence_campaign(args):
+        captured["perplexity_research"] = args.perplexity_research
+        captured["perplexity_search_context_size"] = args.perplexity_search_context_size
+        captured["perplexity_credits_purchased_to_date"] = args.perplexity_credits_purchased_to_date
+        output_dir = Path(args.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "campaign_enriched.json").write_text(
+            json.dumps(
+                [
+                    {"symbol": "AAA", "evidence_brief": "brief"},
+                    {"symbol": "BBB", "evidence_brief": "brief"},
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (output_dir / "campaign_summary.json").write_text(
+            json.dumps(
+                {
+                    "enriched_count": 2,
+                    "research_model_usage": {
+                        "provider": "perplexity",
+                        "model": "sonar",
+                        "estimated_total_cost_usd": 0.02,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        return 0
+
+    monkeypatch.setattr(cli, "load_candidate_source_url", fake_loader)
+    monkeypatch.setattr(cli, "run_evidence_campaign_cli", fake_evidence_campaign)
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--source-url",
+                "https://example.test/nasdaq.txt",
+                "--source",
+                "nasdaq_listed",
+                "--campaign-dir",
+                str(campaign_dir),
+                "--watchlist-limit",
+                "2",
+                "--run-until",
+                "evidence_ready",
+                "--max-fundamental-fetches",
+                "2",
+                "--evidence-batch-size",
+                "2",
+                "--perplexity-research",
+                "--perplexity-search-context-size",
+                "low",
+                "--perplexity-credits-purchased-to-date",
+                "12",
+            ]
+        ),
+        fetch_metrics=_metrics,
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert captured["perplexity_research"] is True
+    assert captured["perplexity_search_context_size"] == "low"
+    assert captured["perplexity_credits_purchased_to_date"] == 12.0
+    assert printed["stage"] == "evidence_ready"
+    assert printed["evidence"]["research_model_usage"]["provider"] == "perplexity"
+
+
+def test_research_automation_campaign_rejects_conflicting_paid_research_modes(tmp_path):
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--source-url",
+            "https://example.test/nasdaq.txt",
+            "--source",
+            "nasdaq_listed",
+            "--campaign-dir",
+            str(tmp_path / "campaign"),
+            "--run-until",
+            "evidence_ready",
+            "--skip-grok",
+            "--perplexity-research",
+        ]
+    )
+
+    try:
+        run_cli(args, fetch_metrics=_metrics)
+    except ValueError as exc:
+        assert "research provider" in str(exc)
+    else:
+        raise AssertionError("Expected conflicting research provider modes to fail closed.")
+
+
 def test_research_automation_campaign_reaches_research_queue_ready(tmp_path, monkeypatch, capsys):
     import longterm.research_automation_campaign_cli as cli
 

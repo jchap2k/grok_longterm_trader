@@ -179,7 +179,11 @@ Normalizes raw idea dictionaries into research packets and applies portfolio pro
 Builds a compact, versioned research evidence brief from transient enrichment fields before a `ResearchPacket` is created. It summarizes Python fundamentals, deterministic scorecard output, latest earnings context, primary-company news, Grok catalyst synthesis, and warnings into a stable `research_evidence_brief_v1` text block. The brief is research context only: it does not change ranking, sizing, paper eligibility, broker behavior, or journal outcomes.
 
 `portfolio/portfolio_profile.py`
-Defines account-level constraints: protected symbols, benchmark, defensive parking symbol, low-risk parking symbol, duration-hedge symbol, cash symbol, and tradable capital.
+Defines account-level constraints: account strategy/tax mode, protected
+symbols, benchmark, defensive parking symbol, low-risk parking symbol,
+duration-hedge symbol, cash symbol, and tradable capital. `roth_ira`, `paper`,
+and other non-taxable modes may plan broad idle-cash parking, while taxable or
+unspecified modes are treated cautiously.
 
 `longterm/discovery.py`
 Builds the upstream stock universe for research. It merges candidate rows from sources such as S&P 500/Russell/Nasdaq lists, ETF holdings, manual watchlists, quality-growth screens, and Motley Fool premium captures; scores them with a lightweight quality-growth pre-filter; then buckets them into `research_queue`, `watchlist`, or `rejected`. Discovery is not allowed to read portfolio state or create trade intents.
@@ -237,6 +241,30 @@ Defines the long-term CGH domain roles and presets:
 
 - `decision_4`: default V1 committee.
 - `decision_6`: expanded valuation and portfolio committee.
+
+After the May 15, 2026 Grok 4.1 fast deprecation, broad enrichment should use
+Python, cached provider data, Polygon, and Perplexity Sonar first. Grok 4.3 is
+reserved for decision-grade committee calls, and `decision_6` should be an
+explicit escalation rather than the scheduler default. The intended routing is:
+`decision_4` for routine adds, holds, reviews, and high-conviction/low-risk
+decisions; `decision_6` for large active-sleeve position changes, new or
+unproven theses, borderline valuation, unusual macro uncertainty, or cases
+where sizing/rebalancing needs the added `ValuationEdgeAnalyst` and
+`PortfolioManager` perspectives.
+
+`longterm/committee_preset_policy.py`
+Builds a provider-free, advisory-only preset recommendation from saved action
+plans, research queue rows, and market-regime artifacts. It is designed as a
+scheduler/dashboard handoff: default to `decision_4`, recommend `decision_6`
+only when explicit complexity signals are present, and keep
+`order_submission_enabled=false`.
+
+`longterm/account_tax_policy.py`
+Centralizes account tax-mode guardrails for broad parking and rebalance
+planning. Non-taxable paper/Roth profiles may plan SPY/SGOV/TLT-style parking
+and broad rebalance reviews. Taxable or unspecified profiles suppress broad
+parking and broad rebalance churn before Stage 6B, while leaving
+symbol-specific sell decisions to the research/review process.
 
 `longterm/reviewers.py`
 Deterministic business-story, balance-sheet, quality-durability, and quality-at-reasonable-price reviewers. These do not make final decisions; they ground the CGH context. The quality-durability reviewer reflects the `Quality Investing` notes by naming durable quality patterns and common quality traps.
@@ -296,6 +324,9 @@ Provides a Brevo-compatible SMTP sender and config loader. It reads `ai_trader/t
 
 `longterm/motley_fool_intake.py`
 Normalizes Motley Fool premium table rows into investigation ideas. Captured ideas preserve any per-company Motley Fool URL from the table row as `motley_fool_company_url` / `source_url` so later enrichment can revisit the ticker's Fool IQ page directly. Motley Fool is treated as a high-quality idea source, not an automatic trading authority.
+The optional Stock Advisor service-list source can preserve repeat appearances
+as `source_recommendation_count` and adds the supplied long-run service
+performance snapshot as display-only attribution context only.
 
 `longterm/motley_fool_capture.py`
 Uses the logged-in Playwright/Chrome profile to capture Motley Fool premium table payloads from full new-recommendation, analyst-ranking, AI-ranking, or dashboard pages. Table extraction preserves cell-level links alongside cell text so downstream intake can retain per-ticker source URLs.
@@ -332,7 +363,7 @@ Builds read-only evidence for future review-aware rebalance tuning. It groups ev
 Converts a structured decision into a non-executing proposed `BUY`, `SELL`, or `NONE` intent.
 
 `longterm/account_action_plan.py`
-Builds the structured dry-run account action contract that future paper/live execution should consume. It aggregates recommendation-table rows, buy-promotion review status, portfolio state, benchmark gating, capital-shortfall suppression, review status, optional idle-cash parking policy, and rebalance proposals into JSON-compatible intents (`BUY`, `PARK_IDLE_CASH`, `PARK_DEFENSIVE_CASH`, `REBALANCE`, `REVIEW`, `CAPITAL_NEEDED`, or `BLOCKED`). Non-actionable promotion reviews become review/enrichment intents with no order, and pending-evidence names are excluded as rebalance targets. It does not place orders.
+Builds the structured dry-run account action contract that future paper/live execution should consume. It aggregates recommendation-table rows, buy-promotion review status, portfolio state, benchmark gating, capital-shortfall suppression, review status, account tax-mode policy, optional idle-cash parking policy, and rebalance proposals into JSON-compatible intents (`BUY`, `SELL`, `REDUCE`, `PARK_IDLE_CASH`, `PARK_DEFENSIVE_CASH`, `REBALANCE`, `REVIEW`, `CAPITAL_NEEDED`, or `BLOCKED`). Explicit non-protected `SELL` / `REDUCE` decisions are surfaced as sell intents before the default held-position `REVIEW` path, while protected symbols remain blocked. Non-actionable promotion reviews become review/enrichment intents with no order, pending-evidence names are excluded as rebalance targets, and broad parking/rebalance churn is suppressed for taxable or unspecified profiles. It does not place orders.
 
 `longterm/portfolio_state.py`
 Loads read-only portfolio snapshots and separates active versus protected holdings.
@@ -367,6 +398,16 @@ writes `pipeline_summary.json`, keeps `order_submission_enabled=false`, and
 rejects any planned stage containing `--submit-paper-orders`. It is artifact
 orchestration only, not trade authority.
 
+`longterm/pipeline_scheduler.py`
+Runs bounded recurring no-submit research-to-paper refresh loops. It validates
+command templates before execution, rejects submit-capable fragments and shell
+chaining, writes isolated per-run artifact folders, refreshes paper portfolio
+state when configured, records scheduler-policy state, and can refresh the
+dashboard manifest/site after each run. The CLI also exposes
+`--preset ongoing-no-submit`, a safe standard command set for the ongoing paper
+review loop. The preset still performs no broker submission; it only builds
+research, paper-preflight, policy, account-refresh, and dashboard artifacts.
+
 `longterm/paper_runbook_check.py`
 Reads saved workflow-smoke and paper-smoke-readiness artifacts and verifies they are ready before the operator runs the supervised submit command. It emits a generated timestamp, workflow plan ID, canonical action-plan hash, and buy-promotion summary so the submit CLI can reject missing, stale, mismatched, malformed, not-ready, or pre-promotion-aware evidence before refreshing broker state. It is read-only and does not call brokers or mutate ledgers.
 
@@ -377,7 +418,7 @@ Builds a read-only Monday operator checklist from saved runbook, workflow-smoke,
 Runs an audit-only whole-share paper workflow from action plan to read-only price map, recorded preview, and paper execution audit. It also summarizes missing/non-actionable buy-promotion state so unpromoted stock BUYs block the smoke before a supervised paper submit. It does not submit orders and is meant to prove the operator artifacts are clean before a supervised paper submit.
 
 `longterm/paper_order_preview.py`
-Converts dry-run account action plan intents into broker-shaped paper order previews without importing Alpaca or submitting orders. Preview rows carry plan/decision traceability, risk/review metadata, buy-promotion review state, cash shortfall, blocked reasons, and paired rebalance transaction IDs. Stock BUY previews require `ACTIONABLE_BUY`; missing or pending promotion reviews become blocked preview rows. `order_submission_enabled` is always `false`.
+Converts dry-run account action plan intents into broker-shaped paper order previews without importing Alpaca or submitting orders. Preview rows carry plan/decision traceability, risk/review metadata, buy-promotion review state, cash shortfall, blocked reasons, explicit sell validation, and paired rebalance transaction IDs. Stock BUY previews require `ACTIONABLE_BUY`; missing or pending promotion reviews become blocked preview rows. Explicit `SELL` / `REDUCE` previews validate protected symbols, positive notional, sufficient holding value, and whole-share price/quantity when requested. `order_submission_enabled` is always `false`.
 
 `longterm/paper_trade_ledger.py`
 Persists non-submitting paper preview rows with plan, preview, decision, transaction, and future trade IDs. The ledger provides durable traceability before any broker submission path exists and reserves execution-event storage for a later Stage 6B paper execution layer.

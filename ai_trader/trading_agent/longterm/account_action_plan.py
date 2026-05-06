@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Callable, Mapping
 
+from longterm.account_tax_policy import AccountTaxPolicy
 from longterm.action_planner import ActionPlanner
 from longterm.benchmark_guard import BenchmarkGuard
 from longterm.buy_promotion import BuyPromotionReview, BuyPromotionReviewer
@@ -49,6 +50,7 @@ class AccountActionPlan:
     benchmark_gate_reason: str
     intents: list[AccountActionIntent] = field(default_factory=list)
     blocked_reasons: list[str] = field(default_factory=list)
+    suppressed_reasons: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -68,6 +70,7 @@ class AccountActionPlanBuilder:
         idle_cash_policy: IdleCashDeploymentPolicy | None = None,
         market_regime: MarketRegimeSnapshot | None = None,
         buy_promotion_reviewer: BuyPromotionReviewer | None = None,
+        account_tax_policy: AccountTaxPolicy | None = None,
     ):
         self.benchmark_guard = benchmark_guard or BenchmarkGuard()
         self.rebalance_planner = rebalance_planner or RebalancePlanner()
@@ -77,6 +80,7 @@ class AccountActionPlanBuilder:
         self.idle_cash_policy = idle_cash_policy or IdleCashDeploymentPolicy()
         self.market_regime = market_regime
         self.buy_promotion_reviewer = buy_promotion_reviewer or BuyPromotionReviewer()
+        self.account_tax_policy = account_tax_policy or AccountTaxPolicy()
 
     def build(
         self,
@@ -103,6 +107,8 @@ class AccountActionPlanBuilder:
         )
         intents: list[AccountActionIntent] = []
         blocked_reasons: list[str] = []
+        suppressed_reasons: list[str] = []
+        explicit_sell_symbols: set[str] = set()
         promotion_reviews = {
             str(row.get("decision_id") or ""): self.buy_promotion_reviewer.evaluate_decision_row(
                 row,
@@ -146,6 +152,36 @@ class AccountActionPlanBuilder:
                     )
                 )
                 blocked_reasons.append(planned.reason)
+                continue
+
+            if planned.order_intent == "SELL" and planned.action in {"SELL", "REDUCE"}:
+                explicit_sell_symbols.add(symbol)
+                if not risk_review.allowed:
+                    reason = "; ".join(risk_review.veto_reasons) or planned.reason
+                    intents.append(
+                        _blocked_intent(
+                            row,
+                            reason,
+                            risk_review=_risk_with_promotion(risk_review.to_dict(), promotion_review),
+                            promotion_review=promotion_review,
+                        )
+                    )
+                    blocked_reasons.append(reason)
+                    continue
+                intents.append(
+                    AccountActionIntent(
+                        symbol=symbol,
+                        intent_type=planned.action,
+                        order_intent="SELL",
+                        trade_value=planned.trade_value,
+                        target_value=planned.target_value,
+                        allowed=planned.allowed,
+                        reason=planned.reason,
+                        decision_id=str(row.get("decision_id") or ""),
+                        risk_review=_risk_with_promotion(risk_review.to_dict(), promotion_review),
+                        promotion_review=_promotion_dict(promotion_review),
+                    )
+                )
                 continue
 
             if portfolio_state.holding_value(symbol) > 0:
@@ -257,32 +293,38 @@ class AccountActionPlanBuilder:
             review_status_by_symbol=review_status_by_symbol,
         )
         if proposal.should_rebalance:
-            rebalance_risk = self.risk_review_builder.build(
-                {
-                    "symbol": proposal.target_symbol,
-                    "recommendation": "REBALANCE",
-                    "suggested_size_pct": proposal.target_suggested_size_pct,
-                },
-                profile=profile,
-                portfolio_state=portfolio_state,
-                benchmark_guard_result=guard_result,
-                review_status=review_status_by_symbol.get(proposal.target_symbol, {}),
-                intent_type="REBALANCE",
-            )
-            intents.append(
-                AccountActionIntent(
-                    symbol=proposal.target_symbol,
+            tax_decision = self.account_tax_policy.can_execute_broad_rebalance(profile)
+            if not tax_decision.allowed:
+                suppressed_reasons.append(tax_decision.reason_code)
+            elif proposal.fund_from_symbol in explicit_sell_symbols:
+                suppressed_reasons.append("rebalance_suppressed_explicit_sell_source")
+            else:
+                rebalance_risk = self.risk_review_builder.build(
+                    {
+                        "symbol": proposal.target_symbol,
+                        "recommendation": "REBALANCE",
+                        "suggested_size_pct": proposal.target_suggested_size_pct,
+                    },
+                    profile=profile,
+                    portfolio_state=portfolio_state,
+                    benchmark_guard_result=guard_result,
+                    review_status=review_status_by_symbol.get(proposal.target_symbol, {}),
                     intent_type="REBALANCE",
-                    order_intent="SELL_TO_FUND_BUY",
-                    trade_value=proposal.proposed_sell_value,
-                    target_value=0.0,
-                    allowed=True,
-                    reason=proposal.reason,
-                    source_symbol=proposal.fund_from_symbol,
-                    decision_id=proposal.target_decision_id,
-                    risk_review=rebalance_risk.to_dict(),
                 )
-            )
+                intents.append(
+                    AccountActionIntent(
+                        symbol=proposal.target_symbol,
+                        intent_type="REBALANCE",
+                        order_intent="SELL_TO_FUND_BUY",
+                        trade_value=proposal.proposed_sell_value,
+                        target_value=0.0,
+                        allowed=True,
+                        reason=proposal.reason,
+                        source_symbol=proposal.fund_from_symbol,
+                        decision_id=proposal.target_decision_id,
+                        risk_review=rebalance_risk.to_dict(),
+                    )
+                )
 
         if self.market_regime is not None:
             intents.extend(
@@ -291,7 +333,9 @@ class AccountActionPlanBuilder:
                     portfolio_state=portfolio_state,
                     intents=intents,
                     policy=self.idle_cash_policy,
+                    tax_policy=self.account_tax_policy,
                     market_regime=self.market_regime,
+                    suppressed_reasons=suppressed_reasons,
                 )
             )
 
@@ -305,6 +349,7 @@ class AccountActionPlanBuilder:
             benchmark_gate_reason=guard_result.reason,
             intents=intents,
             blocked_reasons=blocked_reasons,
+            suppressed_reasons=suppressed_reasons,
         )
 
 
@@ -375,7 +420,9 @@ def _idle_cash_intents(
     portfolio_state: PortfolioState,
     intents: list[AccountActionIntent],
     policy: IdleCashDeploymentPolicy,
+    tax_policy: AccountTaxPolicy,
     market_regime: MarketRegimeSnapshot,
+    suppressed_reasons: list[str],
 ) -> list[AccountActionIntent]:
     committed_cash = sum(
         intent.trade_value
@@ -395,6 +442,10 @@ def _idle_cash_intents(
         )
     idle_cash = round(min(available_cash, active_budget_remaining), 2)
     if idle_cash <= 0:
+        return []
+    tax_decision = tax_policy.can_execute_broad_parking(profile)
+    if not tax_decision.allowed:
+        suppressed_reasons.append(tax_decision.reason_code)
         return []
 
     results: list[AccountActionIntent] = []

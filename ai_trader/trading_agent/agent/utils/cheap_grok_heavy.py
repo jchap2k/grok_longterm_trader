@@ -2,7 +2,7 @@
 cheap_grok_heavy.py
 ====================
 Self-Mixture-of-Agents (Self-MoA) ensemble using the xAI OpenAI-compatible
-REST API.  Runs N parallel grok-4-1-fast-reasoning calls with temperature
+REST API. Runs N parallel grok-4.3 calls with temperature
 variation, then synthesizes via a master call.
 
 SCOPE: Standalone batch tool. Does NOT write to learning.db, trade_journal,
@@ -11,7 +11,8 @@ decision_journal, or any live-trading subsystem. Output is plain text only.
 Inspired by "Poor Man's Grok Heavy" (Reddit 2026-03) and validated by Grok:
   - Non-uniform temperature spread creates both rigorous and creative responses
   - Master synthesizer (in 'heavy mode') combines best of all agents
-  - ~$0.03-0.05 per query vs $1-3 for native Grok Heavy / multi-agent beta
+  - Cost-sensitive replacement for native multi-agent calls; default width is
+    now 4 agents after the May 2026 Grok 4.1 fast deprecation.
 
 Temperature spreads (Grok-validated, asymmetric density):
     8-agent:  [0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.5]
@@ -23,7 +24,7 @@ Temperature spreads (Grok-validated, asymmetric density):
 Usage (standalone):
     from agent.utils.cheap_grok_heavy import CheapGrokHeavy
 
-    client = CheapGrokHeavy(api_key=XAI_API_KEY, agent_count=8)
+    client = CheapGrokHeavy(api_key=XAI_API_KEY, agent_count=4)
     result = client.call(prompt)             # synchronous
     result = await client.call_async(prompt) # async context
 
@@ -33,13 +34,13 @@ Usage (CLI self-test):
 Design notes:
   - Uses openai.AsyncOpenAI with base_url="https://api.x.ai/v1" (same as grok_client.py)
   - xai_sdk does NOT expose temperature - OpenAI-compatible REST API does (0.0 to 2.0)
-  - agent_count=8 default: Grok-validated sweet spot for Self-MoA quality
-  - max_concurrent=6 default: asyncio.Semaphore caps burst to prevent 429s
+  - agent_count=4 default: cost-controlled council for pricier Grok 4.3 calls
+  - max_concurrent=4 default: asyncio.Semaphore caps burst to prevent 429s
   - AsyncOpenAI client created once in __init__ and reused (not recreated per call)
   - Synthesis at temp=0.1 (focused/consistent), max_tokens = agent_max_tokens * 2
   - Agents at max_tokens=2048 (configurable via agent_max_tokens param)
   - Failed agents are excluded from synthesis (warning logged)
-  - Token costs logged at $0.20/$0.50 per 1M (grok-4-1-fast-reasoning 2026)
+  - Token costs logged at $1.25/$2.50 per 1M (grok-4.3, May 2026)
 """
 
 import asyncio
@@ -54,11 +55,11 @@ import pathlib
 # ---------------------------------------------------------------------------
 
 XAI_BASE_URL      = "https://api.x.ai/v1"
-DEFAULT_MODEL     = "grok-4-1-fast-reasoning"
-DEFAULT_AGENTS    = 8            # Grok-validated sweet spot for Self-MoA
+DEFAULT_MODEL     = "grok-4.3"
+DEFAULT_AGENTS    = 4            # cost-controlled default after 4.1 fast deprecation
 AGENT_TIMEOUT_S   = 180          # per-agent hard timeout
-COST_INPUT_PER_M  = 0.20        # $ per 1M input tokens
-COST_OUTPUT_PER_M = 0.50        # $ per 1M output tokens
+COST_INPUT_PER_M  = 1.25        # $ per 1M input tokens
+COST_OUTPUT_PER_M = 2.50        # $ per 1M output tokens
 
 # Grok-validated 8-point spread: default for <= 8 agents.
 # NOT evenly spaced - avoids mid-range clustering.
@@ -193,10 +194,10 @@ class CheapGrokHeavy:
 
     Args:
         api_key:          xAI API key (falls back to XAI_API_KEY env var)
-        agent_count:      number of parallel agents (default 8, Grok-validated sweet spot)
-        model:            model name for all calls (default grok-4-1-fast-reasoning)
+        agent_count:      number of parallel agents (default 4, cost-controlled)
+        model:            model name for all calls (default grok-4.3)
         agent_max_tokens: max output tokens per agent (default 2048); synthesis gets 2x
-        max_concurrent:   max simultaneous API calls via semaphore (default min(6, agent_count))
+        max_concurrent:   max simultaneous API calls via semaphore (default min(4, agent_count))
                           Lower this on shared accounts or if hitting 429s.
         verbose:          print per-agent progress (default True)
     """
@@ -248,7 +249,7 @@ class CheapGrokHeavy:
             ]
 
         self.agent_count = len(self.agent_specs)
-        self.max_concurrent = max_concurrent or min(6, self.agent_count)
+        self.max_concurrent = max_concurrent or min(4, self.agent_count)
 
         if not self.api_key:
             raise ValueError(
@@ -652,7 +653,7 @@ def cheap_grok_heavy_call(
 
     Example:
         from agent.utils.cheap_grok_heavy import cheap_grok_heavy_call
-        result = cheap_grok_heavy_call(prompt, agent_count=8, agent_max_tokens=4096)
+        result = cheap_grok_heavy_call(prompt, agent_count=4, agent_max_tokens=4096)
         result = cheap_grok_heavy_call(prompt, max_concurrent=4)  # conservative rate limiting
     """
     client = CheapGrokHeavy(
@@ -708,7 +709,7 @@ if __name__ == "__main__":
         print("ERROR: XAI_API_KEY not found. Set env var or configure credentials_manager.")
         sys.exit(1)
 
-    _max_c = args.max_concurrent or min(6, args.agents)
+    _max_c = args.max_concurrent or min(4, args.agents)
     print(f"CheapGrokHeavy self-test: {args.agents} agents, max_concurrent={_max_c}, model={args.model}")
     print(f"Temps: {_select_temps(args.agents)}")
     print(f"Prompt: {test_prompt[:100]}...\n")

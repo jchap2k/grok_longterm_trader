@@ -39,9 +39,41 @@ class PortfolioProfile:
     def protected_capital(self) -> float:
         return max(0.0, self.total_account_value - self.tradable_capital)
 
+    @property
+    def is_non_taxable(self) -> bool:
+        mode = self.account_strategy_mode.lower().replace("-", "_").strip()
+        return mode in {
+            "roth_ira",
+            "traditional_ira",
+            "ira",
+            "paper",
+            "paper_non_taxable",
+            "non_taxable",
+        }
+
+    @property
+    def approved_parking_symbols(self) -> List[str]:
+        blocked = set(self.protected_symbols)
+        blocked.update(symbol for symbol in [self.benchmark_symbol, self.cash_symbol] if symbol)
+        symbols: list[str] = []
+        for symbol in [
+            self.defensive_parking_symbol,
+            self.low_risk_parking_symbol,
+            self.duration_hedge_symbol,
+        ]:
+            normalized = str(symbol or "").upper()
+            if normalized and normalized not in blocked and normalized not in symbols:
+                symbols.append(normalized)
+        return symbols
+
+    def is_approved_parking_symbol(self, symbol: str) -> bool:
+        return str(symbol or "").upper() in set(self.approved_parking_symbols)
+
     def to_dict(self) -> Dict[str, Any]:
         payload = asdict(self)
         payload["protected_capital"] = self.protected_capital
+        payload["is_non_taxable"] = self.is_non_taxable
+        payload["approved_parking_symbols"] = self.approved_parking_symbols
         return payload
 
     @classmethod

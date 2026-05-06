@@ -8,11 +8,13 @@ from pathlib import Path
 
 from longterm.paper_outcomes import build_paper_outcome_markdown, summarize_paper_outcomes
 from longterm.paper_trade_ledger import PaperTradeLedger
+from longterm.decision_journal import LongTermDecisionJournal
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Summarize paper fill outcomes from explicit prices.")
     parser.add_argument("--ledger-db", default=None)
+    parser.add_argument("--journal-db", default="")
     parser.add_argument("--price-map", required=True)
     parser.add_argument("--json", action="store_true")
     return parser
@@ -22,6 +24,7 @@ def run_cli(args: argparse.Namespace) -> int:
     payload = summarize_paper_outcomes(
         PaperTradeLedger(args.ledger_db),
         price_map=_load_json(args.price_map),
+        journal=LongTermDecisionJournal(args.journal_db) if args.journal_db else None,
     )
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))

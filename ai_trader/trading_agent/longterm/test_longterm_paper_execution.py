@@ -442,6 +442,48 @@ def test_paper_execution_hard_blocks_protected_and_rebalance_previews(tmp_path):
     assert {event["status"] for event in ledger.list_execution_events(limit=10)} == {"submit_blocked"}
 
 
+def test_paper_execution_hard_blocks_explicit_sell_preview(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = _record_decision(journal, symbol="AAPL", recommendation="SELL")
+    _record_preview(ledger, decision_id, symbol="AAPL", side="sell", notional=1000)
+    plan = {
+        "plan_id": "plan-1",
+        "intents": [
+            {
+                "symbol": "AAPL",
+                "intent_type": "SELL",
+                "order_intent": "SELL",
+                "trade_value": 1000,
+                "allowed": True,
+                "decision_id": decision_id,
+            }
+        ],
+    }
+    broker = FakePaperBroker()
+
+    result = _boundary(tmp_path).run(
+        plan,
+        journal=journal,
+        ledger=ledger,
+        profile=PortfolioProfile(protected_symbols=["FXAIX"]),
+        portfolio_state=PortfolioState(
+            cash=5000,
+            protected_symbols=["FXAIX"],
+            holdings=[{"symbol": "AAPL", "market_value": 3000}],
+        ),
+        submit=True,
+        broker=broker,
+    )
+
+    reasons = result["items"][0]["blocked_reasons"]
+    assert result["submitted_count"] == 0
+    assert broker.calls == []
+    assert "recommendation_not_buy_or_add" in reasons
+    assert "rebalance_blocked_v1" in reasons
+    assert ledger.list_execution_events(limit=1)[0]["status"] == "submit_blocked"
+
+
 def test_paper_execution_excludes_parking_intents_without_blocking_simple_buy(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     ledger = PaperTradeLedger(tmp_path / "paper.db")
@@ -487,6 +529,178 @@ def test_paper_execution_excludes_parking_intents_without_blocking_simple_buy(tm
     by_symbol = {item["symbol"]: item for item in result["items"]}
     assert by_symbol["SPY"]["status"] == "excluded_v1"
     assert ledger.list_execution_events(limit=10)[0]["symbol"] == "AMZN"
+
+
+def test_paper_execution_submits_roth_parking_buy_without_journal_decision(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = "parking-plan-1-SPY"
+    _record_preview(
+        ledger,
+        decision_id,
+        symbol="SPY",
+        order_type="market_quantity_preview",
+        quantity=8,
+        notional=4000,
+    )
+    plan = {
+        "plan_id": "plan-1",
+        "intents": [
+            {
+                "symbol": "SPY",
+                "intent_type": "PARK_IDLE_CASH",
+                "order_intent": "BUY",
+                "trade_value": 4150,
+                "allowed": True,
+                "decision_id": decision_id,
+                "parking_execution": True,
+                "reason": "Normal regime parking.",
+            }
+        ],
+    }
+    broker = FakePaperBroker(status="pending_new", order_id="alpaca-paper-spy")
+
+    result = _boundary(tmp_path).run(
+        plan,
+        journal=journal,
+        ledger=ledger,
+        profile=PortfolioProfile(account_strategy_mode="roth_ira", protected_symbols=["FXAIX"], defensive_parking_symbol="SPY"),
+        portfolio_state=PortfolioState(cash=5000, protected_symbols=["FXAIX"]),
+        submit=True,
+        broker=broker,
+    )
+
+    events = ledger.list_execution_events(limit=10)
+    assert result["submitted_count"] == 1
+    assert result["blocked_count"] == 0
+    assert broker.calls == [
+        {
+            "order_model": "quantity",
+            "symbol": "SPY",
+            "side": "buy",
+            "quantity": 8.0,
+            "client_order_id": events[0]["event_json"]["client_order_id"],
+            "time_in_force": "day",
+        }
+    ]
+    item = result["items"][0]
+    assert item["parking_execution"] is True
+    assert item["status"] == "submitted"
+    assert item["decision_id"] == decision_id
+    assert events[0]["event_json"]["parking_execution"] is True
+
+
+def test_paper_execution_submits_roth_defensive_parking_buy_without_journal_decision(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = "parking-plan-1-SGOV"
+    _record_preview(
+        ledger,
+        decision_id,
+        symbol="SGOV",
+        order_type="market_quantity_preview",
+        quantity=70,
+        notional=7000,
+    )
+    plan = {
+        "plan_id": "plan-1",
+        "intents": [
+            {
+                "symbol": "SGOV",
+                "intent_type": "PARK_DEFENSIVE_CASH",
+                "order_intent": "BUY",
+                "trade_value": 7000,
+                "allowed": True,
+                "decision_id": decision_id,
+                "parking_execution": True,
+                "reason": "Inflation shock defensive parking.",
+            }
+        ],
+    }
+    broker = FakePaperBroker(status="pending_new", order_id="alpaca-paper-sgov")
+
+    result = _boundary(tmp_path).run(
+        plan,
+        journal=journal,
+        ledger=ledger,
+        profile=PortfolioProfile(
+            account_strategy_mode="roth_ira",
+            protected_symbols=["FXAIX"],
+            defensive_parking_symbol="SPY",
+            low_risk_parking_symbol="SGOV",
+            duration_hedge_symbol="TLT",
+        ),
+        portfolio_state=PortfolioState(cash=10000, protected_symbols=["FXAIX"]),
+        submit=True,
+        broker=broker,
+    )
+
+    events = ledger.list_execution_events(limit=10)
+    assert result["submitted_count"] == 1
+    assert result["blocked_count"] == 0
+    assert broker.calls[0]["symbol"] == "SGOV"
+    assert result["items"][0]["intent_type"] == "PARK_DEFENSIVE_CASH"
+    assert result["items"][0]["parking_execution"] is True
+    assert events[0]["event_json"]["parking_execution"] is True
+
+
+def test_paper_execution_blocks_taxable_and_unapproved_parking(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    taxable_id = "parking-plan-1-SPY"
+    unapproved_id = "parking-plan-1-QQQ"
+    _record_preview(ledger, taxable_id, symbol="SPY", order_type="market_quantity_preview", quantity=8, notional=4000)
+    _record_preview(ledger, unapproved_id, symbol="QQQ", order_type="market_quantity_preview", quantity=8, notional=4000)
+    plan = {
+        "plan_id": "plan-1",
+        "intents": [
+            {
+                "symbol": "SPY",
+                "intent_type": "PARK_IDLE_CASH",
+                "order_intent": "BUY",
+                "trade_value": 4150,
+                "allowed": True,
+                "decision_id": taxable_id,
+                "parking_execution": True,
+            },
+            {
+                "symbol": "QQQ",
+                "intent_type": "PARK_IDLE_CASH",
+                "order_intent": "BUY",
+                "trade_value": 4150,
+                "allowed": True,
+                "decision_id": unapproved_id,
+                "parking_execution": True,
+            },
+        ],
+    }
+
+    taxable_result = _boundary(tmp_path).run(
+        plan,
+        journal=journal,
+        ledger=ledger,
+        profile=PortfolioProfile(account_strategy_mode="taxable", protected_symbols=["FXAIX"], defensive_parking_symbol="SPY"),
+        portfolio_state=PortfolioState(cash=5000, protected_symbols=["FXAIX"]),
+        submit=True,
+        broker=FakePaperBroker(),
+    )
+    roth_result = _boundary(tmp_path).run(
+        plan,
+        journal=journal,
+        ledger=ledger,
+        profile=PortfolioProfile(account_strategy_mode="roth_ira", protected_symbols=["FXAIX"], defensive_parking_symbol="SPY"),
+        portfolio_state=PortfolioState(cash=5000, protected_symbols=["FXAIX"]),
+        submit=True,
+        broker=FakePaperBroker(),
+    )
+
+    taxable_reasons = {item["symbol"]: item["blocked_reasons"] for item in taxable_result["items"]}
+    roth_reasons = {item["symbol"]: item["blocked_reasons"] for item in roth_result["items"]}
+    assert taxable_result["submitted_count"] == 0
+    assert "taxable_parking_execution_blocked" in taxable_reasons["SPY"]
+    assert "taxable_parking_execution_blocked" in taxable_reasons["QQQ"]
+    assert roth_result["submitted_count"] == 1
+    assert "parking_symbol_not_approved" in roth_reasons["QQQ"]
 
 
 def test_paper_execution_blocks_benchmark_review_decision_quality_and_cash(tmp_path):

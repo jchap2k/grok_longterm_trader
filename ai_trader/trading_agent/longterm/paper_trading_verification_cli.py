@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 
+from longterm.path_utils import write_json_artifact
 from longterm.paper_trade_ledger import PaperTradeLedger
 from longterm.paper_trading_verification import (
     build_paper_trading_verification_markdown,
@@ -37,9 +37,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _write_observed(path: str | Path, observed: dict) -> None:
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(observed, indent=2, sort_keys=True), encoding="utf-8")
+    write_json_artifact(path, observed)
 
 
 __all__ = ["build_parser", "main", "run_cli"]

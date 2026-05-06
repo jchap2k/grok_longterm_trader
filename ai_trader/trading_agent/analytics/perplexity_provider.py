@@ -6,7 +6,8 @@ in broker_config.json. Uses Perplexity's Sonar model which has live web search
 built in - returns synthesized catalyst summaries with specific figures (EPS,
 revenue, guidance) rather than raw headlines.
 
-Cost: $0.005/request + $1/M tokens. ~$0.035/scan for 7 candidates.
+Cost: Sonar request/search-context fee plus token costs. Broad enrichment should
+prefer Perplexity over Grok 4.3 after the May 2026 Grok 4.1 fast deprecation.
 Rate limit: 50 RPM (Tier 0) - more than sufficient.
 
 Prompt versions:
@@ -62,10 +63,10 @@ CATALYST_PROMPT = (
 
 
 XAI_BASE_URL = 'https://api.x.ai/v1'
-XAI_CATALYST_MODEL = 'grok-4-1-fast-non-reasoning'  # non-reasoning: faster, no thinking overhead for news summaries
+XAI_CATALYST_MODEL = 'grok-4.20-non-reasoning'  # fallback only; prefer Perplexity for broad enrichment
 
 # Grok batch enrichment settings (primary path over per-symbol calls)
-XAI_BATCH_MODEL    = 'grok-4-1-fast-reasoning'  # reasoning required for reliable multi-symbol JSON
+XAI_BATCH_MODEL    = 'grok-4.3'  # fallback only; reasoning required for reliable multi-symbol JSON
 XAI_BATCH_SIZE     = 5    # symbols per batch call (tested: 15/15 at batch=5)
 XAI_BATCH_PARALLEL = 3    # concurrent batch calls
 XAI_BATCH_TIMEOUT  = 120  # seconds per batch API call

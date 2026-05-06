@@ -28,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--price-history-period", default="1y")
     parser.add_argument("--market-regime", default="")
     parser.add_argument("--operator-status", default="")
+    parser.add_argument("--scheduler-policy", default="")
     parser.add_argument("--report-output", default="")
     parser.add_argument("--html-output", default="")
     parser.add_argument("--site-output-dir", default="")
@@ -43,6 +44,7 @@ def run_cli(args: argparse.Namespace, *, price_history_fetcher=fetch_yfinance_hi
         else build_operator_dashboard(
             action_plan=action_plan,
             market_regime=_load_json(args.market_regime) if args.market_regime else None,
+            scheduler_policy=_load_json(args.scheduler_policy) if args.scheduler_policy else None,
             operator_status=_load_json(args.operator_status) if args.operator_status else None,
         )
     )

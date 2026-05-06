@@ -483,6 +483,25 @@ def test_next_actions_markdown_includes_account_action_plan_parking_intents(tmp_
     assert "| SPY | PARK_IDLE_CASH | BUY | $33,150.00 | yes | Normal regime parking. |" in markdown
 
 
+def test_next_actions_markdown_includes_account_action_plan_suppressed_reasons(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
+    state = PortfolioState(cash=33150, protected_symbols=["FXAIX"])
+
+    markdown = build_next_actions_markdown(
+        journal,
+        profile=profile,
+        portfolio_state=state,
+        account_action_plan={
+            "intents": [],
+            "suppressed_reasons": ["taxable_broad_parking_suppressed"],
+        },
+    )
+
+    assert "## Account Action Plan Suppressions" in markdown
+    assert "| Taxable Broad Parking Suppressed | taxable_broad_parking_suppressed |" in markdown
+
+
 def test_next_actions_cli_includes_persisted_deferred_research_items(tmp_path, capsys):
     journal_db = tmp_path / "journal.db"
     journal = LongTermDecisionJournal(journal_db)

@@ -7,19 +7,23 @@ import json
 from pathlib import Path
 from typing import Any
 
+from longterm.orchestration_cli import DEFAULT_PROFILE_PATH
 from longterm.action_plan_filter import build_paper_submit_candidate_plan
+from portfolio.portfolio_profile import PortfolioProfile
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Filter an action plan to Stage 6B simple paper BUY candidates.")
     parser.add_argument("--action-plan", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument("--profile-config", default=str(DEFAULT_PROFILE_PATH))
     parser.add_argument("--json", action="store_true")
     return parser
 
 
 def run_cli(args: argparse.Namespace) -> int:
-    candidate_plan = build_paper_submit_candidate_plan(_load_json(args.action_plan))
+    profile = PortfolioProfile.from_file(args.profile_config) if args.profile_config else None
+    candidate_plan = build_paper_submit_candidate_plan(_load_json(args.action_plan), profile=profile)
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(candidate_plan, indent=2, sort_keys=True), encoding="utf-8")

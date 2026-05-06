@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 
 from longterm.paper_monday_check import build_paper_monday_check, build_paper_monday_check_markdown
+from longterm.path_utils import write_json_artifact
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -17,6 +17,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--runbook-check", required=True)
     parser.add_argument("--status-refresh", default="")
     parser.add_argument("--report-output", default="")
+    parser.add_argument(
+        "--allow-existing-paper-positions",
+        action="store_true",
+        help="Allow saved operator review artifacts for an ongoing paper account with existing positions.",
+    )
     parser.add_argument("--json", action="store_true")
     return parser
 
@@ -28,10 +33,10 @@ def run_cli(args: argparse.Namespace) -> int:
         paper_smoke_readiness=args.paper_smoke_readiness,
         runbook_check=args.runbook_check,
         status_refresh=args.status_refresh or None,
+        allow_existing_positions=args.allow_existing_paper_positions,
     )
     if args.report_output:
-        Path(args.report_output).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.report_output).write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        write_json_artifact(args.report_output, payload)
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:

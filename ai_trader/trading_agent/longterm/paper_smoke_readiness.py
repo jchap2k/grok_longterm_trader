@@ -11,6 +11,7 @@ def build_paper_smoke_readiness_report(
     broker_capabilities: Mapping[str, Any] | None = None,
     scheduler_readiness: Mapping[str, Any] | None = None,
     workflow_smoke: Mapping[str, Any] | None = None,
+    allow_existing_positions: bool = False,
 ) -> dict[str, Any]:
     """Combine existing advisory artifacts into one paper-smoke pre-flight report."""
     account_cleanliness = account_cleanliness or {}
@@ -20,7 +21,14 @@ def build_paper_smoke_readiness_report(
     blockers: list[str] = []
     warnings: list[str] = []
 
-    if not bool(account_cleanliness.get("clean")):
+    cash_within_tolerance = bool(account_cleanliness.get("cash_within_tolerance", False))
+    if bool(account_cleanliness.get("clean")):
+        pass
+    elif allow_existing_positions and account_cleanliness and cash_within_tolerance:
+        warnings.append("existing_paper_positions_allowed")
+    elif allow_existing_positions and account_cleanliness and not cash_within_tolerance:
+        blockers.append("paper_account_cash_mismatch")
+    else:
         blockers.append("paper_account_not_clean")
     if not bool(broker_capabilities.get("compatible")):
         blockers.append("broker_capability_mismatch")
@@ -40,6 +48,7 @@ def build_paper_smoke_readiness_report(
         "schema_version": 2,
         "mode": "paper_smoke_readiness",
         "order_submission_enabled": False,
+        "allow_existing_positions": bool(allow_existing_positions),
         "ready_for_supervised_smoke": not blockers,
         "blocker_count": len(blockers),
         "warning_count": len(warnings),
@@ -53,6 +62,7 @@ def build_paper_smoke_readiness_report(
         "notes": [
             "Read-only pre-flight report. No broker orders were submitted, canceled, or modified.",
             "A ready report means the artifacts look clean enough for a supervised smoke; it does not authorize automation.",
+            "allow_existing_positions is explicit and intended for ongoing paper portfolios, not clean-account smoke resets.",
         ],
     }
 

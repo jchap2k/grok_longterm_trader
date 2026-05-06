@@ -266,7 +266,7 @@ class PaperExecutionBoundary:
         items = []
         for intent in action_plan.get("intents") or []:
             intent_type = str(intent.get("intent_type") or "").upper()
-            if _is_v1_excluded_parking_intent(intent_type):
+            if _is_parking_intent(intent_type) and not bool(intent.get("parking_execution")):
                 items.append(
                     _excluded_v1_item(
                         intent,
@@ -325,15 +325,27 @@ class PaperExecutionBoundary:
     ) -> dict[str, Any]:
         blocked: list[str] = []
         protected = set(profile.protected_symbols) | set(portfolio_state.protected_symbols)
+        intent_type = str(intent.get("intent_type") or "").upper()
+        parking_execution = _is_parking_intent(intent_type)
         if not decision_id:
             blocked.append("missing_decision_id")
-        decision = _decision_or_none(journal, decision_id)
-        if decision is None:
-            blocked.append("missing_decision_journal_row")
-        elif str(decision.get("recommendation") or "").upper() not in {"BUY", "ADD"}:
-            blocked.append("recommendation_not_buy_or_add")
-        elif int(decision.get("confidence") or 0) < self.min_confidence:
-            blocked.append("confidence_below_minimum")
+        if parking_execution:
+            if not profile.is_non_taxable:
+                blocked.append("taxable_parking_execution_blocked")
+            if not profile.is_approved_parking_symbol(symbol):
+                blocked.append("parking_symbol_not_approved")
+            if str(intent.get("order_intent") or "").upper() != "BUY":
+                blocked.append("parking_order_intent_not_buy")
+            if str(intent.get("source_symbol") or ""):
+                blocked.append("rebalance_blocked_v1")
+        else:
+            decision = _decision_or_none(journal, decision_id)
+            if decision is None:
+                blocked.append("missing_decision_journal_row")
+            elif str(decision.get("recommendation") or "").upper() not in {"BUY", "ADD"}:
+                blocked.append("recommendation_not_buy_or_add")
+            elif int(decision.get("confidence") or 0) < self.min_confidence:
+                blocked.append("confidence_below_minimum")
         if preview is None:
             blocked.append("missing_preview")
         else:
@@ -347,13 +359,13 @@ class PaperExecutionBoundary:
                 blocked.append("rebalance_blocked_v1")
             if _preview_age_hours(preview.get("timestamp"), self.now_func()) > self.max_preview_age_hours:
                 blocked.append("preview_stale")
-        if str(intent.get("intent_type") or "").upper() != "BUY":
+        if intent_type != "BUY" and not parking_execution:
             blocked.append("rebalance_blocked_v1")
         if str(intent.get("order_intent") or "BUY").upper() not in {"BUY", ""}:
             blocked.append("rebalance_blocked_v1")
         buy_promotion = _promotion_review(intent, preview)
         buy_promotion_decision = str(buy_promotion.get("promotion_decision") or "")
-        if (
+        if not parking_execution and (
             str(intent.get("intent_type") or "").upper() == "BUY"
             and str(intent.get("order_intent") or "BUY").upper() in {"BUY", ""}
         ):
@@ -363,13 +375,13 @@ class PaperExecutionBoundary:
                 blocked.append("buy_promotion_not_actionable")
         if symbol in protected:
             blocked.append("protected_symbol")
-        if benchmark_paused:
+        if benchmark_paused and not parking_execution:
             blocked.append("benchmark_guard_paused")
         status = review_status.get(symbol, {})
         thesis_state = str(status.get("thesis_state") or "").lower()
-        if thesis_state in {"broken", "weakening", "stale"}:
+        if not parking_execution and thesis_state in {"broken", "weakening", "stale"}:
             blocked.append(f"thesis_state_{thesis_state}")
-        if bool(status.get("review_due")):
+        if not parking_execution and bool(status.get("review_due")):
             blocked.append("review_due")
         notional = float((preview or {}).get("notional") or intent.get("trade_value") or 0.0)
         order_type = str((preview or {}).get("order_type") or "")
@@ -390,6 +402,7 @@ class PaperExecutionBoundary:
         return {
             "decision_id": decision_id,
             "symbol": symbol,
+            "intent_type": intent_type,
             "side": str((preview or {}).get("side") or ""),
             "order_type": order_type,
             "notional": notional,
@@ -406,6 +419,7 @@ class PaperExecutionBoundary:
             "blocked_reasons": blocked,
             "buy_promotion_decision": buy_promotion_decision,
             "buy_promotion": buy_promotion,
+            "parking_execution": parking_execution,
             "benchmark_guard_reason": benchmark_reason,
             "review_status": dict(status),
             "active_rules_hash": rules.sha256,
@@ -539,6 +553,10 @@ def _is_v1_excluded_parking_intent(intent_type: str) -> bool:
     return intent_type in {"PARK_IDLE_CASH", "PARK_DEFENSIVE_CASH"}
 
 
+def _is_parking_intent(intent_type: str) -> bool:
+    return intent_type in {"PARK_IDLE_CASH", "PARK_DEFENSIVE_CASH"}
+
+
 def build_paper_execution_markdown(result: Mapping[str, Any]) -> str:
     lines = [
         "# Paper Execution Boundary",
@@ -590,6 +608,7 @@ def _event_for_item(
         "notional": item.get("notional") or 0.0,
         "quantity": item.get("quantity") or 0.0,
         "order_type": item.get("order_type") or "",
+        "parking_execution": bool(item.get("parking_execution")),
         "requested_notional": item.get("requested_notional") or 0.0,
         "estimated_price": item.get("estimated_price") or 0.0,
         "status": status,
