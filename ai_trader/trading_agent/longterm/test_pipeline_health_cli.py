@@ -104,3 +104,59 @@ def test_pipeline_health_cli_reports_ready_when_all_artifacts_are_parseable(tmp_
     assert printed["status"] == "ready"
     assert printed["health"]["status"] == "ready"
     assert printed["rollup"]["paper_preview"]["ready_count"] == 1
+
+
+def test_pipeline_health_cli_includes_scheduler_resource_controls(tmp_path, capsys):
+    selected = tmp_path / "selected.json"
+    selected.write_text(json.dumps([{"symbol": "MSFT"}]), encoding="utf-8")
+    pipeline_summary = tmp_path / "pipeline_summary.json"
+    scheduler_summary = tmp_path / "pipeline_scheduler_summary.json"
+    pipeline_summary.write_text(
+        json.dumps(
+            {
+                "status": "completed",
+                "order_submission_enabled": False,
+                "artifact_paths": {"research_queue_selected": str(selected)},
+            }
+        ),
+        encoding="utf-8",
+    )
+    scheduler_summary.write_text(
+        json.dumps(
+            {
+                "status": "planned",
+                "runs": [
+                    {
+                        "status": "planned",
+                        "resource_controls": {
+                            "provider_mode": "perplexity",
+                            "paid_provider_enabled": True,
+                            "research_max_pass_count": 25,
+                            "generated_committee_max_batches": 1,
+                            "bounded": True,
+                            "estimated_cost_usd": "unknown",
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--pipeline-summary",
+                str(pipeline_summary),
+                "--pipeline-scheduler-summary",
+                str(scheduler_summary),
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert printed["resource_controls"]["provider_mode"] == "perplexity"
+    assert printed["resource_controls"]["bounded"] is True
+    assert printed["resource_controls"]["research_max_pass_count"] == 25

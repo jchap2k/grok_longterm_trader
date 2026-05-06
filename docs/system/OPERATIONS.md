@@ -859,6 +859,15 @@ python scripts/longterm_pipeline_scheduler.py --preset ongoing-no-submit --run-o
 python scripts/longterm_pipeline_scheduler.py --preset ongoing-no-submit --max-runs 3 --interval-seconds 3600 --output-dir path\to\pipeline_scheduler_runs --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --profile-config path\to\roth_ira_profile.json --market-regime-file path\to\market_regime.json --final-planning-refresh --planning-capital-from-portfolio-state --expected-cash-from-portfolio-state --allow-existing-paper-positions --json
 ```
 
+The same preset can also run a bounded upstream research cadence before the
+paper-preflight chain. Keep paid/reasoning work capped; `--perplexity-research`
+requires an explicit `--research-max-pass-count`, and generated committee
+batches require `--generated-committee-max-batches`.
+
+```powershell
+python scripts/longterm_pipeline_scheduler.py --preset ongoing-no-submit --run-once --output-dir path\to\pipeline_scheduler_runs --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --profile-config path\to\roth_ira_profile.json --research-source-file path\to\universe.csv --research-source manual_watchlist --research-campaign-dir path\to\research_campaign --research-resume --research-run-until research_queue_ready --research-max-pass-count 25 --research-evidence-batch-size 10 --research-max-evidence-batches 2 --perplexity-research --perplexity-search-context-size low --perplexity-credits-purchased-to-date 12 --run-generated-committee-batches --generated-committee-max-batches 1 --final-planning-refresh --planning-capital-from-portfolio-state --expected-cash-from-portfolio-state --allow-existing-paper-positions --json
+```
+
 The preset expands to the same safe stages as the manual template path: a fresh
 Alpaca paper snapshot into `{portfolio_state}`, the no-submit
 research-to-paper pipeline, the advisory scheduler-policy report, and a
@@ -867,6 +876,31 @@ read-only paper-account/dashboard refresh. It writes per-run
 dashboard can refresh from the latest saved run. The preset still rejects
 submit-capable fragments and never adds `--submit-paper-orders` or
 `--confirm-paper-submit`.
+
+Each planned or completed scheduler run also includes a machine-readable
+`resource_controls` object in `pipeline_scheduler_summary.json`. This summarizes
+the visible research provider mode, paid-provider flag, research pass cap,
+evidence batch cap, generated committee batch cap, and whether the rendered run
+appears bounded. It deliberately reports `estimated_cost_usd` as `unknown`
+unless a later stage provides actual usage; the field is a pre-run safety
+surface, not a precise price quote.
+The preset passes `{scheduler_summary}` into the read-only account/dashboard
+refresh as `--pipeline-scheduler-summary`, so `/api/pipeline-health.json` and
+the Safety / Preflight dashboard card can show provider/cap status after the
+scheduler writes the final summary.
+The advisory scheduler policy also reads the latest resource controls. Bounded
+paid runs are allowed to proceed as advisory/scheduled work with a
+`paid_research_provider_planned` warning, while unbounded paid/provider runs are
+blocked into `resource_control_review` until the caps are fixed. Operator status
+bundles and markdown include the same resource-control fields for pre-paper
+review.
+
+For quick scheduler-readiness smokes, prefer a saved action plan and omit
+`--final-planning-refresh` unless you intentionally want a longer supervised
+window for fresh account-action planning. The upstream research and
+paper-preflight path is resumable and fast when it uses saved campaign
+artifacts; the empty-batch final-planning refresh can be materially slower on
+large journals and should be treated as its own bounded scheduler chunk.
 
 The recurring pipeline scheduler is a thin command orchestrator, not a new
 trading authority. It validates the command templates before running them,

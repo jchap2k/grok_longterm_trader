@@ -27,6 +27,7 @@ def build_dashboard_manifest(
     price_history_file: str | Path = "",
     api_usage: str | Path = "",
     pipeline_summary: str | Path = "",
+    pipeline_scheduler_summary: str | Path = "",
     scheduler_policy: str | Path = "",
     committee_preset_policy: str | Path = "",
     decision_journal_path: str | Path = "",
@@ -49,6 +50,7 @@ def build_dashboard_manifest(
         "price_history_file": str(price_history_file or ""),
         "api_usage": str(api_usage or ""),
         "pipeline_summary": str(pipeline_summary or ""),
+        "pipeline_scheduler_summary": str(pipeline_scheduler_summary or ""),
         "scheduler_policy": str(scheduler_policy or ""),
         "committee_preset_policy": str(committee_preset_policy or ""),
         "decision_journal_path": str(decision_journal_path or ""),
@@ -162,6 +164,7 @@ def build_api_usage_from_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]
     base_dir = Path(str(manifest.get("_manifest_path") or ".")).parent
     explicit_usage = _resolve_manifest_path(base_dir, manifest.get("api_usage"))
     pipeline_summary = _resolve_manifest_path(base_dir, manifest.get("pipeline_summary"))
+    pipeline_scheduler_summary = _resolve_manifest_path(base_dir, manifest.get("pipeline_scheduler_summary"))
     source_path = explicit_usage or pipeline_summary
     if not source_path:
         return _empty_api_usage("api_usage_artifact_missing")
@@ -241,6 +244,7 @@ def build_pipeline_health_from_manifest(manifest: Mapping[str, Any]) -> dict[str
     """Build a read-only pipeline artifact health report from the manifest."""
     base_dir = Path(str(manifest.get("_manifest_path") or ".")).parent
     pipeline_summary = _resolve_manifest_path(base_dir, manifest.get("pipeline_summary"))
+    pipeline_scheduler_summary = _resolve_manifest_path(base_dir, manifest.get("pipeline_scheduler_summary"))
     if not pipeline_summary:
         return {
             "schema_version": 1,
@@ -263,7 +267,10 @@ def build_pipeline_health_from_manifest(manifest: Mapping[str, Any]) -> dict[str
             "rollup": {},
             "next_safe_action": "write_or_select_pipeline_summary_artifact",
         }
-    return build_pipeline_health_report(pipeline_summary=pipeline_summary)
+    return build_pipeline_health_report(
+        pipeline_summary=pipeline_summary,
+        pipeline_scheduler_summary=pipeline_scheduler_summary,
+    )
 
 
 def build_scheduler_policy_from_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:

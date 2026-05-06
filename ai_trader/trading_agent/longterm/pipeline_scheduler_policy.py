@@ -52,6 +52,13 @@ def build_pipeline_scheduler_policy_decision(
     if state.get("active_rules_sha256") and state.get("active_rules_sha256") != rules_hash:
         warnings.append("active_rules_changed")
 
+    resource_controls = _latest_resource_controls(pipeline_scheduler_summary or {})
+    resource_warning, resource_blocker = _resource_control_findings(resource_controls)
+    if resource_warning:
+        warnings.append(resource_warning)
+    if resource_blocker:
+        blockers.append(resource_blocker)
+
     review_summary = _build_review_summary(
         journal_db=journal_db,
         today=current_time,
@@ -63,32 +70,38 @@ def build_pipeline_scheduler_policy_decision(
     urgency = "low"
     next_safe_action = "refresh_account_and_dashboard_artifacts"
 
-    panic_reason = _panic_reason(regime, resolved_config)
-    if panic_reason:
-        recommended_mode = "panic_regime_reassessment"
+    if resource_blocker:
+        recommended_mode = "resource_control_review"
         urgency = "high"
-        next_safe_action = "rerun_market_regime_and_next_actions_no_submit"
-        reasons.append(panic_reason)
-    elif review_summary["actionable_review_count"]:
-        recommended_mode = "thesis_review_refresh"
-        urgency = "high" if review_summary["broken_count"] or review_summary["weakening_count"] else "medium"
-        next_safe_action = "run_review_refresh_before_new_buys"
-        reasons.append("review_pressure")
-    elif benchmark_guard.get("should_pause_new_buys"):
-        recommended_mode = "benchmark_reassessment"
-        urgency = "medium"
-        next_safe_action = "refresh_benchmark_outcomes_before_new_buys"
-        reasons.append("benchmark_guard_paused")
+        next_safe_action = "review_scheduler_resource_controls_before_running_paid_work"
+        reasons.append(str(resource_controls.get("bounded_reason") or resource_blocker))
     else:
-        cadence_mode, cadence_reason, cadence_action = _cadence_mode(
-            now=current_time,
-            state=state,
-            pipeline_scheduler_summary=pipeline_scheduler_summary or {},
-            config=resolved_config,
-        )
-        recommended_mode = cadence_mode
-        next_safe_action = cadence_action
-        reasons.append(cadence_reason)
+        panic_reason = _panic_reason(regime, resolved_config)
+        if panic_reason:
+            recommended_mode = "panic_regime_reassessment"
+            urgency = "high"
+            next_safe_action = "rerun_market_regime_and_next_actions_no_submit"
+            reasons.append(panic_reason)
+        elif review_summary["actionable_review_count"]:
+            recommended_mode = "thesis_review_refresh"
+            urgency = "high" if review_summary["broken_count"] or review_summary["weakening_count"] else "medium"
+            next_safe_action = "run_review_refresh_before_new_buys"
+            reasons.append("review_pressure")
+        elif benchmark_guard.get("should_pause_new_buys"):
+            recommended_mode = "benchmark_reassessment"
+            urgency = "medium"
+            next_safe_action = "refresh_benchmark_outcomes_before_new_buys"
+            reasons.append("benchmark_guard_paused")
+        else:
+            cadence_mode, cadence_reason, cadence_action = _cadence_mode(
+                now=current_time,
+                state=state,
+                pipeline_scheduler_summary=pipeline_scheduler_summary or {},
+                config=resolved_config,
+            )
+            recommended_mode = cadence_mode
+            next_safe_action = cadence_action
+            reasons.append(cadence_reason)
 
     return {
         "schema_version": 1,
@@ -103,6 +116,7 @@ def build_pipeline_scheduler_policy_decision(
         "affected_symbols": review_summary["affected_symbols"],
         "review_summary": review_summary,
         "benchmark_guard": benchmark_guard,
+        "resource_controls": resource_controls,
         "market_regime": regime,
         "active_rules_path": str(Path(rules_path)),
         "active_rules_sha256": rules_hash,
@@ -291,6 +305,25 @@ def _cadence_mode(
     if _is_stale(full_research_at, now=now, max_age_seconds=config.full_research_days * 86400):
         return "full_research_cycle", "full_research_stale", "run_full_research_cycle_no_submit"
     return "account_refresh_only", "dashboard_freshness_floor", "refresh_account_and_dashboard_artifacts"
+
+
+def _latest_resource_controls(summary: Mapping[str, Any]) -> dict[str, Any]:
+    runs = summary.get("runs") if isinstance(summary.get("runs"), list) else []
+    for run in reversed(runs):
+        if not isinstance(run, Mapping):
+            continue
+        controls = run.get("resource_controls")
+        if isinstance(controls, Mapping):
+            return dict(controls)
+    return {}
+
+
+def _resource_control_findings(controls: Mapping[str, Any]) -> tuple[str, str]:
+    if not controls:
+        return "", ""
+    warning = "paid_research_provider_planned" if bool(controls.get("paid_provider_enabled")) else ""
+    blocker = "scheduler_resource_controls_unbounded" if controls.get("bounded") is False else ""
+    return warning, blocker
 
 
 def _latest_completed_run_finished_at(summary: Mapping[str, Any]) -> datetime | None:

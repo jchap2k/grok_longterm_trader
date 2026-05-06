@@ -129,12 +129,38 @@ Scheduler-readiness features now exist:
   standard safe chain from core paths: fresh Alpaca paper snapshot, no-submit
   research-to-paper pipeline, advisory scheduler policy, and read-only
   account/dashboard refresh.
+- The safe preset can optionally pass through bounded upstream research
+  campaign, Perplexity, and generated committee batch controls; paid Perplexity
+  mode requires `--research-max-pass-count`, and generated committee execution
+  requires `--generated-committee-max-batches`.
+- Scheduler run records include a `resource_controls` summary that surfaces the
+  visible provider mode, paid-provider status, research/evidence/committee caps,
+  bounded status, and an intentionally unknown pre-run cost estimate.
+- Dashboard manifests can carry the top-level pipeline scheduler summary path,
+  allowing `/api/pipeline-health.json` and the Safety / Preflight card to show
+  scheduler resource-control state once the scheduler summary is finalized.
+- Scheduler policy treats unbounded paid/provider resource controls as a
+  high-urgency `resource_control_review` blocker, while bounded paid runs carry
+  a warning for operator awareness. Operator status bundles and markdown surface
+  the same controls.
+- Latest scheduler smoke:
+  `%TEMP%\longterm_scheduler_full_plan_smoke_20260506_130540`.
+  A print-plan run with bounded Perplexity plus generated committee controls
+  proved `resource_controls.bounded=true`, `provider_mode=perplexity`,
+  `research_max_pass_count=25`, `research_max_evidence_batches=2`, and
+  `generated_committee_max_batches=1` while `order_submission_enabled=false`.
+  A real no-submit operational run then completed from the current paper account
+  snapshot and saved action plan with all pipeline/preflight/dashboard refresh
+  stages passed, zero blockers, zero warnings, and
+  `/api/pipeline-health.json` exposing the same bounded resource controls.
 - Policy-state artifacts track `last_full_research_at`.
 - Committee batch runs are resumable and bounded by `--max-batches`.
 - Full research cadence has been proven through smaller chunks and completed
   all generated committee batches in a bounded run.
 - One longer full no-submit execute was intentionally stopped after wrapper
-  timeout; use longer supervised windows or smaller resumable chunks.
+  timeout while the empty-batch final-planning refresh was still running; use
+  longer supervised windows, existing saved action plans, or smaller resumable
+  chunks rather than assuming final planning is always a quick scheduler step.
 - Scheduler can refresh paper account state before downstream planning.
 
 Near-term scheduler target:

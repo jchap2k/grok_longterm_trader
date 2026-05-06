@@ -203,6 +203,70 @@ def test_dashboard_server_exposes_pipeline_health_from_manifest(tmp_path):
     assert api["order_submission_enabled"] is False
 
 
+def test_dashboard_server_exposes_scheduler_resource_controls_from_manifest(tmp_path):
+    action_plan = tmp_path / "action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    selected = tmp_path / "selected.json"
+    pipeline_summary = tmp_path / "pipeline_summary.json"
+    scheduler_summary = tmp_path / "pipeline_scheduler_summary.json"
+    manifest_path = tmp_path / "dashboard_manifest.json"
+    action_plan.write_text(json.dumps({"intents": []}), encoding="utf-8")
+    portfolio.write_text(json.dumps({"holdings": []}), encoding="utf-8")
+    selected.write_text(json.dumps([{"symbol": "MSFT"}]), encoding="utf-8")
+    pipeline_summary.write_text(
+        json.dumps(
+            {
+                "status": "completed",
+                "order_submission_enabled": False,
+                "artifact_paths": {"research_queue_selected": str(selected)},
+            }
+        ),
+        encoding="utf-8",
+    )
+    scheduler_summary.write_text(
+        json.dumps(
+            {
+                "status": "planned",
+                "runs": [
+                    {
+                        "status": "planned",
+                        "resource_controls": {
+                            "provider_mode": "perplexity",
+                            "paid_provider_enabled": True,
+                            "research_max_pass_count": 25,
+                            "generated_committee_batches": True,
+                            "generated_committee_max_batches": 1,
+                            "bounded": True,
+                            "estimated_cost_usd": "unknown",
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest_path.write_text(
+        json.dumps(
+            build_dashboard_manifest(
+                action_plan=action_plan,
+                portfolio_state=portfolio,
+                pipeline_summary=pipeline_summary,
+                pipeline_scheduler_summary=scheduler_summary,
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    status, content_type, body = resolve_dashboard_request(manifest_path, "/api/pipeline-health.json")
+    api = json.loads(body.decode("utf-8"))
+
+    assert status == 200
+    assert content_type == "application/json; charset=utf-8"
+    assert api["resource_controls"]["provider_mode"] == "perplexity"
+    assert api["resource_controls"]["generated_committee_max_batches"] == 1
+    assert api["resource_controls"]["bounded"] is True
+
+
 def test_live_dashboard_filters_protected_symbol_from_actionable_candidates(tmp_path):
     action_plan = tmp_path / "action_plan.json"
     portfolio = tmp_path / "portfolio.json"

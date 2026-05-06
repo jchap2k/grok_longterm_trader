@@ -9,6 +9,11 @@ from dataclasses import asdict
 from pathlib import Path
 
 from longterm.orchestration_cli import DEFAULT_PROFILE_PATH
+from longterm.perplexity_research_enrichment import (
+    DEFAULT_PERPLEXITY_API_URL,
+    DEFAULT_PERPLEXITY_MAX_TOKENS,
+    DEFAULT_PERPLEXITY_MODEL,
+)
 from longterm.pipeline_scheduler import (
     PipelineSchedulerConfig,
     PipelineSchedulerInputs,
@@ -43,6 +48,53 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--final-planning-refresh", action="store_true")
     parser.add_argument("--planning-capital-from-portfolio-state", action="store_true")
     parser.add_argument("--expected-cash-from-portfolio-state", action="store_true")
+    research_source = parser.add_mutually_exclusive_group()
+    research_source.add_argument("--research-source-file", default="")
+    research_source.add_argument("--research-source-url", default="")
+    parser.add_argument("--research-source", default="")
+    parser.add_argument("--research-campaign-dir", default="")
+    parser.add_argument("--research-resume", action="store_true")
+    parser.add_argument(
+        "--research-run-until",
+        choices=["scan_ready", "evidence_ready", "research_queue_ready"],
+        default="",
+    )
+    parser.add_argument("--research-watchlist-limit", type=int, default=None)
+    parser.add_argument("--research-universe-batch-size", type=int, default=None)
+    parser.add_argument("--research-top-percent", type=float, default=None)
+    parser.add_argument("--research-min-pass-count", type=int, default=None)
+    parser.add_argument("--research-max-pass-count", type=int, default=None)
+    parser.add_argument("--research-min-coverage-percent-for-enrichment", type=float, default=None)
+    parser.add_argument("--research-max-fundamental-fetches", type=int, default=None)
+    parser.add_argument("--research-fundamental-fetch-chunk-size", type=int, default=None)
+    parser.add_argument("--research-evidence-batch-size", type=int, default=None)
+    parser.add_argument("--research-max-evidence-batches", type=int, default=None)
+    parser.add_argument("--research-rate-limit-batch-size", type=int, default=None)
+    parser.add_argument("--research-rate-limit-pause-seconds", type=float, default=None)
+    parser.add_argument("--research-campaign-batch-pause-seconds", type=float, default=None)
+    parser.add_argument("--polygon-news", action="store_true")
+    parser.add_argument("--research-news-cache-path", default="")
+    provider = parser.add_mutually_exclusive_group()
+    provider.add_argument("--xai-grok", action="store_true")
+    provider.add_argument("--skip-grok", action="store_true")
+    provider.add_argument("--perplexity-research", action="store_true")
+    parser.add_argument("--perplexity-api-key-env", default="PERPLEXITY_API_KEY")
+    parser.add_argument("--perplexity-model", default=DEFAULT_PERPLEXITY_MODEL)
+    parser.add_argument("--perplexity-api-url", default=DEFAULT_PERPLEXITY_API_URL)
+    parser.add_argument("--perplexity-timeout-seconds", type=float, default=120.0)
+    parser.add_argument("--perplexity-max-tokens", type=int, default=DEFAULT_PERPLEXITY_MAX_TOKENS)
+    parser.add_argument("--perplexity-search-context-size", choices=["low", "medium", "high"], default="low")
+    parser.add_argument("--perplexity-credits-purchased-to-date", type=float, default=None)
+    parser.add_argument("--selection-top-percent", type=float, default=None)
+    parser.add_argument("--selection-min-count", type=int, default=None)
+    parser.add_argument("--selection-max-count", type=int, default=None)
+    parser.add_argument("--recent-research-symbols-file", default="")
+    parser.add_argument("--research-as-of-date", default="")
+    parser.add_argument("--research-batch-size", type=int, default=None)
+    parser.add_argument("--run-generated-committee-batches", action="store_true")
+    parser.add_argument("--no-generated-committee-resume", action="store_true")
+    parser.add_argument("--generated-committee-max-batches", type=int, default=None)
+    parser.add_argument("--committee-batch-dir", default="")
     parser.add_argument(
         "--rules-path",
         default=str(Path(__file__).resolve().parents[2] / "rules" / "active_rules.txt"),
@@ -73,9 +125,27 @@ def _append_optional_path(parts: list[str], flag: str, value: str) -> None:
         parts.extend([flag, _quote(value)])
 
 
+def _append_optional_value(parts: list[str], flag: str, value: object | None) -> None:
+    if value is not None and value != "":
+        parts.extend([flag, _quote(str(value))])
+
+
 def _append_optional_flag(parts: list[str], flag: str, enabled: bool) -> None:
     if enabled:
         parts.append(flag)
+
+
+def _validate_ongoing_no_submit_research_bounds(args: argparse.Namespace) -> None:
+    if (args.perplexity_research or args.xai_grok) and args.research_max_pass_count is None:
+        raise ValueError(
+            "Paid research provider mode with --preset ongoing-no-submit requires "
+            "--research-max-pass-count to bound paid enrichment."
+        )
+    if args.run_generated_committee_batches and args.generated_committee_max_batches is None:
+        raise ValueError(
+            "--run-generated-committee-batches with --preset ongoing-no-submit requires "
+            "--generated-committee-max-batches to bound LLM committee work."
+        )
 
 
 def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, str]:
@@ -84,6 +154,7 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
     ledger_db = _require_preset_path(args, "ledger_db", "--ledger-db")
     action_plan = _require_preset_path(args, "action_plan", "--action-plan")
     profile_config = args.profile_config or str(DEFAULT_PROFILE_PATH)
+    _validate_ongoing_no_submit_research_bounds(args)
 
     pre_refresh = " ".join(
         [
@@ -113,6 +184,88 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
         _quote(profile_config),
         "--json",
     ]
+    _append_optional_path(pipeline_parts, "--research-source-file", args.research_source_file)
+    _append_optional_path(pipeline_parts, "--research-source-url", args.research_source_url)
+    _append_optional_value(pipeline_parts, "--research-source", args.research_source)
+    _append_optional_path(pipeline_parts, "--research-campaign-dir", args.research_campaign_dir)
+    _append_optional_flag(pipeline_parts, "--research-resume", args.research_resume)
+    _append_optional_value(pipeline_parts, "--research-run-until", args.research_run_until)
+    _append_optional_value(pipeline_parts, "--research-watchlist-limit", args.research_watchlist_limit)
+    _append_optional_value(pipeline_parts, "--research-universe-batch-size", args.research_universe_batch_size)
+    _append_optional_value(pipeline_parts, "--research-top-percent", args.research_top_percent)
+    _append_optional_value(pipeline_parts, "--research-min-pass-count", args.research_min_pass_count)
+    _append_optional_value(pipeline_parts, "--research-max-pass-count", args.research_max_pass_count)
+    _append_optional_value(
+        pipeline_parts,
+        "--research-min-coverage-percent-for-enrichment",
+        args.research_min_coverage_percent_for_enrichment,
+    )
+    _append_optional_value(
+        pipeline_parts,
+        "--research-max-fundamental-fetches",
+        args.research_max_fundamental_fetches,
+    )
+    _append_optional_value(
+        pipeline_parts,
+        "--research-fundamental-fetch-chunk-size",
+        args.research_fundamental_fetch_chunk_size,
+    )
+    _append_optional_value(pipeline_parts, "--research-evidence-batch-size", args.research_evidence_batch_size)
+    _append_optional_value(pipeline_parts, "--research-max-evidence-batches", args.research_max_evidence_batches)
+    _append_optional_value(pipeline_parts, "--research-rate-limit-batch-size", args.research_rate_limit_batch_size)
+    _append_optional_value(
+        pipeline_parts,
+        "--research-rate-limit-pause-seconds",
+        args.research_rate_limit_pause_seconds,
+    )
+    _append_optional_value(
+        pipeline_parts,
+        "--research-campaign-batch-pause-seconds",
+        args.research_campaign_batch_pause_seconds,
+    )
+    _append_optional_flag(pipeline_parts, "--polygon-news", args.polygon_news)
+    _append_optional_path(pipeline_parts, "--research-news-cache-path", args.research_news_cache_path)
+    _append_optional_flag(pipeline_parts, "--xai-grok", args.xai_grok)
+    _append_optional_flag(pipeline_parts, "--skip-grok", args.skip_grok)
+    _append_optional_flag(pipeline_parts, "--perplexity-research", args.perplexity_research)
+    if args.perplexity_research:
+        _append_optional_value(pipeline_parts, "--perplexity-api-key-env", args.perplexity_api_key_env)
+        _append_optional_value(pipeline_parts, "--perplexity-model", args.perplexity_model)
+        _append_optional_value(pipeline_parts, "--perplexity-api-url", args.perplexity_api_url)
+        _append_optional_value(pipeline_parts, "--perplexity-timeout-seconds", args.perplexity_timeout_seconds)
+        _append_optional_value(pipeline_parts, "--perplexity-max-tokens", args.perplexity_max_tokens)
+        _append_optional_value(
+            pipeline_parts,
+            "--perplexity-search-context-size",
+            args.perplexity_search_context_size,
+        )
+        _append_optional_value(
+            pipeline_parts,
+            "--perplexity-credits-purchased-to-date",
+            args.perplexity_credits_purchased_to_date,
+        )
+    _append_optional_value(pipeline_parts, "--selection-top-percent", args.selection_top_percent)
+    _append_optional_value(pipeline_parts, "--selection-min-count", args.selection_min_count)
+    _append_optional_value(pipeline_parts, "--selection-max-count", args.selection_max_count)
+    _append_optional_path(pipeline_parts, "--recent-research-symbols-file", args.recent_research_symbols_file)
+    _append_optional_value(pipeline_parts, "--research-as-of-date", args.research_as_of_date)
+    _append_optional_value(pipeline_parts, "--research-batch-size", args.research_batch_size)
+    _append_optional_flag(
+        pipeline_parts,
+        "--run-generated-committee-batches",
+        args.run_generated_committee_batches,
+    )
+    _append_optional_flag(
+        pipeline_parts,
+        "--no-generated-committee-resume",
+        args.no_generated_committee_resume,
+    )
+    _append_optional_value(
+        pipeline_parts,
+        "--generated-committee-max-batches",
+        args.generated_committee_max_batches,
+    )
+    _append_optional_path(pipeline_parts, "--committee-batch-dir", args.committee_batch_dir)
     _append_optional_path(pipeline_parts, "--market-regime-file", args.market_regime_file)
     _append_optional_path(pipeline_parts, "--price-map", args.price_map)
     _append_optional_flag(pipeline_parts, "--skip-price-map", args.skip_price_map)
@@ -167,6 +320,8 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
         _quote(ledger_db),
         "--pipeline-summary",
         "{pipeline_summary}",
+        "--pipeline-scheduler-summary",
+        "{scheduler_summary}",
         "--output-dir",
         "{account_refresh_output_dir}",
         "--dashboard-manifest-output",

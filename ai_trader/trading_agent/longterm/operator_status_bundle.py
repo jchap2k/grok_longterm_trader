@@ -156,6 +156,12 @@ def _agent_next_step(
         "submitted_order_count": submitted_orders,
         "scheduler_policy_mode": str(scheduler_policy_summary.get("recommended_mode") or ""),
         "scheduler_policy_urgency": str(scheduler_policy_summary.get("urgency") or ""),
+        "scheduler_resource_provider_mode": str(
+            (scheduler_policy_summary.get("resource_controls") or {}).get("provider_mode") or ""
+        ),
+        "scheduler_resource_bounded": bool(
+            (scheduler_policy_summary.get("resource_controls") or {}).get("bounded")
+        ),
         "committee_recommended_preset": str(committee_preset_summary.get("recommended_preset") or ""),
         "committee_escalation_required": bool(committee_preset_summary.get("escalation_required")),
         "order_submission_enabled": False,
@@ -326,8 +332,9 @@ def _scheduler_policy_summary(payload: Mapping[str, Any] | None) -> dict[str, An
             "warnings": [],
             "blockers": [],
             "affected_symbols": [],
-            "next_safe_action": "",
-            "order_submission_enabled": False,
+        "next_safe_action": "",
+        "resource_controls": {},
+        "order_submission_enabled": False,
         }
     return {
         "available": True,
@@ -339,6 +346,9 @@ def _scheduler_policy_summary(payload: Mapping[str, Any] | None) -> dict[str, An
         "blockers": [str(value) for value in (payload.get("blockers") or [])],
         "affected_symbols": [str(value).upper() for value in (payload.get("affected_symbols") or [])],
         "next_safe_action": str(payload.get("next_safe_action") or "unknown"),
+        "resource_controls": dict(payload.get("resource_controls") or {})
+        if isinstance(payload.get("resource_controls"), Mapping)
+        else {},
         "order_submission_enabled": False,
     }
 
@@ -367,6 +377,20 @@ def _scheduler_policy_markdown_lines(summary: Mapping[str, Any]) -> list[str]:
     blockers = summary.get("blockers") or []
     lines.extend(["", "### Scheduler Blockers", ""])
     lines.extend(f"- {_cell(str(blocker))}" for blocker in blockers) if blockers else lines.append("- none")
+    controls = summary.get("resource_controls") or {}
+    if isinstance(controls, Mapping) and controls:
+        lines.extend(
+            [
+                "",
+                "### Scheduler Resource Controls",
+                "",
+                f"- Provider: `{_cell(str(controls.get('provider_mode') or 'unknown'))}`",
+                f"- Paid provider enabled: `{str(bool(controls.get('paid_provider_enabled'))).lower()}`",
+                f"- Research max pass count: `{_cell(str(controls.get('research_max_pass_count') if controls.get('research_max_pass_count') is not None else 'n/a'))}`",
+                f"- Generated committee max batches: `{_cell(str(controls.get('generated_committee_max_batches') if controls.get('generated_committee_max_batches') is not None else 'n/a'))}`",
+                f"- Bounded: `{str(bool(controls.get('bounded'))).lower()}`",
+            ]
+        )
     return lines
 
 

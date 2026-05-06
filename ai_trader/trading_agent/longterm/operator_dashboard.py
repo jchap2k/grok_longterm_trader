@@ -1377,6 +1377,10 @@ def _pipeline_health_panel() -> str:
         "<div><span>Missing</span><strong data-pipeline-health-missing>n/a</strong></div>"
         "<div><span>Malformed</span><strong data-pipeline-health-malformed>n/a</strong></div>"
         "<div><span>Selected</span><strong data-pipeline-health-selected>n/a</strong></div>"
+        "<div><span>Provider</span><strong data-pipeline-resource-provider>n/a</strong></div>"
+        "<div><span>Research Cap</span><strong data-pipeline-resource-research-cap>n/a</strong></div>"
+        "<div><span>Committee Cap</span><strong data-pipeline-resource-committee-cap>n/a</strong></div>"
+        "<div><span>Bounded</span><strong data-pipeline-resource-bounded>n/a</strong></div>"
         "</div>"
         "<p data-pipeline-health-message>Serve the dashboard locally to check saved pipeline artifacts from "
         "<code>/api/pipeline-health.json</code>.</p>"
@@ -1793,6 +1797,10 @@ def _pipeline_health_refresh_script() -> str:
   const missingNode = card.querySelector("[data-pipeline-health-missing]");
   const malformedNode = card.querySelector("[data-pipeline-health-malformed]");
   const selectedNode = card.querySelector("[data-pipeline-health-selected]");
+  const providerNode = card.querySelector("[data-pipeline-resource-provider]");
+  const researchCapNode = card.querySelector("[data-pipeline-resource-research-cap]");
+  const committeeCapNode = card.querySelector("[data-pipeline-resource-committee-cap]");
+  const boundedNode = card.querySelector("[data-pipeline-resource-bounded]");
   const messageNode = card.querySelector("[data-pipeline-health-message]");
   const updatedNode = card.querySelector("[data-pipeline-health-updated]");
   const titleCase = (value) => String(value || "unknown").replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
@@ -1800,10 +1808,15 @@ def _pipeline_health_refresh_script() -> str:
     const health = payload.health || {};
     const rollup = payload.rollup || {};
     const selection = rollup.research_selection || {};
+    const controls = payload.resource_controls || {};
     if (statusNode) statusNode.textContent = titleCase(payload.status || health.status);
     if (missingNode) missingNode.textContent = String(health.missing_count ?? 0);
     if (malformedNode) malformedNode.textContent = String(health.malformed_count ?? 0);
     if (selectedNode) selectedNode.textContent = String(selection.selected_count ?? 0);
+    if (providerNode) providerNode.textContent = titleCase(controls.provider_mode || "unavailable");
+    if (researchCapNode) researchCapNode.textContent = controls.research_max_pass_count == null ? "n/a" : String(controls.research_max_pass_count);
+    if (committeeCapNode) committeeCapNode.textContent = controls.generated_committee_max_batches == null ? "n/a" : String(controls.generated_committee_max_batches);
+    if (boundedNode) boundedNode.textContent = controls.bounded == null ? "n/a" : (controls.bounded ? "Yes" : "No");
     if (messageNode) messageNode.textContent = payload.next_safe_action ? titleCase(payload.next_safe_action) : "Pipeline health loaded.";
     if (updatedNode) updatedNode.textContent = `Checked from local pipeline endpoint: ${payload.pipeline_status || "unknown"}`;
     card.dataset.pipelineHealthState = String(payload.status || health.status || "unknown");

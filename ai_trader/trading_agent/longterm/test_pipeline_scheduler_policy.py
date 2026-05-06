@@ -187,6 +187,68 @@ def test_scheduler_policy_infers_account_refresh_freshness_from_scheduler_summar
     assert "dashboard_freshness_floor" in decision["reasons"]
 
 
+def test_scheduler_policy_blocks_unbounded_paid_resource_controls(tmp_path):
+    scheduler_summary = {
+        "runs": [
+            {
+                "status": "planned",
+                "finished_at": (NOW - timedelta(minutes=10)).isoformat().replace("+00:00", "Z"),
+                "resource_controls": {
+                    "provider_mode": "perplexity",
+                    "paid_provider_enabled": True,
+                    "research_max_pass_count": None,
+                    "bounded": False,
+                    "bounded_reason": "missing_research_max_pass_count",
+                },
+            }
+        ]
+    }
+
+    decision = build_pipeline_scheduler_policy_decision(
+        rules_path=_rules(tmp_path / "active_rules.txt"),
+        now=NOW,
+        pipeline_scheduler_summary=scheduler_summary,
+        policy_state=_fresh_state(),
+    )
+
+    assert decision["recommended_mode"] == "resource_control_review"
+    assert decision["urgency"] == "high"
+    assert "scheduler_resource_controls_unbounded" in decision["blockers"]
+    assert "paid_research_provider_planned" in decision["warnings"]
+    assert decision["resource_controls"]["provider_mode"] == "perplexity"
+    assert decision["next_safe_action"] == "review_scheduler_resource_controls_before_running_paid_work"
+
+
+def test_scheduler_policy_warns_for_bounded_paid_resource_controls(tmp_path):
+    scheduler_summary = {
+        "runs": [
+            {
+                "status": "planned",
+                "finished_at": (NOW - timedelta(minutes=10)).isoformat().replace("+00:00", "Z"),
+                "resource_controls": {
+                    "provider_mode": "perplexity",
+                    "paid_provider_enabled": True,
+                    "research_max_pass_count": 25,
+                    "bounded": True,
+                    "bounded_reason": "explicit_caps_present",
+                },
+            }
+        ]
+    }
+
+    decision = build_pipeline_scheduler_policy_decision(
+        rules_path=_rules(tmp_path / "active_rules.txt"),
+        now=NOW,
+        pipeline_scheduler_summary=scheduler_summary,
+        policy_state=_fresh_state(),
+    )
+
+    assert decision["recommended_mode"] == "account_refresh_only"
+    assert "paid_research_provider_planned" in decision["warnings"]
+    assert "scheduler_resource_controls_unbounded" not in decision["blockers"]
+    assert decision["resource_controls"]["research_max_pass_count"] == 25
+
+
 def test_scheduler_policy_ignores_failed_account_refresh_when_inferring_freshness(tmp_path):
     scheduler_summary = {
         "runs": [

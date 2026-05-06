@@ -23,6 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--price-history-file", default="")
     parser.add_argument("--api-usage", default="")
     parser.add_argument("--pipeline-summary", default="")
+    parser.add_argument("--pipeline-scheduler-summary", default="")
     parser.add_argument("--scheduler-policy", default="")
     parser.add_argument("--committee-preset-policy", default="")
     parser.add_argument("--decision-journal", default="")
@@ -49,6 +50,7 @@ def run_cli(args: argparse.Namespace, *, server_func=serve_dashboard_manifest) -
             price_history_file=args.price_history_file,
             api_usage=args.api_usage,
             pipeline_summary=args.pipeline_summary,
+            pipeline_scheduler_summary=args.pipeline_scheduler_summary,
             scheduler_policy=args.scheduler_policy,
             committee_preset_policy=args.committee_preset_policy,
             decision_journal_path=args.decision_journal,

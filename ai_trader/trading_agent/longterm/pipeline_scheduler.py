@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 import subprocess
 import time
 from dataclasses import asdict, dataclass, field
@@ -88,6 +89,7 @@ class PipelineSchedulerRunRecord:
     account_refresh_stdout_path: str = ""
     account_refresh_stderr_path: str = ""
     blocker: str = ""
+    resource_controls: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -321,6 +323,7 @@ def _run_one_scheduler_cycle(
         if inputs.account_refresh_command_template
         else ""
     )
+    resource_controls = derive_scheduler_resource_controls(pipeline_command)
     if config.print_plan_only:
         return PipelineSchedulerRunRecord(
             run_number=run_number,
@@ -339,6 +342,7 @@ def _run_one_scheduler_cycle(
             scheduler_policy_path=str(scheduler_policy_path) if policy_command else "",
             scheduler_policy_command=policy_command,
             account_refresh_command=refresh_command,
+            resource_controls=resource_controls,
         )
 
     pre_refresh_exit_code: int | None = None
@@ -374,6 +378,7 @@ def _run_one_scheduler_cycle(
                 scheduler_policy_command=policy_command,
                 account_refresh_command=refresh_command,
                 blocker="pre_pipeline_refresh_command_failed",
+                resource_controls=resource_controls,
             )
 
     pipeline_stdout_path = run_dir / "pipeline_command_stdout.txt"
@@ -408,6 +413,7 @@ def _run_one_scheduler_cycle(
             scheduler_policy_command=policy_command,
             account_refresh_command=refresh_command,
             blocker="pipeline_command_failed",
+            resource_controls=resource_controls,
         )
 
     committee_exit_code: int | None = None
@@ -449,6 +455,7 @@ def _run_one_scheduler_cycle(
                 scheduler_policy_command=policy_command,
                 account_refresh_command=refresh_command,
                 blocker="committee_preset_policy_command_failed",
+                resource_controls=resource_controls,
             )
 
     policy_exit_code: int | None = None
@@ -493,6 +500,7 @@ def _run_one_scheduler_cycle(
                 scheduler_policy_stderr_path=policy_stderr_path,
                 account_refresh_command=refresh_command,
                 blocker="scheduler_policy_command_failed",
+                resource_controls=resource_controls,
             )
 
     refresh_exit_code: int | None = None
@@ -540,6 +548,7 @@ def _run_one_scheduler_cycle(
                 account_refresh_stdout_path=refresh_stdout_path,
                 account_refresh_stderr_path=refresh_stderr_path,
                 blocker="account_refresh_command_failed",
+                resource_controls=resource_controls,
             )
 
     return PipelineSchedulerRunRecord(
@@ -574,7 +583,60 @@ def _run_one_scheduler_cycle(
         account_refresh_exit_code=refresh_exit_code,
         account_refresh_stdout_path=refresh_stdout_path,
         account_refresh_stderr_path=refresh_stderr_path,
+        resource_controls=resource_controls,
     )
+
+
+def derive_scheduler_resource_controls(pipeline_command: str) -> dict[str, object]:
+    """Summarize provider and batch caps visible in a rendered pipeline command."""
+    tokens = _split_command(pipeline_command)
+    provider_mode = "free_or_skip_grok"
+    if "--perplexity-research" in tokens:
+        provider_mode = "perplexity"
+    elif "--xai-grok" in tokens:
+        provider_mode = "xai_grok"
+    elif "--skip-grok" in tokens:
+        provider_mode = "free_or_skip_grok"
+
+    research_max_pass_count = _int_flag(tokens, "--research-max-pass-count")
+    generated_committee_batches = "--run-generated-committee-batches" in tokens
+    generated_committee_max_batches = _int_flag(tokens, "--generated-committee-max-batches")
+    paid_provider_enabled = provider_mode in {"perplexity", "xai_grok"}
+    missing_bounds: list[str] = []
+    if paid_provider_enabled and research_max_pass_count is None:
+        missing_bounds.append("research_max_pass_count")
+    if generated_committee_batches and generated_committee_max_batches is None:
+        missing_bounds.append("generated_committee_max_batches")
+
+    return {
+        "schema_version": 1,
+        "provider_mode": provider_mode,
+        "paid_provider_enabled": paid_provider_enabled,
+        "research_source": _string_flag(tokens, "--research-source") or "",
+        "research_source_file_present": "--research-source-file" in tokens,
+        "research_source_url_present": "--research-source-url" in tokens,
+        "research_campaign_dir_present": "--research-campaign-dir" in tokens,
+        "research_resume": "--research-resume" in tokens,
+        "research_run_until": _string_flag(tokens, "--research-run-until") or "",
+        "research_max_pass_count": research_max_pass_count,
+        "research_evidence_batch_size": _int_flag(tokens, "--research-evidence-batch-size"),
+        "research_max_evidence_batches": _int_flag(tokens, "--research-max-evidence-batches"),
+        "research_rate_limit_batch_size": _int_flag(tokens, "--research-rate-limit-batch-size"),
+        "research_rate_limit_pause_seconds": _float_flag(tokens, "--research-rate-limit-pause-seconds"),
+        "polygon_news": "--polygon-news" in tokens,
+        "perplexity_search_context_size": (
+            _string_flag(tokens, "--perplexity-search-context-size") if provider_mode == "perplexity" else ""
+        ),
+        "perplexity_max_tokens": _int_flag(tokens, "--perplexity-max-tokens") if provider_mode == "perplexity" else None,
+        "perplexity_credits_purchased_to_date": (
+            _float_flag(tokens, "--perplexity-credits-purchased-to-date") if provider_mode == "perplexity" else None
+        ),
+        "generated_committee_batches": generated_committee_batches,
+        "generated_committee_max_batches": generated_committee_max_batches,
+        "bounded": not missing_bounds,
+        "bounded_reason": "explicit_caps_present" if not missing_bounds else "missing_" + "_and_".join(missing_bounds),
+        "estimated_cost_usd": "unknown",
+    }
 
 
 def _prepare_pipeline_command(command_template: str, context: dict[str, str]) -> str:
@@ -586,6 +648,47 @@ def _prepare_pipeline_command(command_template: str, context: dict[str, str]) ->
     if "{" in command or "}" in command:
         raise ValueError(f"Unresolved placeholder in scheduler command: {command}")
     return command
+
+
+def _split_command(command: str) -> list[str]:
+    try:
+        return [token.strip('"') for token in shlex.split(command, posix=False)]
+    except ValueError:
+        return command.split()
+
+
+def _string_flag(tokens: list[str], flag: str) -> str | None:
+    try:
+        index = tokens.index(flag)
+    except ValueError:
+        return None
+    next_index = index + 1
+    if next_index >= len(tokens):
+        return None
+    value = tokens[next_index]
+    if value.startswith("--"):
+        return None
+    return value
+
+
+def _int_flag(tokens: list[str], flag: str) -> int | None:
+    value = _string_flag(tokens, flag)
+    if value is None:
+        return None
+    try:
+        return int(float(value))
+    except ValueError:
+        return None
+
+
+def _float_flag(tokens: list[str], flag: str) -> float | None:
+    value = _string_flag(tokens, flag)
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
 
 
 def _prepare_account_refresh_command(
@@ -748,6 +851,7 @@ __all__ = [
     "PipelineSchedulerInputs",
     "PipelineSchedulerRunRecord",
     "PipelineSchedulerSummary",
+    "derive_scheduler_resource_controls",
     "run_pipeline_scheduler",
     "validate_scheduler_command_template",
     "write_pipeline_scheduler_summary",

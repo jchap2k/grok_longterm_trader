@@ -80,6 +80,7 @@ def test_refresh_paper_account_artifacts_writes_current_portfolio_dashboard_and_
     market = tmp_path / "market.json"
     prices = tmp_path / "prices.json"
     pipeline_summary = tmp_path / "pipeline_summary.json"
+    pipeline_scheduler_summary = tmp_path / "pipeline_scheduler_summary.json"
     scheduler_policy = tmp_path / "scheduler_policy.json"
     committee_preset_policy = tmp_path / "committee_preset_policy.json"
     output_dir = tmp_path / "refresh"
@@ -115,6 +116,21 @@ def test_refresh_paper_account_artifacts_writes_current_portfolio_dashboard_and_
         {
             "status": "completed",
             "artifact_paths": {"paper_preview": str(tmp_path / "paper_preview.json")},
+        },
+    )
+    _write_json(
+        pipeline_scheduler_summary,
+        {
+            "status": "planned",
+            "runs": [
+                {
+                    "resource_controls": {
+                        "provider_mode": "perplexity",
+                        "research_max_pass_count": 25,
+                        "bounded": True,
+                    }
+                }
+            ],
         },
     )
     _write_json(
@@ -159,6 +175,7 @@ def test_refresh_paper_account_artifacts_writes_current_portfolio_dashboard_and_
         evidence_file=evidence,
         price_history_file=prices,
         pipeline_summary_path=pipeline_summary,
+        pipeline_scheduler_summary_path=pipeline_scheduler_summary,
         scheduler_policy_path=scheduler_policy,
         committee_preset_policy_path=committee_preset_policy,
         dashboard_manifest_output=manifest,
@@ -197,9 +214,11 @@ def test_refresh_paper_account_artifacts_writes_current_portfolio_dashboard_and_
     assert Path(summary["paper_outcome_summary_path"]).exists()
     manifest_payload = json.loads(manifest.read_text(encoding="utf-8"))
     assert manifest_payload["pipeline_summary"] == str(pipeline_summary)
+    assert manifest_payload["pipeline_scheduler_summary"] == str(pipeline_scheduler_summary)
     assert manifest_payload["scheduler_policy"] == str(scheduler_policy)
     assert manifest_payload["committee_preset_policy"] == str(committee_preset_policy)
     assert summary["components"]["pipeline_summary"]["exists"] is True
+    assert summary["components"]["pipeline_scheduler_summary"]["exists"] is True
     assert summary["components"]["scheduler_policy"]["exists"] is True
     assert summary["components"]["committee_preset_policy"]["exists"] is True
     status_bundle = json.loads(Path(summary["operator_status_path"]).read_text(encoding="utf-8"))

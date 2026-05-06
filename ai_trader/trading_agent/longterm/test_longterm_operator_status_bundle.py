@@ -310,6 +310,39 @@ def test_operator_status_bundle_surfaces_scheduler_policy_next_safe_action(tmp_p
     assert "- active_rules_changed" in markdown
 
 
+def test_operator_status_bundle_surfaces_scheduler_resource_controls(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    scheduler_policy = {
+        "mode": "pipeline_scheduler_policy",
+        "recommended_mode": "resource_control_review",
+        "urgency": "high",
+        "reasons": ["missing_research_max_pass_count"],
+        "warnings": ["paid_research_provider_planned"],
+        "blockers": ["scheduler_resource_controls_unbounded"],
+        "resource_controls": {
+            "provider_mode": "perplexity",
+            "paid_provider_enabled": True,
+            "research_max_pass_count": 25,
+            "generated_committee_max_batches": 1,
+            "bounded": True,
+        },
+        "next_safe_action": "review_scheduler_resource_controls_before_running_paid_work",
+        "order_submission_enabled": False,
+    }
+
+    bundle = build_operator_status_bundle(journal, scheduler_policy=scheduler_policy)
+    markdown = build_operator_status_markdown(bundle)
+
+    assert bundle["scheduler_policy_summary"]["resource_controls"]["provider_mode"] == "perplexity"
+    assert bundle["scheduler_policy_summary"]["resource_controls"]["research_max_pass_count"] == 25
+    assert bundle["agent_next_step"]["scheduler_resource_provider_mode"] == "perplexity"
+    assert bundle["agent_next_step"]["scheduler_resource_bounded"] is True
+    assert "### Scheduler Resource Controls" in markdown
+    assert "- Provider: `perplexity`" in markdown
+    assert "- Research max pass count: `25`" in markdown
+    assert "- Bounded: `true`" in markdown
+
+
 def test_operator_status_bundle_surfaces_committee_preset_policy(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     committee_policy = {

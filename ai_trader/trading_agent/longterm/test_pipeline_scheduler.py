@@ -855,6 +855,11 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_safe_commands(t
     assert "--submit-paper-orders" not in all_commands
     assert "--confirm-paper-submit" not in all_commands
     assert "longterm_paper_execution.py" not in all_commands
+    controls = run["resource_controls"]
+    assert controls["provider_mode"] == "free_or_skip_grok"
+    assert controls["paid_provider_enabled"] is False
+    assert controls["generated_committee_batches"] is False
+    assert controls["bounded"] is True
 
 
 def test_pipeline_scheduler_cli_ongoing_no_submit_preset_requires_core_paths(tmp_path):
@@ -875,6 +880,190 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_requires_core_paths(tmp
                     str(tmp_path / "account_action_plan.json"),
                     "--ledger-db",
                     str(tmp_path / "paper_ledger.db"),
+                    "--print-plan-only",
+                ]
+            )
+        )
+
+
+def test_pipeline_scheduler_cli_ongoing_no_submit_preset_passes_bounded_research_options(tmp_path, capsys):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    source_file = tmp_path / "universe.csv"
+    source_file.write_text("symbol\nAAPL\n", encoding="utf-8")
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--preset",
+                "ongoing-no-submit",
+                "--output-dir",
+                str(tmp_path / "scheduler"),
+                "--rules-path",
+                str(rules_path),
+                "--journal-db",
+                str(tmp_path / "journal.db"),
+                "--ledger-db",
+                str(tmp_path / "paper_ledger.db"),
+                "--action-plan",
+                str(tmp_path / "account_action_plan.json"),
+                "--research-source-file",
+                str(source_file),
+                "--research-source",
+                "manual_watchlist",
+                "--research-campaign-dir",
+                str(tmp_path / "campaign"),
+                "--research-resume",
+                "--research-run-until",
+                "research_queue_ready",
+                "--research-max-pass-count",
+                "25",
+                "--research-evidence-batch-size",
+                "10",
+                "--research-max-evidence-batches",
+                "2",
+                "--perplexity-research",
+                "--perplexity-model",
+                "sonar",
+                "--perplexity-max-tokens",
+                "3500",
+                "--perplexity-search-context-size",
+                "low",
+                "--perplexity-credits-purchased-to-date",
+                "12.5",
+                "--run-generated-committee-batches",
+                "--generated-committee-max-batches",
+                "1",
+                "--print-plan-only",
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    pipeline_command = printed["runs"][0]["pipeline_command"]
+    controls = printed["runs"][0]["resource_controls"]
+    assert code == 0
+    assert "--research-source-file" in pipeline_command
+    assert str(source_file) in pipeline_command
+    assert "--research-source manual_watchlist" in pipeline_command
+    assert "--research-campaign-dir" in pipeline_command
+    assert "--research-resume" in pipeline_command
+    assert "--research-max-pass-count 25" in pipeline_command
+    assert "--research-evidence-batch-size 10" in pipeline_command
+    assert "--research-max-evidence-batches 2" in pipeline_command
+    assert "--perplexity-research" in pipeline_command
+    assert "--perplexity-model sonar" in pipeline_command
+    assert "--perplexity-max-tokens 3500" in pipeline_command
+    assert "--perplexity-search-context-size low" in pipeline_command
+    assert "--perplexity-credits-purchased-to-date 12.5" in pipeline_command
+    assert "--run-generated-committee-batches" in pipeline_command
+    assert "--generated-committee-max-batches 1" in pipeline_command
+    assert "--submit-paper-orders" not in pipeline_command.lower()
+    assert "--confirm-paper-submit" not in pipeline_command.lower()
+    assert controls["provider_mode"] == "perplexity"
+    assert controls["paid_provider_enabled"] is True
+    assert controls["research_max_pass_count"] == 25
+    assert controls["research_evidence_batch_size"] == 10
+    assert controls["research_max_evidence_batches"] == 2
+    assert controls["generated_committee_batches"] is True
+    assert controls["generated_committee_max_batches"] == 1
+    assert controls["bounded"] is True
+    assert controls["estimated_cost_usd"] == "unknown"
+    assert "PERPLEXITY_API_KEY" not in json.dumps(controls)
+
+
+def test_pipeline_scheduler_cli_ongoing_no_submit_preset_requires_cost_bounds_for_perplexity(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    source_file = tmp_path / "universe.csv"
+    source_file.write_text("symbol\nAAPL\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="--research-max-pass-count"):
+        run_cli(
+            build_parser().parse_args(
+                [
+                    "--preset",
+                    "ongoing-no-submit",
+                    "--output-dir",
+                    str(tmp_path / "scheduler"),
+                    "--rules-path",
+                    str(rules_path),
+                    "--journal-db",
+                    str(tmp_path / "journal.db"),
+                    "--ledger-db",
+                    str(tmp_path / "paper_ledger.db"),
+                    "--action-plan",
+                    str(tmp_path / "account_action_plan.json"),
+                    "--research-source-file",
+                    str(source_file),
+                    "--research-source",
+                    "manual_watchlist",
+                    "--research-campaign-dir",
+                    str(tmp_path / "campaign"),
+                    "--perplexity-research",
+                    "--print-plan-only",
+                ]
+            )
+        )
+
+
+def test_pipeline_scheduler_cli_ongoing_no_submit_preset_requires_cost_bounds_for_xai_grok(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    source_file = tmp_path / "universe.csv"
+    source_file.write_text("symbol\nAAPL\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="--research-max-pass-count"):
+        run_cli(
+            build_parser().parse_args(
+                [
+                    "--preset",
+                    "ongoing-no-submit",
+                    "--output-dir",
+                    str(tmp_path / "scheduler"),
+                    "--rules-path",
+                    str(rules_path),
+                    "--journal-db",
+                    str(tmp_path / "journal.db"),
+                    "--ledger-db",
+                    str(tmp_path / "paper_ledger.db"),
+                    "--action-plan",
+                    str(tmp_path / "account_action_plan.json"),
+                    "--research-source-file",
+                    str(source_file),
+                    "--research-source",
+                    "manual_watchlist",
+                    "--research-campaign-dir",
+                    str(tmp_path / "campaign"),
+                    "--xai-grok",
+                    "--print-plan-only",
+                ]
+            )
+        )
+
+
+def test_pipeline_scheduler_cli_ongoing_no_submit_preset_requires_committee_batch_cap(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="--generated-committee-max-batches"):
+        run_cli(
+            build_parser().parse_args(
+                [
+                    "--preset",
+                    "ongoing-no-submit",
+                    "--output-dir",
+                    str(tmp_path / "scheduler"),
+                    "--rules-path",
+                    str(rules_path),
+                    "--journal-db",
+                    str(tmp_path / "journal.db"),
+                    "--ledger-db",
+                    str(tmp_path / "paper_ledger.db"),
+                    "--action-plan",
+                    str(tmp_path / "account_action_plan.json"),
+                    "--run-generated-committee-batches",
                     "--print-plan-only",
                 ]
             )
