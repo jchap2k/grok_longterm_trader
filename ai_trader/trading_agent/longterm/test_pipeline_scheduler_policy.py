@@ -284,6 +284,8 @@ def test_scheduler_policy_warns_when_active_rules_hash_changed(tmp_path):
 
     assert "active_rules_changed" in decision["warnings"]
     assert decision["active_rules_sha256"] != "old-hash"
+    assert decision["cadence_recommendations"]["final_planning_due"] is True
+    assert "active_rules_changed" in decision["cadence_recommendations"]["final_planning_reasons"]
 
 
 def test_scheduler_policy_cli_writes_json_report(tmp_path, capsys):
@@ -384,6 +386,7 @@ def test_scheduler_policy_state_persists_scheduler_history_and_full_research_mar
                 "artifact_paths": {"generated_committee_batch_run_summary": str(committee_summary)},
             },
             {"stage_id": "final_planning_refresh", "status": "passed"},
+            {"stage_id": "extract_final_action_plan", "status": "passed"},
         ],
     }
     decision = build_pipeline_scheduler_policy_decision(
@@ -405,6 +408,50 @@ def test_scheduler_policy_state_persists_scheduler_history_and_full_research_mar
     assert state["last_account_refresh_at"] == (NOW - timedelta(minutes=10)).isoformat().replace("+00:00", "Z")
     assert state["last_no_submit_preflight_at"] == (NOW - timedelta(minutes=10)).isoformat().replace("+00:00", "Z")
     assert state["last_full_research_at"] == decision["generated_at"]
+    assert state["last_final_planning_at"] == decision["generated_at"]
+
+
+def test_scheduler_policy_marks_final_planning_due_after_full_research_without_planning(tmp_path):
+    decision = build_pipeline_scheduler_policy_decision(
+        rules_path=_rules(tmp_path / "active_rules.txt"),
+        now=NOW,
+        policy_state={
+            **_fresh_state(),
+            "last_full_research_at": (NOW - timedelta(minutes=5)).isoformat(),
+            "last_final_planning_at": (NOW - timedelta(hours=1)).isoformat(),
+        },
+    )
+
+    cadence = decision["cadence_recommendations"]
+    assert cadence["final_planning_due"] is True
+    assert "final_planning_older_than_full_research" in cadence["final_planning_reasons"]
+    assert decision["recommended_mode"] == "final_planning_refresh"
+    assert decision["next_safe_action"] == "run_final_planning_refresh_no_submit"
+
+
+def test_scheduler_policy_state_does_not_mark_final_planning_for_timeout_or_missing_extract(tmp_path):
+    decision = build_pipeline_scheduler_policy_decision(
+        rules_path=_rules(tmp_path / "active_rules.txt"),
+        now=NOW,
+        policy_state=_fresh_state(),
+    )
+
+    state = build_pipeline_scheduler_policy_state(
+        decision,
+        pipeline_summary={
+            "status": "failed",
+            "blocker_count": 1,
+            "stages": [
+                {
+                    "stage_id": "final_planning_refresh",
+                    "status": "failed",
+                    "blocker": "stage_timeout:final_planning_refresh",
+                },
+            ],
+        },
+    )
+
+    assert "last_final_planning_at" not in state
 
 
 def test_scheduler_policy_state_does_not_mark_full_research_for_partial_generated_committee_run(tmp_path):

@@ -1,4 +1,5 @@
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -88,6 +89,40 @@ def test_runner_stops_on_failed_stage_and_logs_output(tmp_path):
     assert result.blocker_count == 1
     assert result.stage_results[-1].status == "failed"
     assert "bad err" in Path(result.stage_results[-1].log_path).read_text(encoding="utf-8")
+
+
+def test_runner_fails_closed_when_stage_times_out(tmp_path, monkeypatch):
+    stage = PipelineStage(
+        stage_id="final_planning_refresh",
+        title="Final planning",
+        command="python slow_final_planning.py",
+        timeout_seconds=1.5,
+    )
+
+    def fake_run(*args, **kwargs):
+        raise subprocess.TimeoutExpired(
+            cmd=kwargs.get("args") or args[0],
+            timeout=kwargs.get("timeout"),
+            output="partial out",
+            stderr="partial err",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = run_pipeline_stages(
+        [stage],
+        output_dir=tmp_path,
+        summary_output=tmp_path / "pipeline_summary.json",
+    )
+
+    saved = json.loads((tmp_path / "pipeline_summary.json").read_text(encoding="utf-8"))
+    final_stage = saved["stages"][0]
+    assert result.status == "failed"
+    assert result.blocker_count == 1
+    assert final_stage["status"] == "failed"
+    assert final_stage["blocker"] == "stage_timeout:final_planning_refresh"
+    assert final_stage["timeout_seconds"] == 1.5
+    assert "timed out after 1.5 seconds" in Path(final_stage["log_path"]).read_text(encoding="utf-8")
 
 
 def test_runner_writes_stdout_artifact_when_requested(tmp_path):
@@ -428,6 +463,18 @@ def test_final_planning_refresh_stage_uses_empty_cycle(tmp_path):
     assert "--available-cash 74000" in stage.command
     assert stage.artifact_paths["empty_idea_batch"].endswith("empty_idea_batch.json")
     assert stage.stdout_artifact_path.endswith("final_planning_refresh.json")
+
+
+def test_final_planning_refresh_stage_can_be_timeout_bounded(tmp_path):
+    stage = build_final_planning_refresh_stage(
+        output_dir=tmp_path,
+        journal_db=tmp_path / "journal.db",
+        portfolio_state=tmp_path / "portfolio.json",
+        timeout_seconds=45,
+    )
+
+    assert stage.stage_id == "final_planning_refresh"
+    assert stage.timeout_seconds == 45
 
 
 def test_research_campaign_stages_prepare_selection_and_committee_batches(tmp_path):
@@ -920,6 +967,50 @@ def test_pipeline_cli_can_include_committee_and_planning_stages(tmp_path, capsys
     assert printed["stages"][0]["stage_id"] == "committee_batch_001"
     assert printed["stages"][1]["stage_id"] == "final_planning_refresh"
     assert printed["stages"][2]["stage_id"] == "extract_final_action_plan"
+
+
+def test_pipeline_cli_print_plan_shows_final_planning_timeout_bound(tmp_path, capsys):
+    rules_path = tmp_path / "active_rules.txt"
+    action_plan = tmp_path / "account_action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    price_map = tmp_path / "prices.json"
+    for path in (rules_path, action_plan, portfolio, price_map):
+        path.write_text("{}", encoding="utf-8")
+    summary = tmp_path / "summary.json"
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--output-dir",
+                str(tmp_path / "pipeline"),
+                "--rules-path",
+                str(rules_path),
+                "--final-planning-refresh",
+                "--final-planning-timeout-seconds",
+                "30",
+                "--action-plan",
+                str(action_plan),
+                "--portfolio-state",
+                str(portfolio),
+                "--journal-db",
+                str(tmp_path / "journal.db"),
+                "--ledger-db",
+                str(tmp_path / "ledger.db"),
+                "--price-map",
+                str(price_map),
+                "--skip-price-map",
+                "--print-plan-only",
+                "--summary-output",
+                str(summary),
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    planning_stage = next(stage for stage in printed["stages"] if stage["stage_id"] == "final_planning_refresh")
+    assert code == 0
+    assert planning_stage["timeout_seconds"] == 30
 
 
 def test_pipeline_cli_can_prepend_research_campaign_stages(tmp_path, capsys):

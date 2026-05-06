@@ -21,6 +21,9 @@ from longterm.pipeline_scheduler import (
 )
 
 
+DEFAULT_FINAL_PLANNING_TIMEOUT_SECONDS = 900.0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run a recurring no-submit research-to-paper pipeline scheduler."
@@ -46,6 +49,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--skip-price-map", action="store_true")
     parser.add_argument("--allow-existing-paper-positions", action="store_true")
     parser.add_argument("--final-planning-refresh", action="store_true")
+    parser.add_argument(
+        "--final-planning-timeout-seconds",
+        type=float,
+        default=None,
+        help=(
+            "Timeout forwarded to the final-planning refresh stage. "
+            "The ongoing-no-submit preset defaults to 900 seconds when final planning is enabled."
+        ),
+    )
     parser.add_argument("--planning-capital-from-portfolio-state", action="store_true")
     parser.add_argument("--expected-cash-from-portfolio-state", action="store_true")
     research_source = parser.add_mutually_exclusive_group()
@@ -130,12 +142,18 @@ def _append_optional_value(parts: list[str], flag: str, value: object | None) ->
         parts.extend([flag, _quote(str(value))])
 
 
+def _format_number(value: float) -> str:
+    return str(int(value)) if float(value).is_integer() else str(value)
+
+
 def _append_optional_flag(parts: list[str], flag: str, enabled: bool) -> None:
     if enabled:
         parts.append(flag)
 
 
 def _validate_ongoing_no_submit_research_bounds(args: argparse.Namespace) -> None:
+    if args.final_planning_timeout_seconds is not None and args.final_planning_timeout_seconds <= 0:
+        raise ValueError("--final-planning-timeout-seconds must be positive when supplied.")
     if (args.perplexity_research or args.xai_grok) and args.research_max_pass_count is None:
         raise ValueError(
             "Paid research provider mode with --preset ongoing-no-submit requires "
@@ -275,6 +293,9 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
         args.allow_existing_paper_positions,
     )
     _append_optional_flag(pipeline_parts, "--final-planning-refresh", args.final_planning_refresh)
+    if args.final_planning_refresh:
+        timeout_seconds = args.final_planning_timeout_seconds or DEFAULT_FINAL_PLANNING_TIMEOUT_SECONDS
+        _append_optional_value(pipeline_parts, "--final-planning-timeout-seconds", _format_number(timeout_seconds))
     _append_optional_flag(
         pipeline_parts,
         "--planning-capital-from-portfolio-state",

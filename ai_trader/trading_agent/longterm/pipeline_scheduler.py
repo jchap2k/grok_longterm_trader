@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shlex
 import subprocess
@@ -192,6 +193,12 @@ def run_pipeline_scheduler(
                 now_func=now,
             )
             records.append(record)
+            _update_scheduler_policy_state_after_record(
+                scheduler_policy_state_path,
+                record=record,
+                rules_path=rules_path,
+            )
+            write_pipeline_scheduler_summary(_build_summary(output_dir=output_dir, records=records), summary_output_path)
         finally:
             try:
                 lock_path.unlink()
@@ -601,12 +608,16 @@ def derive_scheduler_resource_controls(pipeline_command: str) -> dict[str, objec
     research_max_pass_count = _int_flag(tokens, "--research-max-pass-count")
     generated_committee_batches = "--run-generated-committee-batches" in tokens
     generated_committee_max_batches = _int_flag(tokens, "--generated-committee-max-batches")
+    final_planning_refresh = "--final-planning-refresh" in tokens
+    final_planning_timeout_seconds = _float_flag(tokens, "--final-planning-timeout-seconds")
     paid_provider_enabled = provider_mode in {"perplexity", "xai_grok"}
     missing_bounds: list[str] = []
     if paid_provider_enabled and research_max_pass_count is None:
         missing_bounds.append("research_max_pass_count")
     if generated_committee_batches and generated_committee_max_batches is None:
         missing_bounds.append("generated_committee_max_batches")
+    if final_planning_refresh and final_planning_timeout_seconds is None:
+        missing_bounds.append("final_planning_timeout_seconds")
 
     return {
         "schema_version": 1,
@@ -633,6 +644,8 @@ def derive_scheduler_resource_controls(pipeline_command: str) -> dict[str, objec
         ),
         "generated_committee_batches": generated_committee_batches,
         "generated_committee_max_batches": generated_committee_max_batches,
+        "final_planning_refresh": final_planning_refresh,
+        "final_planning_timeout_seconds": final_planning_timeout_seconds,
         "bounded": not missing_bounds,
         "bounded_reason": "explicit_caps_present" if not missing_bounds else "missing_" + "_and_".join(missing_bounds),
         "estimated_cost_usd": "unknown",
@@ -802,6 +815,58 @@ def _build_summary(output_dir: Path, records: list[PipelineSchedulerRunRecord]) 
         runs=records,
         next_safe_action=next_safe_action,
     )
+
+
+def _update_scheduler_policy_state_after_record(
+    path: Path,
+    *,
+    record: PipelineSchedulerRunRecord,
+    rules_path: Path,
+) -> None:
+    if record.status != "completed":
+        return
+    state = _load_json_dict(path)
+    state["schema_version"] = 1
+    state["updated_at"] = record.finished_at
+    state["active_rules_sha256"] = hashlib.sha256(rules_path.read_bytes()).hexdigest()
+    if record.pipeline_exit_code == 0:
+        state["last_no_submit_preflight_at"] = record.finished_at
+    if record.account_refresh_exit_code == 0:
+        state["last_account_refresh_at"] = record.finished_at
+    if _pipeline_summary_has_successful_final_planning(record.pipeline_summary_path):
+        state["last_final_planning_at"] = record.finished_at
+    _write_json(path, state)
+
+
+def _pipeline_summary_has_successful_final_planning(path_value: str) -> bool:
+    payload = _load_json_dict(Path(path_value))
+    if str(payload.get("status") or "") != "completed":
+        return False
+    if _int_value(payload.get("blocker_count")) != 0:
+        return False
+    passed_stage_ids = {
+        str(stage.get("stage_id") or "")
+        for stage in payload.get("stages") or []
+        if isinstance(stage, dict) and str(stage.get("status") or "") in {"passed", "completed"}
+    }
+    return {"final_planning_refresh", "extract_final_action_plan"}.issubset(passed_stage_ids)
+
+
+def _load_json_dict(path: Path) -> dict[str, object]:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return dict(payload) if isinstance(payload, dict) else {}
+
+
+def _int_value(value: object) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _summary_output_path(inputs: PipelineSchedulerInputs, output_dir: Path) -> Path:

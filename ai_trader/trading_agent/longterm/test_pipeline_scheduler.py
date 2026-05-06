@@ -319,6 +319,50 @@ def test_account_refresh_runs_after_successful_pipeline_with_pipeline_summary(tm
     assert summary.runs[0].pipeline_summary_path in calls[1]
 
 
+def test_successful_scheduler_run_updates_cadence_state_after_account_refresh(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+
+    def fake_runner(command: str) -> tuple[int, str, str]:
+        if "longterm_research_to_paper_pipeline.py" in command:
+            summary_path = Path(command.split("--summary-output ", 1)[1].split(" --", 1)[0].strip('"'))
+            summary_path.write_text(
+                json.dumps(
+                    {
+                        "status": "completed",
+                        "blocker_count": 0,
+                        "artifact_paths": {},
+                        "stages": [
+                            {"stage_id": "final_planning_refresh", "status": "passed"},
+                            {"stage_id": "extract_final_action_plan", "status": "passed"},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            return 0, "pipeline", ""
+        return 0, "refresh", ""
+
+    summary = run_pipeline_scheduler(
+        PipelineSchedulerInputs(
+            output_dir=tmp_path / "scheduler",
+            pipeline_command_template=_safe_pipeline_template(),
+            account_refresh_command_template=_safe_account_refresh_template(),
+            rules_path=rules_path,
+        ),
+        PipelineSchedulerConfig(max_runs=1),
+        command_runner=fake_runner,
+        now_func=FakeClock().now,
+    )
+
+    state = json.loads((tmp_path / "scheduler" / "scheduler_policy_state.json").read_text(encoding="utf-8"))
+    assert summary.runs[0].status == "completed"
+    assert state["last_no_submit_preflight_at"] == summary.runs[0].finished_at
+    assert state["last_account_refresh_at"] == summary.runs[0].finished_at
+    assert state["last_final_planning_at"] == summary.runs[0].finished_at
+    assert state["active_rules_sha256"]
+
+
 def test_scheduler_policy_runs_between_pipeline_and_account_refresh_and_is_passed_to_refresh(tmp_path):
     rules_path = tmp_path / "active_rules.txt"
     rules_path.write_text("<rules />", encoding="utf-8")
@@ -812,6 +856,8 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_safe_commands(t
                 "--market-regime-file",
                 str(tmp_path / "market_regime.json"),
                 "--final-planning-refresh",
+                "--final-planning-timeout-seconds",
+                "45",
                 "--planning-capital-from-portfolio-state",
                 "--expected-cash-from-portfolio-state",
                 "--skip-price-map",
@@ -842,6 +888,7 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_safe_commands(t
     assert "--portfolio-state" in run["pipeline_command"]
     assert "paper_portfolio_state.json" in run["pipeline_command"]
     assert "--final-planning-refresh" in run["pipeline_command"]
+    assert "--final-planning-timeout-seconds 45" in run["pipeline_command"]
     assert "--planning-capital-from-portfolio-state" in run["pipeline_command"]
     assert "--expected-cash-from-portfolio-state" in run["pipeline_command"]
     assert "--skip-price-map" in run["pipeline_command"]
@@ -858,6 +905,8 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_safe_commands(t
     controls = run["resource_controls"]
     assert controls["provider_mode"] == "free_or_skip_grok"
     assert controls["paid_provider_enabled"] is False
+    assert controls["final_planning_refresh"] is True
+    assert controls["final_planning_timeout_seconds"] == 45
     assert controls["generated_committee_batches"] is False
     assert controls["bounded"] is True
 

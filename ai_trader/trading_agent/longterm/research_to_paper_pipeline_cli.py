@@ -90,6 +90,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--committee-batch-dir", default="")
     parser.add_argument("--final-planning-refresh", action="store_true")
+    parser.add_argument(
+        "--final-planning-timeout-seconds",
+        type=float,
+        default=None,
+        help="Optional subprocess timeout for the final planning refresh stage.",
+    )
     parser.add_argument("--market-regime-file", default="")
     parser.add_argument("--motley-fool-config", default="")
     parser.add_argument("--agent-preset", default="decision_4")
@@ -170,6 +176,8 @@ def _numeric_cash(payload: dict, *, flag_name: str) -> float:
 
 
 def run_cli(args: argparse.Namespace) -> int:
+    if args.final_planning_timeout_seconds is not None and args.final_planning_timeout_seconds <= 0:
+        raise ValueError("--final-planning-timeout-seconds must be positive when supplied.")
     output_dir = Path(args.output_dir)
     summary_output = Path(args.summary_output) if args.summary_output else output_dir / "pipeline_summary.json"
     expected_cash = _resolve_expected_cash(args)
@@ -263,6 +271,7 @@ def run_cli(args: argparse.Namespace) -> int:
                 profile_config=args.profile_config,
                 active_sleeve_value=active_sleeve_value,
                 available_cash=available_cash,
+                timeout_seconds=args.final_planning_timeout_seconds,
             )
         )
         stages.append(

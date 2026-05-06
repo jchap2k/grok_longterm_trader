@@ -39,6 +39,7 @@ class PipelineStage:
     command: str
     artifact_paths: dict[str, str] = field(default_factory=dict)
     stdout_artifact_path: str = ""
+    timeout_seconds: float | None = None
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,7 @@ class PipelineStageResult:
     log_path: str = ""
     artifact_paths: dict[str, str] = field(default_factory=dict)
     blocker: str = ""
+    timeout_seconds: float | None = None
 
 
 @dataclass(frozen=True)
@@ -319,6 +321,7 @@ def build_final_planning_refresh_stage(
     profile_config: str = "",
     active_sleeve_value: float | None = None,
     available_cash: float | None = None,
+    timeout_seconds: float | None = None,
 ) -> PipelineStage:
     """Build a final empty-cycle planning refresh stage."""
     root = Path(output_dir)
@@ -345,6 +348,7 @@ def build_final_planning_refresh_stage(
         command=command,
         artifact_paths={"empty_idea_batch": str(empty_batch), "final_planning_refresh": str(output)},
         stdout_artifact_path=str(output),
+        timeout_seconds=timeout_seconds,
     )
     validate_stage_command(stage)
     return stage
@@ -641,7 +645,6 @@ def run_pipeline_stages(
     results: list[PipelineStageResult] = []
     status = "planned" if print_plan_only else "completed"
     blocker_count = 0
-    runner = command_runner or _run_command
     for index, stage in enumerate(stage_list, start=1):
         artifact_paths.update(stage.artifact_paths)
         if print_plan_only:
@@ -652,10 +655,21 @@ def run_pipeline_stages(
                     command=stage.command,
                     status="planned",
                     artifact_paths=dict(stage.artifact_paths),
+                    timeout_seconds=stage.timeout_seconds,
                 )
             )
             continue
-        exit_code, stdout, stderr = runner(stage.command)
+        timed_out = False
+        try:
+            if command_runner is None:
+                exit_code, stdout, stderr = _run_command(stage.command, timeout_seconds=stage.timeout_seconds)
+            else:
+                exit_code, stdout, stderr = command_runner(stage.command)
+        except subprocess.TimeoutExpired as exc:
+            timed_out = True
+            exit_code = 124
+            stdout = _timeout_text(exc.output)
+            stderr = _timeout_stderr(stage, exc)
         log_path = root / "logs" / f"{index:02d}_{stage.stage_id}.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_path.write_text(
@@ -667,7 +681,9 @@ def run_pipeline_stages(
             stdout_path.parent.mkdir(parents=True, exist_ok=True)
             stdout_path.write_text(stdout, encoding="utf-8")
         stage_status = "passed" if exit_code == 0 else "failed"
-        blocker = "" if exit_code == 0 else f"stage_failed:{stage.stage_id}"
+        blocker = ""
+        if exit_code != 0:
+            blocker = f"stage_timeout:{stage.stage_id}" if timed_out else f"stage_failed:{stage.stage_id}"
         if exit_code != 0:
             status = "failed"
             blocker_count += 1
@@ -681,6 +697,7 @@ def run_pipeline_stages(
                 log_path=str(log_path),
                 artifact_paths=dict(stage.artifact_paths),
                 blocker=blocker,
+                timeout_seconds=stage.timeout_seconds,
             )
         )
         if exit_code != 0:
@@ -806,9 +823,24 @@ def write_pipeline_summary(result: PipelineRunResult, path: str | Path) -> None:
     write_json_artifact(path, asdict(result))
 
 
-def _run_command(command: str) -> tuple[int, str, str]:
-    completed = subprocess.run(command, shell=True, text=True, capture_output=True)
+def _run_command(command: str, *, timeout_seconds: float | None = None) -> tuple[int, str, str]:
+    completed = subprocess.run(command, shell=True, text=True, capture_output=True, timeout=timeout_seconds)
     return completed.returncode, completed.stdout, completed.stderr
+
+
+def _timeout_stderr(stage: PipelineStage, exc: subprocess.TimeoutExpired) -> str:
+    stderr = _timeout_text(exc.stderr)
+    timeout = stage.timeout_seconds if stage.timeout_seconds is not None else exc.timeout
+    message = f"Stage {stage.stage_id} timed out after {_format_number(timeout)} seconds."
+    return f"{stderr}\n{message}".strip()
+
+
+def _timeout_text(value: str | bytes | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return str(value)
 
 
 def _next_safe_action(status: str) -> str:

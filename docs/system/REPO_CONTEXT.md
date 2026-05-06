@@ -11,8 +11,8 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-06 by Codex after scheduler, enrichment, dashboard,
-paper-boundary, and Grok-collab updates.
+Last updated: 2026-05-06 by Codex after scheduler timeout/cadence-state,
+enrichment, dashboard, paper-boundary, and Grok-collab updates.
 
 ## 1. Project Identity
 
@@ -136,6 +136,16 @@ Scheduler-readiness features now exist:
 - Scheduler run records include a `resource_controls` summary that surfaces the
   visible provider mode, paid-provider status, research/evidence/committee caps,
   bounded status, and an intentionally unknown pre-run cost estimate.
+- Final-planning refresh can be subprocess-timeout bounded. The pipeline stage
+  records `timeout_seconds`; on timeout it fails closed with
+  `stage_timeout:final_planning_refresh`, stops downstream stages, writes the
+  stage log, and leaves `order_submission_enabled=false`.
+- The ongoing no-submit scheduler preset forwards
+  `--final-planning-timeout-seconds` whenever `--final-planning-refresh` is
+  enabled. If omitted by the operator, the preset uses a 900-second default.
+  Resource controls expose `final_planning_refresh` and
+  `final_planning_timeout_seconds`; enabled final planning with no timeout is
+  considered unbounded.
 - Dashboard manifests can carry the top-level pipeline scheduler summary path,
   allowing `/api/pipeline-health.json` and the Safety / Preflight card to show
   scheduler resource-control state once the scheduler summary is finalized.
@@ -143,17 +153,31 @@ Scheduler-readiness features now exist:
   high-urgency `resource_control_review` blocker, while bounded paid runs carry
   a warning for operator awareness. Operator status bundles and markdown surface
   the same controls.
-- Latest scheduler smoke:
-  `%TEMP%\longterm_scheduler_full_plan_smoke_20260506_130540`.
-  A print-plan run with bounded Perplexity plus generated committee controls
-  proved `resource_controls.bounded=true`, `provider_mode=perplexity`,
-  `research_max_pass_count=25`, `research_max_evidence_batches=2`, and
-  `generated_committee_max_batches=1` while `order_submission_enabled=false`.
-  A real no-submit operational run then completed from the current paper account
-  snapshot and saved action plan with all pipeline/preflight/dashboard refresh
-  stages passed, zero blockers, zero warnings, and
-  `/api/pipeline-health.json` exposing the same bounded resource controls.
-- Policy-state artifacts track `last_full_research_at`.
+- Latest scheduler smokes:
+  - `%TEMP%\longterm_scheduler_full_plan_smoke_20260506_130540`: print-plan
+    with bounded Perplexity plus generated committee controls proved
+    `resource_controls.bounded=true`, `provider_mode=perplexity`,
+    `research_max_pass_count=25`, `research_max_evidence_batches=2`, and
+    `generated_committee_max_batches=1` while
+    `order_submission_enabled=false`.
+  - `%TEMP%\longterm_scheduler_chunks1_4_20260506_160511`: two-cycle real
+    no-submit operational scheduler run from the current paper account snapshot
+    and saved action plan. Both runs completed with pipeline blockers `0`,
+    artifact health `ready`, 10 paper holdings reflected, dashboard pages
+    generated, account refresh success, and no submitted orders.
+  - `%TEMP%\longterm_scheduler_final_planning_plan_20260506_160649`: print-plan
+    proved final planning renders `--final-planning-refresh` plus
+    `--final-planning-timeout-seconds 45` and resource controls mark it bounded.
+- Policy-state artifacts track `last_full_research_at`,
+  `last_no_submit_preflight_at`, `last_account_refresh_at`, and
+  `last_final_planning_at`. The scheduler updates account/preflight timestamps
+  after each completed cycle, and marks final planning complete only when the
+  saved pipeline summary completed both `final_planning_refresh` and
+  `extract_final_action_plan` with zero blockers.
+- Scheduler policy now emits `cadence_recommendations` for account refresh,
+  no-submit preflight, full research, and final planning. Final planning becomes
+  due when active rules change, when final planning is older than the latest
+  full research, or when its cadence expires.
 - Committee batch runs are resumable and bounded by `--max-batches`.
 - Full research cadence has been proven through smaller chunks and completed
   all generated committee batches in a bounded run.

@@ -766,7 +766,7 @@ through `run_longterm_cycle.py`, a final empty idea-batch cycle refreshes accoun
 planning from the journal, and then the normal paper-readiness stages run:
 
 ```powershell
-python scripts/longterm_research_to_paper_pipeline.py --output-dir path\to\pipeline_artifacts --committee-batch-dir path\to\committee_batches --final-planning-refresh --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --market-regime-file path\to\market_regime.json --motley-fool-config path\to\disabled_fool_config.json --planning-capital-from-portfolio-state --skip-price-map --expected-cash-from-portfolio-state --allow-existing-paper-positions --json
+python scripts/longterm_research_to_paper_pipeline.py --output-dir path\to\pipeline_artifacts --committee-batch-dir path\to\committee_batches --final-planning-refresh --final-planning-timeout-seconds 900 --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --market-regime-file path\to\market_regime.json --motley-fool-config path\to\disabled_fool_config.json --planning-capital-from-portfolio-state --skip-price-map --expected-cash-from-portfolio-state --allow-existing-paper-positions --json
 ```
 
 Use this expanded form only when the saved committee batch files and portfolio
@@ -777,6 +777,10 @@ outside active deployment sizing. It does not perform broad-universe discovery,
 fundamentals cache filling, Polygon/Grok enrichment, or broker submission by
 itself; use the upstream research-campaign bridge below when the scheduler needs
 to prepare those research batches first.
+Use `--final-planning-timeout-seconds` for scheduler work. If final planning
+exceeds the timeout, the wrapper fails closed with
+`stage_timeout:final_planning_refresh`, writes the stage log, stops downstream
+stages, and does not mark durable final-planning cadence as complete.
 
 The wrapper can also prepend a broad-universe research campaign stage. This is
 the scheduler-friendly bridge for overnight research preparation: it runs the
@@ -821,7 +825,7 @@ generated committee summary reaches `status=completed` with no remaining
 batches.
 
 ```powershell
-python scripts/longterm_research_to_paper_pipeline.py --output-dir path\to\pipeline_artifacts --research-source-file path\to\nasdaqtrader.txt --research-source nasdaq_trader --research-campaign-dir path\to\research_campaign --research-resume --research-run-until research_queue_ready --run-generated-committee-batches --generated-committee-max-batches 1 --final-planning-refresh --market-regime-file path\to\market_regime.json --planning-capital-from-portfolio-state --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --price-map path\to\price_map.json --skip-price-map --expected-cash-from-portfolio-state --allow-existing-paper-positions --json
+python scripts/longterm_research_to_paper_pipeline.py --output-dir path\to\pipeline_artifacts --research-source-file path\to\nasdaqtrader.txt --research-source nasdaq_trader --research-campaign-dir path\to\research_campaign --research-resume --research-run-until research_queue_ready --run-generated-committee-batches --generated-committee-max-batches 1 --final-planning-refresh --final-planning-timeout-seconds 900 --market-regime-file path\to\market_regime.json --planning-capital-from-portfolio-state --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --price-map path\to\price_map.json --skip-price-map --expected-cash-from-portfolio-state --allow-existing-paper-positions --json
 ```
 
 Use `--no-generated-committee-resume` only when intentionally rebuilding a
@@ -855,8 +859,8 @@ For the standard ongoing paper-review loop, prefer the built-in safe preset so
 the operator does not have to hand-maintain four long command templates:
 
 ```powershell
-python scripts/longterm_pipeline_scheduler.py --preset ongoing-no-submit --run-once --output-dir path\to\pipeline_scheduler_runs --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --profile-config path\to\roth_ira_profile.json --market-regime-file path\to\market_regime.json --final-planning-refresh --planning-capital-from-portfolio-state --expected-cash-from-portfolio-state --allow-existing-paper-positions --json
-python scripts/longterm_pipeline_scheduler.py --preset ongoing-no-submit --max-runs 3 --interval-seconds 3600 --output-dir path\to\pipeline_scheduler_runs --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --profile-config path\to\roth_ira_profile.json --market-regime-file path\to\market_regime.json --final-planning-refresh --planning-capital-from-portfolio-state --expected-cash-from-portfolio-state --allow-existing-paper-positions --json
+python scripts/longterm_pipeline_scheduler.py --preset ongoing-no-submit --run-once --output-dir path\to\pipeline_scheduler_runs --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --profile-config path\to\roth_ira_profile.json --market-regime-file path\to\market_regime.json --final-planning-refresh --final-planning-timeout-seconds 900 --planning-capital-from-portfolio-state --expected-cash-from-portfolio-state --allow-existing-paper-positions --json
+python scripts/longterm_pipeline_scheduler.py --preset ongoing-no-submit --max-runs 3 --interval-seconds 3600 --output-dir path\to\pipeline_scheduler_runs --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --profile-config path\to\roth_ira_profile.json --market-regime-file path\to\market_regime.json --final-planning-refresh --final-planning-timeout-seconds 900 --planning-capital-from-portfolio-state --expected-cash-from-portfolio-state --allow-existing-paper-positions --json
 ```
 
 The same preset can also run a bounded upstream research cadence before the
@@ -865,7 +869,7 @@ requires an explicit `--research-max-pass-count`, and generated committee
 batches require `--generated-committee-max-batches`.
 
 ```powershell
-python scripts/longterm_pipeline_scheduler.py --preset ongoing-no-submit --run-once --output-dir path\to\pipeline_scheduler_runs --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --profile-config path\to\roth_ira_profile.json --research-source-file path\to\universe.csv --research-source manual_watchlist --research-campaign-dir path\to\research_campaign --research-resume --research-run-until research_queue_ready --research-max-pass-count 25 --research-evidence-batch-size 10 --research-max-evidence-batches 2 --perplexity-research --perplexity-search-context-size low --perplexity-credits-purchased-to-date 12 --run-generated-committee-batches --generated-committee-max-batches 1 --final-planning-refresh --planning-capital-from-portfolio-state --expected-cash-from-portfolio-state --allow-existing-paper-positions --json
+python scripts/longterm_pipeline_scheduler.py --preset ongoing-no-submit --run-once --output-dir path\to\pipeline_scheduler_runs --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --profile-config path\to\roth_ira_profile.json --research-source-file path\to\universe.csv --research-source manual_watchlist --research-campaign-dir path\to\research_campaign --research-resume --research-run-until research_queue_ready --research-max-pass-count 25 --research-evidence-batch-size 10 --research-max-evidence-batches 2 --perplexity-research --perplexity-search-context-size low --perplexity-credits-purchased-to-date 12 --run-generated-committee-batches --generated-committee-max-batches 1 --final-planning-refresh --final-planning-timeout-seconds 900 --planning-capital-from-portfolio-state --expected-cash-from-portfolio-state --allow-existing-paper-positions --json
 ```
 
 The preset expands to the same safe stages as the manual template path: a fresh
@@ -876,6 +880,11 @@ read-only paper-account/dashboard refresh. It writes per-run
 dashboard can refresh from the latest saved run. The preset still rejects
 submit-capable fragments and never adds `--submit-paper-orders` or
 `--confirm-paper-submit`.
+When `--final-planning-refresh` is supplied, the preset forwards
+`--final-planning-timeout-seconds`; if the operator omits it, the preset uses a
+900-second default. The rendered `resource_controls` object records both
+`final_planning_refresh` and `final_planning_timeout_seconds`, and an enabled
+final-planning refresh without a timeout is treated as unbounded.
 
 Each planned or completed scheduler run also includes a machine-readable
 `resource_controls` object in `pipeline_scheduler_summary.json`. This summarizes
@@ -930,6 +939,12 @@ summary file is treated as empty state. Templates can also use
 refresh output. Use `{portfolio_state}` in the pipeline template whenever
 `--pre-pipeline-refresh-command-template` is supplied, so final-planning and
 expected-cash checks read the fresh per-run paper snapshot.
+After each completed scheduler cycle, the scheduler itself updates
+`scheduler_policy_state.json` with successful account-refresh and no-submit
+preflight timestamps. It marks `last_final_planning_at` only when the saved
+pipeline summary completed both `final_planning_refresh` and
+`extract_final_action_plan` with zero blockers. A timeout or partial extract
+does not advance that timestamp.
 
 When the scheduled no-submit path is refreshing an already-populated paper
 portfolio, add `--allow-existing-paper-positions` to the pipeline command
@@ -963,6 +978,12 @@ previous `scheduler_policy_state.json` contains a different
 journal input reuses the existing `ReviewStatusBuilder` and benchmark guard so
 stale/broken theses or FXAIX-underperformance can raise cadence urgency before
 new research or buys.
+
+The policy output includes `cadence_recommendations` with due flags for account
+refresh, no-submit preflight, full research, and final planning. Final planning
+becomes due when active rules change, when the last successful final plan is
+older than the latest full research completion, or when the final-planning
+cadence expires. This recommendation is still advisory and no-submit.
 
 When `--pipeline-scheduler-summary` is supplied, the policy can infer the latest
 successful no-submit preflight and account-refresh timestamps from completed

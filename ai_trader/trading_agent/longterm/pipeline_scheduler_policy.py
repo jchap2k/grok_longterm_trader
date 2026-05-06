@@ -25,6 +25,7 @@ class PipelineSchedulerPolicyConfig:
     account_refresh_minutes: float = 30.0
     no_submit_preflight_hours: float = 6.0
     full_research_days: float = 7.0
+    final_planning_hours: float = 24.0
     panic_min_vix: float = 30.0
     review_candidate_limit: int = 50
 
@@ -51,6 +52,7 @@ def build_pipeline_scheduler_policy_decision(
 
     if state.get("active_rules_sha256") and state.get("active_rules_sha256") != rules_hash:
         warnings.append("active_rules_changed")
+    active_rules_changed = "active_rules_changed" in warnings
 
     resource_controls = _latest_resource_controls(pipeline_scheduler_summary or {})
     resource_warning, resource_blocker = _resource_control_findings(resource_controls)
@@ -65,6 +67,13 @@ def build_pipeline_scheduler_policy_decision(
         limit=resolved_config.review_candidate_limit,
     )
     benchmark_guard = _build_benchmark_guard(journal_db)
+    cadence_recommendations = _build_cadence_recommendations(
+        now=current_time,
+        state=state,
+        pipeline_scheduler_summary=pipeline_scheduler_summary or {},
+        config=resolved_config,
+        active_rules_changed=active_rules_changed,
+    )
 
     recommended_mode = "account_refresh_only"
     urgency = "low"
@@ -98,6 +107,7 @@ def build_pipeline_scheduler_policy_decision(
                 state=state,
                 pipeline_scheduler_summary=pipeline_scheduler_summary or {},
                 config=resolved_config,
+                cadence_recommendations=cadence_recommendations,
             )
             recommended_mode = cadence_mode
             next_safe_action = cadence_action
@@ -117,6 +127,7 @@ def build_pipeline_scheduler_policy_decision(
         "review_summary": review_summary,
         "benchmark_guard": benchmark_guard,
         "resource_controls": resource_controls,
+        "cadence_recommendations": cadence_recommendations,
         "market_regime": regime,
         "active_rules_path": str(Path(rules_path)),
         "active_rules_sha256": rules_hash,
@@ -124,6 +135,7 @@ def build_pipeline_scheduler_policy_decision(
             "account_refresh_minutes": resolved_config.account_refresh_minutes,
             "no_submit_preflight_hours": resolved_config.no_submit_preflight_hours,
             "full_research_days": resolved_config.full_research_days,
+            "final_planning_hours": resolved_config.final_planning_hours,
             "panic_min_vix": resolved_config.panic_min_vix,
             "review_candidate_limit": resolved_config.review_candidate_limit,
         },
@@ -180,6 +192,8 @@ def build_pipeline_scheduler_policy_state(
         state["last_no_submit_preflight_at"] = _format_timestamp(preflight_at)
     if mark_full_research_complete or _pipeline_summary_has_committee_research(pipeline_summary or {}):
         state["last_full_research_at"] = generated_at
+    if _pipeline_summary_has_successful_final_planning(pipeline_summary or {}):
+        state["last_final_planning_at"] = generated_at
     return state
 
 
@@ -290,6 +304,7 @@ def _cadence_mode(
     state: Mapping[str, Any],
     pipeline_scheduler_summary: Mapping[str, Any],
     config: PipelineSchedulerPolicyConfig,
+    cadence_recommendations: Mapping[str, Any],
 ) -> tuple[str, str, str]:
     account_refresh_at = _parse_timestamp(state.get("last_account_refresh_at")) or _latest_successful_account_refresh_at(
         pipeline_scheduler_summary
@@ -304,7 +319,59 @@ def _cadence_mode(
         return "no_submit_preflight", "no_submit_preflight_stale", "run_no_submit_preflight_pipeline"
     if _is_stale(full_research_at, now=now, max_age_seconds=config.full_research_days * 86400):
         return "full_research_cycle", "full_research_stale", "run_full_research_cycle_no_submit"
+    if cadence_recommendations.get("final_planning_due"):
+        reasons = cadence_recommendations.get("final_planning_reasons")
+        reason = str(reasons[0]) if isinstance(reasons, list) and reasons else "final_planning_due"
+        return "final_planning_refresh", reason, "run_final_planning_refresh_no_submit"
     return "account_refresh_only", "dashboard_freshness_floor", "refresh_account_and_dashboard_artifacts"
+
+
+def _build_cadence_recommendations(
+    *,
+    now: datetime,
+    state: Mapping[str, Any],
+    pipeline_scheduler_summary: Mapping[str, Any],
+    config: PipelineSchedulerPolicyConfig,
+    active_rules_changed: bool,
+) -> dict[str, Any]:
+    account_refresh_at = _parse_timestamp(state.get("last_account_refresh_at")) or _latest_successful_account_refresh_at(
+        pipeline_scheduler_summary
+    )
+    preflight_at = _parse_timestamp(state.get("last_no_submit_preflight_at")) or _latest_completed_run_finished_at(
+        pipeline_scheduler_summary
+    )
+    full_research_at = _parse_timestamp(state.get("last_full_research_at"))
+    final_planning_at = _parse_timestamp(state.get("last_final_planning_at"))
+    final_reasons: list[str] = []
+    if active_rules_changed:
+        final_reasons.append("active_rules_changed")
+    if final_planning_at and full_research_at and final_planning_at < full_research_at:
+        final_reasons.append("final_planning_older_than_full_research")
+    if final_planning_at and _is_stale(final_planning_at, now=now, max_age_seconds=config.final_planning_hours * 3600):
+        final_reasons.append("final_planning_stale")
+    account_refresh_due = _is_stale(account_refresh_at, now=now, max_age_seconds=config.account_refresh_minutes * 60)
+    no_submit_preflight_due = _is_stale(preflight_at, now=now, max_age_seconds=config.no_submit_preflight_hours * 3600)
+    full_research_due = _is_stale(full_research_at, now=now, max_age_seconds=config.full_research_days * 86400)
+    reasons: list[str] = []
+    if account_refresh_due:
+        reasons.append("account_refresh_stale")
+    if no_submit_preflight_due:
+        reasons.append("no_submit_preflight_stale")
+    if full_research_due:
+        reasons.append("full_research_stale")
+    reasons.extend(final_reasons)
+    return {
+        "account_refresh_due": account_refresh_due,
+        "no_submit_preflight_due": no_submit_preflight_due,
+        "full_research_due": full_research_due,
+        "final_planning_due": bool(final_reasons),
+        "final_planning_reasons": final_reasons,
+        "reasons": reasons,
+        "last_account_refresh_at": _format_timestamp(account_refresh_at) if account_refresh_at else "",
+        "last_no_submit_preflight_at": _format_timestamp(preflight_at) if preflight_at else "",
+        "last_full_research_at": _format_timestamp(full_research_at) if full_research_at else "",
+        "last_final_planning_at": _format_timestamp(final_planning_at) if final_planning_at else "",
+    }
 
 
 def _latest_resource_controls(summary: Mapping[str, Any]) -> dict[str, Any]:
@@ -362,6 +429,19 @@ def _pipeline_summary_has_committee_research(summary: Mapping[str, Any]) -> bool
         if stage_id.startswith("committee_batch_"):
             return True
     return False
+
+
+def _pipeline_summary_has_successful_final_planning(summary: Mapping[str, Any]) -> bool:
+    if str(summary.get("status") or "") != "completed":
+        return False
+    if _int_value(summary.get("blocker_count")) != 0:
+        return False
+    passed_stage_ids = {
+        str(stage.get("stage_id") or "")
+        for stage in summary.get("stages") or []
+        if isinstance(stage, Mapping) and str(stage.get("status") or "") in {"passed", "completed"}
+    }
+    return {"final_planning_refresh", "extract_final_action_plan"}.issubset(passed_stage_ids)
 
 
 def _generated_committee_stage_completed(stage: Mapping[str, Any]) -> bool:
