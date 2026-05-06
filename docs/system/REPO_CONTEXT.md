@@ -11,8 +11,9 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-06 by Codex after scheduler timeout/cadence-state,
-enrichment, dashboard, paper-boundary, and Grok-collab updates.
+Last updated: 2026-05-06 by Codex after scheduler no-submit cadence
+verification, timeout/cadence-state, enrichment, dashboard, paper-boundary,
+and Grok-collab updates.
 
 ## 1. Project Identity
 
@@ -168,12 +169,23 @@ Scheduler-readiness features now exist:
   - `%TEMP%\longterm_scheduler_final_planning_plan_20260506_160649`: print-plan
     proved final planning renders `--final-planning-refresh` plus
     `--final-planning-timeout-seconds 45` and resource controls mark it bounded.
+  - `%TEMP%\longterm_scheduler_chunks5_7_20260506_163023`: full no-submit
+    research cadence proof using copied/resumable completed committee artifacts.
+    The scheduler completed one run with `error_count=0`,
+    `order_submission_enabled=false`, generated-committee stage completed by
+    skipping the 10 already-handled batches, final planning passed with a
+    900-second timeout bound, pipeline artifact health was `ready`, and the new
+    scheduler cadence verifier reported `status=ready` with no blockers.
 - Policy-state artifacts track `last_full_research_at`,
   `last_no_submit_preflight_at`, `last_account_refresh_at`, and
   `last_final_planning_at`. The scheduler updates account/preflight timestamps
   after each completed cycle, and marks final planning complete only when the
   saved pipeline summary completed both `final_planning_refresh` and
   `extract_final_action_plan` with zero blockers.
+- `longterm_pipeline_scheduler_verify.py` is the saved-artifact verifier for
+  no-submit cadence runs. It checks scheduler/pipeline status, no-submit command
+  fragments, bounded resource controls, final-planning timeout, workflow-smoke
+  submitted count, and required policy-state timestamps.
 - Scheduler policy now emits `cadence_recommendations` for account refresh,
   no-submit preflight, full research, and final planning. Final planning becomes
   due when active rules change, when final planning is older than the latest
@@ -188,8 +200,8 @@ Scheduler-readiness features now exist:
 - Scheduler can refresh paper account state before downstream planning.
 
 Near-term scheduler target:
-- Run a full no-submit research cadence with maintained policy state in a
-  longer supervised window.
+- Move from manual supervised scheduler proofs toward a bounded recurring
+  no-submit loop using the verifier report as the post-run acceptance check.
 - Keep paid provider flags explicit until cost behavior is comfortable.
 - Keep broker submission disabled unless running the supervised paper BUY path.
 

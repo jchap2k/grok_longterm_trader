@@ -946,6 +946,31 @@ pipeline summary completed both `final_planning_refresh` and
 `extract_final_action_plan` with zero blockers. A timeout or partial extract
 does not advance that timestamp.
 
+Verify a completed no-submit cadence run before treating it as scheduler-ready:
+
+```powershell
+python scripts/longterm_pipeline_scheduler_verify.py --pipeline-scheduler-summary path\to\pipeline_scheduler_summary.json --policy-state path\to\scheduler_policy_state.json --require-resource-bounded --require-final-planning-bound --require-policy-timestamp last_full_research_at --require-policy-timestamp last_no_submit_preflight_at --require-policy-timestamp last_account_refresh_at --require-policy-timestamp last_final_planning_at --report-output path\to\scheduler_cadence_verification.json --json
+```
+
+The verifier reads saved artifacts only. It blocks if scheduler or pipeline
+submission is enabled, if any scheduler stage failed, if submit-capable command
+fragments appear, if final planning is enabled without a timeout, if pipeline
+blockers are present, if workflow smoke shows submitted orders, or if required
+policy-state timestamps are missing. A `ready` report means the cadence run is
+coherent for no-submit scheduler operation; it is still not authorization to
+submit broker orders.
+
+After a full cadence run finishes, optionally generate a post-cadence advisory
+policy from the finalized scheduler summary and state:
+
+```powershell
+python scripts/longterm_pipeline_scheduler_policy.py --rules-path path\to\active_rules.txt --journal-db path\to\journal.db --policy-state path\to\scheduler_policy_state.json --pipeline-scheduler-summary path\to\pipeline_scheduler_summary.json --pipeline-summary path\to\run_001\pipeline_summary.json --market-regime path\to\market_regime.json --report-output path\to\post_cadence_scheduler_policy.json --json
+```
+
+This second policy read usually gives a cleaner "what next?" view than the
+in-cycle policy artifact because it sees the finalized scheduler summary and
+the account-refresh timestamp written by the scheduler.
+
 When the scheduled no-submit path is refreshing an already-populated paper
 portfolio, add `--allow-existing-paper-positions` to the pipeline command
 template and `--expected-cash-from-portfolio-state` so cash cleanliness follows
