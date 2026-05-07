@@ -408,7 +408,9 @@ orchestration only, not trade authority. When supplied with
 `--portfolio-news-monitor`, it first ingests and validates the saved portfolio
 news-monitor report, then exposes monitor queue counts and top triggers in the
 pipeline artifact rollup without creating research decisions, LLM calls, or
-order intents.
+order intents. The ingest stage also writes
+`portfolio_news_followup_ideas.json`, a grouped, packet-validated idea batch for
+later bounded enrichment/review consumption.
 
 `longterm/pipeline_scheduler.py`
 Runs bounded recurring no-submit research-to-paper refresh loops. It validates

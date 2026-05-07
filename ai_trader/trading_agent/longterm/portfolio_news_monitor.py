@@ -192,6 +192,8 @@ def _queue_row(item: Mapping[str, Any], article: Mapping[str, Any], *, generated
     impact = str(article.get("impact_category") or "")
     return {
         "symbol": item["symbol"],
+        "company_name": str(item.get("company_name") or item["symbol"]),
+        "business_context": str(item.get("business_context") or ""),
         "trigger_type": item["trigger_type"],
         "trigger_sort": 0 if item["trigger_type"] == "portfolio_news" else 1,
         "relevance_score": float(article.get("relevance_score") or 0.0),

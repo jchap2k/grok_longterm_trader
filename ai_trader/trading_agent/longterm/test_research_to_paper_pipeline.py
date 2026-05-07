@@ -269,13 +269,22 @@ def test_portfolio_news_monitor_ingest_stage_rolls_up_queue_for_scheduler_dashbo
     assert stage.stage_id == "ingest_portfolio_news_monitor"
     assert stage.artifact_paths["portfolio_news_monitor"] == str(report_path)
     assert stage.artifact_paths["portfolio_news_monitor_ingest"] == str(ingest_path)
+    assert stage.artifact_paths["portfolio_news_followup_ideas"] == str(tmp_path / "portfolio_news_followup_ideas.json")
     assert ingest_path.exists()
     assert rollup["queue_count"] == 2
     assert rollup["high_impact_count"] == 1
     assert rollup["review_trigger_count"] == 1
+    assert rollup["followup_idea_count"] == 2
+    assert rollup["followup_symbols"] == ["ADBE", "MSFT"]
     assert rollup["symbols"] == ["ADBE", "MSFT"]
     assert rollup["high_impact_symbols_with_decisions"] == ["ADBE"]
     assert rollup["top_triggers"][0]["symbol"] == "ADBE"
+    followups = json.loads((tmp_path / "portfolio_news_followup_ideas.json").read_text(encoding="utf-8"))
+    assert followups[0]["symbol"] == "ADBE"
+    assert followups[0]["company_name"] == "ADBE"
+    assert followups[0]["idea_source"] == "portfolio_news_monitor"
+    assert "Adobe launches new AI product" in "\n".join(followups[0]["source_notes"])
+    assert followups[0]["portfolio_news_monitor_metadata"]["trigger_count"] == 1
 
 
 def test_portfolio_news_monitor_ingest_stage_blocks_on_malformed_report(tmp_path):

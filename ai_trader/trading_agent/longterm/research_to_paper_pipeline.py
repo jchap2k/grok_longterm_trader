@@ -390,6 +390,7 @@ def build_portfolio_news_monitor_ingest_stage(
     root = Path(output_dir)
     source = Path(portfolio_news_monitor)
     ingest = root / "portfolio_news_monitor_ingest.json"
+    followup_ideas = root / "portfolio_news_followup_ideas.json"
     stage = PipelineStage(
         stage_id="ingest_portfolio_news_monitor",
         title="Ingest portfolio news monitor follow-up queue",
@@ -397,11 +398,13 @@ def build_portfolio_news_monitor_ingest_stage(
             f"python {_quote(_script_path('longterm_portfolio_news_monitor_ingest.py'))} "
             f"--input {_quote(source)} "
             f"--output {_quote(ingest)} "
+            f"--followup-ideas-output {_quote(followup_ideas)} "
             "--json"
         ),
         artifact_paths={
             "portfolio_news_monitor": str(source),
             "portfolio_news_monitor_ingest": str(ingest),
+            "portfolio_news_followup_ideas": str(followup_ideas),
         },
         stdout_artifact_path=str(ingest),
     )
@@ -817,6 +820,12 @@ def build_pipeline_artifact_rollup(artifact_paths: Mapping[str, str]) -> dict[st
             "high_impact_symbols_with_decisions": [
                 str(symbol)
                 for symbol in portfolio_news_monitor.get("high_impact_symbols_with_decisions") or []
+                if str(symbol)
+            ],
+            "followup_idea_count": _int_value(portfolio_news_monitor.get("followup_idea_count")),
+            "followup_symbols": [
+                str(symbol)
+                for symbol in portfolio_news_monitor.get("followup_symbols") or []
                 if str(symbol)
             ],
             "warnings": [

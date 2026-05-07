@@ -442,6 +442,10 @@ durably timestamped in scheduler policy-state as `last_news_monitor_at`.
 The pipeline exposes monitor counts under
 `artifact_rollup.portfolio_news_monitor`, including queue count, high-impact
 count, review-trigger count, affected symbols, and top triggers.
+It also writes `portfolio_news_followup_ideas.json`, a grouped idea batch that
+is compatible with the research-packet intake path. Treat that file as a
+future bounded enrichment/review input, not as permission to call LLMs or change
+account actions automatically.
 
 For broad universe work, prefer overnight batches over paid speed upgrades.
 Polygon's free-tier cadence is acceptable when requests are paced in groups of

@@ -130,8 +130,12 @@ Perplexity state:
   latest journal decision when available, and writes an
   `enrichment_needed_queue` without broker calls, LLM calls, or order intents.
 - `longterm_portfolio_news_monitor_ingest.py` validates saved monitor reports
-  and creates compact queue summaries for pipeline/scheduler/dashboard rollups.
-  It does not fetch news, call LLMs, or create trade intents.
+  and creates compact queue summaries plus
+  `portfolio_news_followup_ideas.json` for pipeline/scheduler/dashboard
+  rollups. Follow-up ideas are validated through
+  `research.intake.create_research_packet_from_idea()` before being written,
+  but they remain future bounded enrichment/review inputs. The ingest path does
+  not fetch news, call LLMs, or create trade intents.
 
 ## 5. Scheduler And Pipeline State
 
@@ -153,7 +157,8 @@ Scheduler-readiness features now exist:
   `ingest_portfolio_news_monitor`. Its artifact rollup exposes
   `portfolio_news_monitor.queue_count`, `high_impact_count`,
   `review_trigger_count`, affected symbols, high-impact journal-linked symbols,
-  warnings, and top triggers while keeping `order_submission_enabled=false`.
+  `followup_idea_count`, follow-up symbols, warnings, and top triggers while
+  keeping `order_submission_enabled=false`.
 - The safe preset can optionally pass through bounded upstream research
   campaign, Perplexity, and generated committee batch controls; paid Perplexity
   mode requires `--research-max-pass-count`, and generated committee execution
@@ -242,8 +247,9 @@ Near-term scheduler target:
 - Move from manual supervised scheduler proofs toward a bounded recurring
   no-submit loop using the verifier report as the post-run acceptance check.
 - Feed monitor queue rows into a later explicit deeper-enrichment/review queue;
-  current scheduler wiring surfaces them and timestamps the check but does not
-  automatically spend LLM calls or change portfolio decisions.
+  current scheduler wiring surfaces packet-validated follow-up ideas and
+  timestamps the check but does not automatically spend LLM calls or change
+  portfolio decisions.
 - Keep paid provider flags explicit until cost behavior is comfortable.
 - Keep broker submission disabled unless running the supervised paper BUY path.
 

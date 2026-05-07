@@ -138,6 +138,8 @@ def test_portfolio_news_monitor_links_latest_journal_decision_for_held_symbol(tm
     queue_row = report["enrichment_needed_queue"][0]
     assert queue_row["linked_decision_id"] == decision_id
     assert queue_row["latest_recommendation"] == "BUY"
+    assert queue_row["company_name"] == "Apple"
+    assert queue_row["business_context"] == "Services and ecosystem durability."
     assert queue_row["thesis_impact_hint"] in {"potential_confirmation", "potential_invalidation", "review_required"}
 
 
