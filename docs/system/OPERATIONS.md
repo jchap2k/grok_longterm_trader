@@ -487,6 +487,16 @@ complex holdings or large possible portfolio implications. The default remains
 LLM loop. Final-planning refresh remains a separate explicit action after the
 operator reviews the new committee decisions.
 
+After a capped follow-up committee run, the pipeline rollup and pipeline-health
+report expose reviewed follow-up symbols, decision IDs, reviewed count, and the
+next safe action
+`inspect_portfolio_news_followup_reviews_before_final_planning_refresh`. The
+localhost dashboard displays the reviewed count and follow-up step from
+`/api/pipeline-health.json`. Treat that as an inspection checkpoint: review the
+newly journaled follow-up decisions first, then run a separate final-planning
+refresh if the decisions should affect buy-promotion, account planning, or
+paper-readiness artifacts.
+
 For broad universe work, prefer overnight batches over paid speed upgrades.
 Polygon's free-tier cadence is acceptable when requests are paced in groups of
 five with a little more than one minute of pause, cached, and resumable; a

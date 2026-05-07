@@ -213,6 +213,77 @@ def test_pipeline_summary_includes_artifact_rollups_for_scheduler_dashboard(tmp_
     assert rollup["health"]["missing_count"] == 0
 
 
+def test_pipeline_rollup_surfaces_portfolio_news_followup_review_step(tmp_path):
+    batch = tmp_path / "research-batch-001.json"
+    cycle_output = tmp_path / "research-batch-001_cycle.json"
+    committee = tmp_path / "committee_batch_run_summary.json"
+    write_json_artifact(
+        batch,
+        [
+            {
+                "symbol": "ADBE",
+                "company_name": "Adobe",
+                "idea_source": "portfolio_news_monitor",
+            }
+        ],
+    )
+    write_json_artifact(
+        cycle_output,
+        {
+            "status": "completed",
+            "decision_ids": ["decision-adbe-news-review"],
+            "account_action_plan_generated": True,
+        },
+    )
+    write_json_artifact(
+        committee,
+        {
+            "mode": "committee_batch_runner",
+            "campaign_id": "portfolio_news_followup",
+            "status": "completed",
+            "batch_count": 1,
+            "completed_count": 1,
+            "failed_count": 0,
+            "skipped_count": 0,
+            "remaining_count": 0,
+            "batches": [
+                {
+                    "batch_id": "research-batch-001",
+                    "batch_path": str(batch),
+                    "cycle_output": str(cycle_output),
+                    "status": "passed",
+                }
+            ],
+        },
+    )
+    stages = [
+        PipelineStage(
+            stage_id="portfolio_news_followup_committee_batches",
+            title="Follow-up",
+            command="python followup.py",
+            artifact_paths={
+                "portfolio_news_followup_committee_batch_run_summary": str(committee),
+            },
+        )
+    ]
+
+    result = run_pipeline_stages(
+        stages,
+        output_dir=tmp_path / "out",
+        summary_output=tmp_path / "summary.json",
+        command_runner=lambda command: (0, "", ""),
+    )
+
+    followup = result.artifact_rollup["portfolio_news_monitor"]
+    assert followup["followup_reviewed_count"] == 1
+    assert followup["followup_reviewed_symbols"] == ["ADBE"]
+    assert followup["followup_reviewed_decision_ids"] == ["decision-adbe-news-review"]
+    assert followup["followup_review_next_action"] == (
+        "inspect_portfolio_news_followup_reviews_before_final_planning_refresh"
+    )
+    assert result.next_safe_action == "inspect_portfolio_news_followup_reviews_before_final_planning_refresh"
+
+
 def test_portfolio_news_monitor_ingest_stage_rolls_up_queue_for_scheduler_dashboard(tmp_path):
     report_path = tmp_path / "portfolio_news_monitor.json"
     ingest_path = tmp_path / "portfolio_news_monitor_ingest.json"

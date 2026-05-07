@@ -832,7 +832,7 @@ def run_pipeline_stages(
         output_dir=str(root),
         stages=[asdict(item) for item in results],
         artifact_paths=artifact_paths,
-        next_safe_action=_next_safe_action(status),
+        next_safe_action=_next_safe_action(status, artifact_rollup=artifact_rollup),
         artifact_rollup=artifact_rollup,
     )
     write_pipeline_summary(result, summary_output)
@@ -853,6 +853,10 @@ def build_pipeline_artifact_rollup(artifact_paths: Mapping[str, str]) -> dict[st
     portfolio_news_followup_split = _load_json_object(artifact_paths.get("portfolio_news_followup_batch_split"))
     portfolio_news_followup_committee = _load_json_object(
         artifact_paths.get("portfolio_news_followup_committee_batch_run_summary")
+    )
+    portfolio_news_followup_review = _portfolio_news_followup_review_summary(
+        portfolio_news_followup_committee,
+        final_planning_refresh_path=artifact_paths.get("final_planning_refresh"),
     )
     intents = [dict(item) for item in action_plan.get("intents") or [] if isinstance(item, Mapping)]
     intent_counts: dict[str, int] = {}
@@ -932,6 +936,11 @@ def build_pipeline_artifact_rollup(artifact_paths: Mapping[str, str]) -> dict[st
                 portfolio_news_followup_committee.get("remaining_count")
             ),
             "followup_committee_status": str(portfolio_news_followup_committee.get("status") or "not_run"),
+            "followup_reviewed_count": portfolio_news_followup_review["reviewed_count"],
+            "followup_reviewed_batch_count": portfolio_news_followup_review["reviewed_batch_count"],
+            "followup_reviewed_symbols": portfolio_news_followup_review["reviewed_symbols"],
+            "followup_reviewed_decision_ids": portfolio_news_followup_review["reviewed_decision_ids"],
+            "followup_review_next_action": portfolio_news_followup_review["next_action"],
             "warnings": [
                 str(warning)
                 for warning in portfolio_news_monitor.get("warnings") or []
@@ -948,6 +957,51 @@ def build_pipeline_artifact_rollup(artifact_paths: Mapping[str, str]) -> dict[st
             "agent_next_step": operator_status.get("agent_next_step") or {},
         },
         "health": build_pipeline_artifact_health(artifact_paths),
+    }
+
+
+def _portfolio_news_followup_review_summary(
+    summary: Mapping[str, Any],
+    *,
+    final_planning_refresh_path: str | None = None,
+) -> dict[str, Any]:
+    """Summarize journaled portfolio-news follow-up reviews from batch outputs."""
+    reviewed_symbols: list[str] = []
+    reviewed_decision_ids: list[str] = []
+    reviewed_batches = 0
+    for batch_result in summary.get("batches") or []:
+        if not isinstance(batch_result, Mapping):
+            continue
+        if str(batch_result.get("status") or "") not in {"passed", "skipped_resume"}:
+            continue
+        batch_symbols = _symbols_from_rows(_load_json_list(str(batch_result.get("batch_path") or "")))
+        cycle = _load_json_object(str(batch_result.get("cycle_output") or ""))
+        decision_ids = [
+            str(decision_id)
+            for decision_id in cycle.get("decision_ids") or []
+            if str(decision_id)
+        ]
+        if not batch_symbols and not decision_ids:
+            continue
+        reviewed_batches += 1
+        reviewed_symbols.extend(batch_symbols)
+        reviewed_decision_ids.extend(decision_ids)
+    reviewed_symbols = _dedupe_strings(reviewed_symbols)
+    reviewed_decision_ids = _dedupe_strings(reviewed_decision_ids)
+    reviewed_count = len(reviewed_decision_ids) or len(reviewed_symbols)
+    final_planning_present = bool(final_planning_refresh_path and artifact_exists(Path(final_planning_refresh_path)))
+    if reviewed_count and final_planning_present:
+        next_action = "inspect_portfolio_news_followup_reviews_and_refreshed_plan_before_submit"
+    elif reviewed_count:
+        next_action = "inspect_portfolio_news_followup_reviews_before_final_planning_refresh"
+    else:
+        next_action = ""
+    return {
+        "reviewed_count": reviewed_count,
+        "reviewed_batch_count": reviewed_batches,
+        "reviewed_symbols": reviewed_symbols,
+        "reviewed_decision_ids": reviewed_decision_ids,
+        "next_action": next_action,
     }
 
 
@@ -1013,10 +1067,14 @@ def _timeout_text(value: str | bytes | None) -> str:
     return str(value)
 
 
-def _next_safe_action(status: str) -> str:
+def _next_safe_action(status: str, *, artifact_rollup: Mapping[str, Any] | None = None) -> str:
     if status == "planned":
         return "review_pipeline_plan"
     if status == "completed":
+        followup = ((artifact_rollup or {}).get("portfolio_news_monitor") or {})
+        followup_action = str(followup.get("followup_review_next_action") or "")
+        if followup_action:
+            return followup_action
         return "review_saved_preflight_artifacts_before_any_supervised_submit"
     return "inspect_failed_stage_log_before_continuing"
 
@@ -1056,6 +1114,18 @@ def _symbols_from_rows(rows: Iterable[Mapping[str, Any]]) -> list[str]:
             seen.add(symbol)
             symbols.append(symbol)
     return symbols
+
+
+def _dedupe_strings(values: Iterable[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for raw in values:
+        value = str(raw).strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
 
 
 def _int_value(value: Any) -> int:

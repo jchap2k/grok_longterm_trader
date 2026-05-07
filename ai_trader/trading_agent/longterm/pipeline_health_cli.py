@@ -64,6 +64,9 @@ def build_pipeline_health_report(
     status = "ready"
     if health["status"] != "ready" or missing_required:
         status = "attention_required"
+    followup_next_action = str(
+        ((rollup.get("portfolio_news_monitor") or {}).get("followup_review_next_action") or "")
+    )
     return {
         "schema_version": 1,
         "mode": "pipeline_artifact_health",
@@ -79,7 +82,7 @@ def build_pipeline_health_report(
         "next_safe_action": (
             "review_missing_or_malformed_artifacts"
             if status == "attention_required"
-            else "artifacts_ready_for_dashboard_or_scheduler"
+            else followup_next_action or "artifacts_ready_for_dashboard_or_scheduler"
         ),
     }
 

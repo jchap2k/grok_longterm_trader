@@ -79,6 +79,8 @@ def test_operator_dashboard_html_renders_human_control_surface():
     assert "MA" in html
     assert "SPY" in html
     assert "Order Submission Enabled: false" in html
+    assert "data-pipeline-followup-reviewed" in html
+    assert "data-pipeline-followup-next-step" in html
 
 
 def test_operator_dashboard_svg_logo_uses_rail_contrast_variant():

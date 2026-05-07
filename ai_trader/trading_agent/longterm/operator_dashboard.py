@@ -105,6 +105,10 @@ def build_operator_dashboard_html(dashboard: Mapping[str, Any]) -> str:
         "<h1>Long-Term Trader Dashboard</h1>"
         f"<p>Order Submission Enabled: {str(bool(dashboard.get('order_submission_enabled'))).lower()}</p>"
         f"<p>Advisory: {escape(str((dashboard.get('agent_advisory') or {}).get('state') or 'unknown'))}</p>"
+        "<div data-pipeline-health>"
+        "<p>Follow-up reviews: <span data-pipeline-followup-reviewed>n/a</span></p>"
+        "<p>Follow-up next step: <span data-pipeline-followup-next-step>n/a</span></p>"
+        "</div>"
         f"{body}</body></html>\n"
     )
 
@@ -1381,6 +1385,8 @@ def _pipeline_health_panel() -> str:
         "<div><span>Research Cap</span><strong data-pipeline-resource-research-cap>n/a</strong></div>"
         "<div><span>Committee Cap</span><strong data-pipeline-resource-committee-cap>n/a</strong></div>"
         "<div><span>Bounded</span><strong data-pipeline-resource-bounded>n/a</strong></div>"
+        "<div><span>Follow-Up Reviewed</span><strong data-pipeline-followup-reviewed>n/a</strong></div>"
+        "<div><span>Follow-Up Step</span><strong data-pipeline-followup-next-step>n/a</strong></div>"
         "</div>"
         "<p data-pipeline-health-message>Serve the dashboard locally to check saved pipeline artifacts from "
         "<code>/api/pipeline-health.json</code>.</p>"
@@ -1801,6 +1807,8 @@ def _pipeline_health_refresh_script() -> str:
   const researchCapNode = card.querySelector("[data-pipeline-resource-research-cap]");
   const committeeCapNode = card.querySelector("[data-pipeline-resource-committee-cap]");
   const boundedNode = card.querySelector("[data-pipeline-resource-bounded]");
+  const followupReviewedNode = card.querySelector("[data-pipeline-followup-reviewed]");
+  const followupNextStepNode = card.querySelector("[data-pipeline-followup-next-step]");
   const messageNode = card.querySelector("[data-pipeline-health-message]");
   const updatedNode = card.querySelector("[data-pipeline-health-updated]");
   const titleCase = (value) => String(value || "unknown").replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
@@ -1808,6 +1816,7 @@ def _pipeline_health_refresh_script() -> str:
     const health = payload.health || {};
     const rollup = payload.rollup || {};
     const selection = rollup.research_selection || {};
+    const portfolioNews = rollup.portfolio_news_monitor || {};
     const controls = payload.resource_controls || {};
     if (statusNode) statusNode.textContent = titleCase(payload.status || health.status);
     if (missingNode) missingNode.textContent = String(health.missing_count ?? 0);
@@ -1817,6 +1826,8 @@ def _pipeline_health_refresh_script() -> str:
     if (researchCapNode) researchCapNode.textContent = controls.research_max_pass_count == null ? "n/a" : String(controls.research_max_pass_count);
     if (committeeCapNode) committeeCapNode.textContent = controls.generated_committee_max_batches == null ? "n/a" : String(controls.generated_committee_max_batches);
     if (boundedNode) boundedNode.textContent = controls.bounded == null ? "n/a" : (controls.bounded ? "Yes" : "No");
+    if (followupReviewedNode) followupReviewedNode.textContent = String(portfolioNews.followup_reviewed_count ?? 0);
+    if (followupNextStepNode) followupNextStepNode.textContent = portfolioNews.followup_review_next_action ? titleCase(portfolioNews.followup_review_next_action) : "n/a";
     if (messageNode) messageNode.textContent = payload.next_safe_action ? titleCase(payload.next_safe_action) : "Pipeline health loaded.";
     if (updatedNode) updatedNode.textContent = `Checked from local pipeline endpoint: ${payload.pipeline_status || "unknown"}`;
     card.dataset.pipelineHealthState = String(payload.status || health.status || "unknown");

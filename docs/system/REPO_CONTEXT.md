@@ -11,8 +11,8 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-07 by Codex after adding Kronos to the post-scheduler
-roadmap as an optional local market-language advisory layer.
+Last updated: 2026-05-07 by Codex after portfolio-news follow-up committee
+reviews were surfaced as a distinct pipeline-health/dashboard inspection step.
 
 ## 1. Project Identity
 
@@ -159,6 +159,12 @@ Perplexity state:
   follow-up batches through the existing no-submit committee runner. This may
   journal review decisions, but it still does not refresh buy-promotion/final
   action planning, mutate account actions, or submit broker orders.
+- Pipeline rollups and `/api/pipeline-health.json` now expose reviewed
+  portfolio-news follow-up symbols, decision IDs, reviewed count, and the next
+  safe action
+  `inspect_portfolio_news_followup_reviews_before_final_planning_refresh`.
+  This makes the required inspection checkpoint visible before any later
+  buy-promotion/final-planning refresh.
 
 ## 5. Scheduler And Pipeline State
 
@@ -191,8 +197,8 @@ Scheduler-readiness features now exist:
   `portfolio_news_monitor.queue_count`, `high_impact_count`,
   `review_trigger_count`, affected symbols, high-impact journal-linked symbols,
   `followup_idea_count`, follow-up symbols, optional follow-up batch counts,
-  follow-up committee progress counts, warnings, and top triggers while keeping
-  `order_submission_enabled=false`.
+  follow-up committee progress counts, reviewed follow-up decision IDs/symbols,
+  warnings, and top triggers while keeping `order_submission_enabled=false`.
 - The safe preset can optionally pass through bounded upstream research
   campaign, Perplexity, and generated committee batch controls; paid Perplexity
   mode requires `--research-max-pass-count`, and generated committee execution

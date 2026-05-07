@@ -160,3 +160,62 @@ def test_pipeline_health_cli_includes_scheduler_resource_controls(tmp_path, caps
     assert printed["resource_controls"]["provider_mode"] == "perplexity"
     assert printed["resource_controls"]["bounded"] is True
     assert printed["resource_controls"]["research_max_pass_count"] == 25
+
+
+def test_pipeline_health_cli_surfaces_portfolio_news_followup_review_next_action(tmp_path, capsys):
+    batch = tmp_path / "research-batch-001.json"
+    cycle_output = tmp_path / "research-batch-001_cycle.json"
+    committee = tmp_path / "committee_batch_run_summary.json"
+    pipeline_summary = tmp_path / "pipeline_summary.json"
+    batch.write_text(json.dumps([{"symbol": "MSFT"}]), encoding="utf-8")
+    cycle_output.write_text(json.dumps({"decision_ids": ["decision-msft-followup"]}), encoding="utf-8")
+    committee.write_text(
+        json.dumps(
+            {
+                "campaign_id": "portfolio_news_followup",
+                "status": "completed",
+                "batch_count": 1,
+                "completed_count": 1,
+                "failed_count": 0,
+                "skipped_count": 0,
+                "remaining_count": 0,
+                "batches": [
+                    {
+                        "status": "passed",
+                        "batch_path": str(batch),
+                        "cycle_output": str(cycle_output),
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    pipeline_summary.write_text(
+        json.dumps(
+            {
+                "status": "completed",
+                "order_submission_enabled": False,
+                "artifact_paths": {
+                    "portfolio_news_followup_committee_batch_run_summary": str(committee),
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--pipeline-summary",
+                str(pipeline_summary),
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert printed["next_safe_action"] == "inspect_portfolio_news_followup_reviews_before_final_planning_refresh"
+    followup = printed["rollup"]["portfolio_news_monitor"]
+    assert followup["followup_reviewed_symbols"] == ["MSFT"]
+    assert followup["followup_reviewed_decision_ids"] == ["decision-msft-followup"]
