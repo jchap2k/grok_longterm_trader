@@ -404,17 +404,23 @@ planning refresh before that paper-preflight path, but it still does not perform
 broker submission. It validates the active rules file, logs every command,
 writes `pipeline_summary.json`, keeps `order_submission_enabled=false`, and
 rejects any planned stage containing `--submit-paper-orders`. It is artifact
-orchestration only, not trade authority.
+orchestration only, not trade authority. When supplied with
+`--portfolio-news-monitor`, it first ingests and validates the saved portfolio
+news-monitor report, then exposes monitor queue counts and top triggers in the
+pipeline artifact rollup without creating research decisions, LLM calls, or
+order intents.
 
 `longterm/pipeline_scheduler.py`
 Runs bounded recurring no-submit research-to-paper refresh loops. It validates
 command templates before execution, rejects submit-capable fragments and shell
 chaining, writes isolated per-run artifact folders, refreshes paper portfolio
-state when configured, records scheduler-policy state, and can refresh the
-dashboard manifest/site after each run. It can also run a post-cycle verifier
-after the scheduler summary and policy-state artifacts are written, causing the
-cycle to fail closed if the no-submit cadence evidence is not ready. The CLI
-also exposes
+state when configured, can run deterministic portfolio-news monitoring before
+the pipeline, records scheduler-policy state, and can refresh the dashboard
+manifest/site after each run. A successful monitor pass writes
+`last_news_monitor_at` even if a later pipeline stage fails, preserving evidence
+that the daily news check happened. It can also run a post-cycle verifier after
+the scheduler summary and policy-state artifacts are written, causing the cycle
+to fail closed if the no-submit cadence evidence is not ready. The CLI also exposes
 `--preset ongoing-no-submit`, a safe standard command set for the ongoing paper
 review loop. The preset still performs no broker submission; it only builds
 research, paper-preflight, policy, account-refresh, and dashboard artifacts.

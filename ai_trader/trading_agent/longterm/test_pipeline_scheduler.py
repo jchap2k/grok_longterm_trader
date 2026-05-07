@@ -82,6 +82,17 @@ def _safe_post_run_verification_template() -> str:
     )
 
 
+def _safe_portfolio_news_monitor_template() -> str:
+    return (
+        "python scripts/longterm_portfolio_news_monitor.py "
+        "--portfolio-state {portfolio_state} "
+        "--snapshot-file news_snapshot.json "
+        "--journal-db journal.db "
+        "--output {portfolio_news_monitor} "
+        "--json"
+    )
+
+
 def _safe_committee_preset_policy_template() -> str:
     return (
         "python scripts/longterm_committee_preset_policy.py "
@@ -234,6 +245,33 @@ def test_validate_post_run_verification_template_requires_verifier_summary_and_o
         )
 
 
+def test_validate_portfolio_news_monitor_template_requires_script_and_output(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+
+    validate_scheduler_command_template(
+        _safe_portfolio_news_monitor_template(),
+        command_kind="portfolio_news_monitor",
+        rules_path=rules_path,
+    )
+
+    with pytest.raises(ValueError, match="longterm_portfolio_news_monitor.py"):
+        validate_scheduler_command_template(
+            _safe_portfolio_news_monitor_template().replace(
+                "longterm_portfolio_news_monitor.py",
+                "longterm_other.py",
+            ),
+            command_kind="portfolio_news_monitor",
+            rules_path=rules_path,
+        )
+    with pytest.raises(ValueError, match="--output"):
+        validate_scheduler_command_template(
+            _safe_portfolio_news_monitor_template().replace("--output {portfolio_news_monitor} ", ""),
+            command_kind="portfolio_news_monitor",
+            rules_path=rules_path,
+        )
+
+
 def test_print_plan_only_writes_rendered_summary_without_running_commands(tmp_path):
     rules_path = tmp_path / "active_rules.txt"
     rules_path.write_text("<rules />", encoding="utf-8")
@@ -259,6 +297,29 @@ def test_print_plan_only_writes_rendered_summary_without_running_commands(tmp_pa
     assert "--summary-output" in command
     assert "--rules-path" in command
     assert "{pipeline_summary}" not in command
+
+
+def test_print_plan_only_renders_portfolio_news_monitor_command(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+
+    summary = run_pipeline_scheduler(
+        PipelineSchedulerInputs(
+            output_dir=tmp_path / "scheduler",
+            pipeline_command_template=_safe_pipeline_template(),
+            portfolio_news_monitor_command_template=_safe_portfolio_news_monitor_template(),
+            rules_path=rules_path,
+        ),
+        PipelineSchedulerConfig(max_runs=1, print_plan_only=True),
+        now_func=FakeClock().now,
+    )
+
+    run = summary.runs[0]
+    assert summary.status == "planned"
+    assert "longterm_portfolio_news_monitor.py" in run.portfolio_news_monitor_command
+    assert "portfolio_news_monitor.json" in run.portfolio_news_monitor_command
+    assert "{portfolio_news_monitor}" not in run.portfolio_news_monitor_command
+    assert run.portfolio_news_monitor_path.endswith("portfolio_news_monitor.json")
 
 
 def test_successful_scheduler_run_writes_command_logs_health_and_summary(tmp_path):
@@ -302,6 +363,101 @@ def test_successful_scheduler_run_writes_command_logs_health_and_summary(tmp_pat
     health = json.loads(Path(run.pipeline_health_path).read_text(encoding="utf-8"))
     assert health["status"] == "ready"
     assert health["rollup"]["research_selection"]["selected_symbols"] == ["MSFT"]
+
+
+def test_portfolio_news_monitor_runs_before_pipeline_and_path_is_forwarded(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    calls: list[str] = []
+
+    def fake_runner(command: str) -> tuple[int, str, str]:
+        calls.append(command)
+        if "longterm_portfolio_news_monitor.py" in command:
+            monitor_path = Path(command.split("--output ", 1)[1].split(" --", 1)[0].strip('"'))
+            monitor_path.write_text(json.dumps({"status": "completed", "enrichment_needed_queue": []}), encoding="utf-8")
+            return 0, "monitor", ""
+        summary_path = Path(command.split("--summary-output ", 1)[1].split(" --", 1)[0].strip('"'))
+        summary_path.write_text(json.dumps({"status": "completed", "artifact_paths": {}}), encoding="utf-8")
+        return 0, "pipeline", ""
+
+    summary = run_pipeline_scheduler(
+        PipelineSchedulerInputs(
+            output_dir=tmp_path / "scheduler",
+            pipeline_command_template=_safe_pipeline_template() + " --portfolio-news-monitor {portfolio_news_monitor}",
+            portfolio_news_monitor_command_template=_safe_portfolio_news_monitor_template(),
+            rules_path=rules_path,
+        ),
+        PipelineSchedulerConfig(max_runs=1),
+        command_runner=fake_runner,
+        now_func=FakeClock().now,
+    )
+
+    run = summary.runs[0]
+    assert summary.status == "completed"
+    assert "longterm_portfolio_news_monitor.py" in calls[0]
+    assert "longterm_research_to_paper_pipeline.py" in calls[1]
+    assert run.portfolio_news_monitor_exit_code == 0
+    assert Path(run.portfolio_news_monitor_stdout_path).read_text(encoding="utf-8") == "monitor"
+    assert run.portfolio_news_monitor_path in run.pipeline_command
+
+
+def test_portfolio_news_monitor_failure_blocks_pipeline(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    calls: list[str] = []
+
+    def fake_runner(command: str) -> tuple[int, str, str]:
+        calls.append(command)
+        return 8, "", "news failed"
+
+    summary = run_pipeline_scheduler(
+        PipelineSchedulerInputs(
+            output_dir=tmp_path / "scheduler",
+            pipeline_command_template=_safe_pipeline_template() + " --portfolio-news-monitor {portfolio_news_monitor}",
+            portfolio_news_monitor_command_template=_safe_portfolio_news_monitor_template(),
+            rules_path=rules_path,
+        ),
+        PipelineSchedulerConfig(max_runs=1),
+        command_runner=fake_runner,
+        now_func=FakeClock().now,
+    )
+
+    run = summary.runs[0]
+    assert len(calls) == 1
+    assert summary.status == "failed"
+    assert run.blocker == "portfolio_news_monitor_command_failed"
+    assert run.portfolio_news_monitor_exit_code == 8
+    assert "news failed" in Path(run.portfolio_news_monitor_stderr_path).read_text(encoding="utf-8")
+
+
+def test_successful_portfolio_news_monitor_updates_state_even_if_pipeline_fails(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+
+    def fake_runner(command: str) -> tuple[int, str, str]:
+        if "longterm_portfolio_news_monitor.py" in command:
+            monitor_path = Path(command.split("--output ", 1)[1].split(" --", 1)[0].strip('"'))
+            monitor_path.write_text(json.dumps({"status": "completed", "enrichment_needed_queue": []}), encoding="utf-8")
+            return 0, "monitor", ""
+        return 9, "", "pipeline failed"
+
+    summary = run_pipeline_scheduler(
+        PipelineSchedulerInputs(
+            output_dir=tmp_path / "scheduler",
+            pipeline_command_template=_safe_pipeline_template() + " --portfolio-news-monitor {portfolio_news_monitor}",
+            portfolio_news_monitor_command_template=_safe_portfolio_news_monitor_template(),
+            rules_path=rules_path,
+        ),
+        PipelineSchedulerConfig(max_runs=1),
+        command_runner=fake_runner,
+        now_func=FakeClock().now,
+    )
+
+    state = json.loads((tmp_path / "scheduler" / "scheduler_policy_state.json").read_text(encoding="utf-8"))
+    assert summary.status == "failed"
+    assert summary.runs[0].blocker == "pipeline_command_failed"
+    assert state["last_news_monitor_at"] == summary.runs[0].finished_at
+    assert "last_no_submit_preflight_at" not in state
 
 
 def test_failed_pipeline_stops_repeated_scheduler_when_stop_on_error(tmp_path):
@@ -979,6 +1135,39 @@ def test_pipeline_scheduler_cli_accepts_pre_pipeline_refresh_template(tmp_path, 
     assert "paper_portfolio_state.json" in run["pipeline_command"]
 
 
+def test_pipeline_scheduler_cli_accepts_portfolio_news_monitor_template(tmp_path, capsys):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    summary_output = tmp_path / "summary.json"
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--output-dir",
+                str(tmp_path / "scheduler"),
+                "--rules-path",
+                str(rules_path),
+                "--pipeline-command-template",
+                _safe_pipeline_template() + " --portfolio-news-monitor {portfolio_news_monitor}",
+                "--portfolio-news-monitor-command-template",
+                _safe_portfolio_news_monitor_template(),
+                "--print-plan-only",
+                "--summary-output",
+                str(summary_output),
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    run = printed["runs"][0]
+    assert code == 0
+    assert run["status"] == "planned"
+    assert "longterm_portfolio_news_monitor.py" in run["portfolio_news_monitor_command"]
+    assert "--portfolio-news-monitor" in run["pipeline_command"]
+    assert "portfolio_news_monitor.json" in run["pipeline_command"]
+
+
 def test_pipeline_scheduler_cli_accepts_post_run_verification_template(tmp_path, capsys):
     rules_path = tmp_path / "active_rules.txt"
     rules_path.write_text("<rules />", encoding="utf-8")
@@ -1119,6 +1308,88 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_requires_core_paths(tmp
                     str(tmp_path / "account_action_plan.json"),
                     "--ledger-db",
                     str(tmp_path / "paper_ledger.db"),
+                    "--print-plan-only",
+                ]
+            )
+        )
+
+
+def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_portfolio_news_monitor(tmp_path, capsys):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    snapshot = tmp_path / "news_snapshot.json"
+    snapshot.write_text("{}", encoding="utf-8")
+    watchlist = tmp_path / "watchlist.json"
+    watchlist.write_text("[]", encoding="utf-8")
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--preset",
+                "ongoing-no-submit",
+                "--output-dir",
+                str(tmp_path / "scheduler"),
+                "--rules-path",
+                str(rules_path),
+                "--journal-db",
+                str(tmp_path / "journal.db"),
+                "--ledger-db",
+                str(tmp_path / "paper_ledger.db"),
+                "--action-plan",
+                str(tmp_path / "account_action_plan.json"),
+                "--portfolio-news-monitor",
+                "--portfolio-news-snapshot-file",
+                str(snapshot),
+                "--portfolio-news-watchlist-ideas",
+                str(watchlist),
+                "--portfolio-news-published-after",
+                "2026-05-01",
+                "--portfolio-news-relevance-threshold",
+                "0.7",
+                "--portfolio-news-max-articles-per-symbol",
+                "3",
+                "--print-plan-only",
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    run = printed["runs"][0]
+    assert code == 0
+    assert "longterm_portfolio_news_monitor.py" in run["portfolio_news_monitor_command"]
+    assert "--snapshot-file" in run["portfolio_news_monitor_command"]
+    assert str(snapshot) in run["portfolio_news_monitor_command"]
+    assert "--watchlist-ideas" in run["portfolio_news_monitor_command"]
+    assert "--published-after 2026-05-01" in run["portfolio_news_monitor_command"]
+    assert "--relevance-threshold 0.7" in run["portfolio_news_monitor_command"]
+    assert "--max-articles-per-symbol 3" in run["portfolio_news_monitor_command"]
+    assert "--portfolio-news-monitor" in run["pipeline_command"]
+    assert "portfolio_news_monitor.json" in run["pipeline_command"]
+    assert "--require-policy-timestamp last_news_monitor_at" in run["post_run_verification_command"]
+
+
+def test_pipeline_scheduler_cli_ongoing_no_submit_preset_requires_news_snapshot_when_enabled(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="--portfolio-news-snapshot-file"):
+        run_cli(
+            build_parser().parse_args(
+                [
+                    "--preset",
+                    "ongoing-no-submit",
+                    "--output-dir",
+                    str(tmp_path / "scheduler"),
+                    "--rules-path",
+                    str(rules_path),
+                    "--journal-db",
+                    str(tmp_path / "journal.db"),
+                    "--ledger-db",
+                    str(tmp_path / "paper_ledger.db"),
+                    "--action-plan",
+                    str(tmp_path / "account_action_plan.json"),
+                    "--portfolio-news-monitor",
                     "--print-plan-only",
                 ]
             )

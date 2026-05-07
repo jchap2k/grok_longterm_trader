@@ -20,6 +20,7 @@ from longterm.research_to_paper_pipeline import (
     build_final_planning_refresh_stage,
     build_generated_committee_batch_runner_stage,
     build_paper_preflight_stages,
+    build_portfolio_news_monitor_ingest_stage,
     build_research_campaign_stages,
     run_pipeline_stages,
 )
@@ -76,6 +77,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--recent-research-symbols-file", default="")
     parser.add_argument("--research-as-of-date", default="")
     parser.add_argument("--research-batch-size", type=int, default=5)
+    parser.add_argument(
+        "--portfolio-news-monitor",
+        default="",
+        help="Optional saved portfolio news monitor report to ingest as follow-up queue context.",
+    )
     parser.add_argument("--run-generated-committee-batches", action="store_true")
     parser.add_argument(
         "--no-generated-committee-resume",
@@ -278,6 +284,13 @@ def run_cli(args: argparse.Namespace) -> int:
             build_final_planning_action_plan_extract_stage(
                 output_dir=output_dir,
                 action_plan=args.action_plan,
+            )
+        )
+    if args.portfolio_news_monitor:
+        stages.append(
+            build_portfolio_news_monitor_ingest_stage(
+                portfolio_news_monitor=args.portfolio_news_monitor,
+                output_dir=output_dir,
             )
         )
     stages.extend(build_paper_preflight_stages(

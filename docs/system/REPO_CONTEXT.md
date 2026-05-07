@@ -11,9 +11,10 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-06 by Codex after scheduler post-run verifier wiring,
-no-submit cadence verification, timeout/cadence-state, enrichment, dashboard,
-paper-boundary, and Grok-collab updates.
+Last updated: 2026-05-06 by Codex after portfolio-news monitor scheduler
+wiring, scheduler post-run verifier wiring, no-submit cadence verification,
+timeout/cadence-state, enrichment, dashboard, paper-boundary, and Grok-collab
+updates.
 
 ## 1. Project Identity
 
@@ -63,6 +64,7 @@ Important modules:
 - `longterm/research_automation_campaign.py`
 - `longterm/research_evidence_brief.py`
 - `longterm/portfolio_news_monitor.py`
+- `longterm/portfolio_news_monitor_ingest.py`
 - `longterm/research_runner.py`
 - `longterm/committee_batch_runner.py`
 - `longterm/committee_preset_policy.py`
@@ -127,7 +129,9 @@ Perplexity state:
   excludes protected holdings by default, links queued portfolio symbols to the
   latest journal decision when available, and writes an
   `enrichment_needed_queue` without broker calls, LLM calls, or order intents.
-  Scheduler wiring for `last_news_monitor_at` is still a near-term follow-up.
+- `longterm_portfolio_news_monitor_ingest.py` validates saved monitor reports
+  and creates compact queue summaries for pipeline/scheduler/dashboard rollups.
+  It does not fetch news, call LLMs, or create trade intents.
 
 ## 5. Scheduler And Pipeline State
 
@@ -139,6 +143,17 @@ Scheduler-readiness features now exist:
   account/dashboard refresh. The preset now also appends a post-run
   `longterm_pipeline_scheduler_verify.py` command after the scheduler summary
   and policy-state artifacts are written.
+- The safe preset can optionally run the deterministic portfolio-news monitor
+  before the pipeline via `--portfolio-news-monitor` and a required
+  `--portfolio-news-snapshot-file`. It writes
+  `run_00N/portfolio_news_monitor.json`, passes that path into
+  `longterm_research_to_paper_pipeline.py --portfolio-news-monitor`, and adds
+  `last_news_monitor_at` to verifier timestamp requirements.
+- The research-to-paper pipeline now ingests saved monitor reports as
+  `ingest_portfolio_news_monitor`. Its artifact rollup exposes
+  `portfolio_news_monitor.queue_count`, `high_impact_count`,
+  `review_trigger_count`, affected symbols, high-impact journal-linked symbols,
+  warnings, and top triggers while keeping `order_submission_enabled=false`.
 - The safe preset can optionally pass through bounded upstream research
   campaign, Perplexity, and generated committee batch controls; paid Perplexity
   mode requires `--research-max-pass-count`, and generated committee execution
@@ -195,10 +210,12 @@ Scheduler-readiness features now exist:
     timestamp checks.
 - Policy-state artifacts track `last_full_research_at`,
   `last_no_submit_preflight_at`, `last_account_refresh_at`, and
-  `last_final_planning_at`. The scheduler updates account/preflight timestamps
-  after each completed cycle, and marks final planning complete only when the
-  saved pipeline summary completed both `final_planning_refresh` and
-  `extract_final_action_plan` with zero blockers.
+  `last_final_planning_at`; when the portfolio-news monitor is enabled they
+  also track `last_news_monitor_at`. The scheduler updates account/preflight
+  timestamps after each completed cycle, writes `last_news_monitor_at` after a
+  successful monitor pass even if a later pipeline stage fails, and marks final
+  planning complete only when the saved pipeline summary completed both
+  `final_planning_refresh` and `extract_final_action_plan` with zero blockers.
 - `longterm_pipeline_scheduler_verify.py` is the saved-artifact verifier for
   no-submit cadence runs. It checks scheduler/pipeline status, no-submit command
   fragments, bounded resource controls, final-planning timeout, workflow-smoke
@@ -224,6 +241,9 @@ Scheduler-readiness features now exist:
 Near-term scheduler target:
 - Move from manual supervised scheduler proofs toward a bounded recurring
   no-submit loop using the verifier report as the post-run acceptance check.
+- Feed monitor queue rows into a later explicit deeper-enrichment/review queue;
+  current scheduler wiring surfaces them and timestamps the check but does not
+  automatically spend LLM calls or change portfolio decisions.
 - Keep paid provider flags explicit until cost behavior is comfortable.
 - Keep broker submission disabled unless running the supervised paper BUY path.
 

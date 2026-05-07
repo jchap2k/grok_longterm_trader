@@ -381,6 +381,34 @@ def build_final_planning_action_plan_extract_stage(
     return stage
 
 
+def build_portfolio_news_monitor_ingest_stage(
+    *,
+    portfolio_news_monitor: str | Path,
+    output_dir: str | Path,
+) -> PipelineStage:
+    """Build a deterministic stage that validates and summarizes monitor output."""
+    root = Path(output_dir)
+    source = Path(portfolio_news_monitor)
+    ingest = root / "portfolio_news_monitor_ingest.json"
+    stage = PipelineStage(
+        stage_id="ingest_portfolio_news_monitor",
+        title="Ingest portfolio news monitor follow-up queue",
+        command=(
+            f"python {_quote(_script_path('longterm_portfolio_news_monitor_ingest.py'))} "
+            f"--input {_quote(source)} "
+            f"--output {_quote(ingest)} "
+            "--json"
+        ),
+        artifact_paths={
+            "portfolio_news_monitor": str(source),
+            "portfolio_news_monitor_ingest": str(ingest),
+        },
+        stdout_artifact_path=str(ingest),
+    )
+    validate_stage_command(stage)
+    return stage
+
+
 def build_paper_preflight_stages(
     *,
     output_dir: str | Path,
@@ -731,6 +759,7 @@ def build_pipeline_artifact_rollup(artifact_paths: Mapping[str, str]) -> dict[st
     preview = _load_json_object(artifact_paths.get("paper_preview"))
     workflow = _load_json_object(artifact_paths.get("workflow_smoke"))
     operator_status = _load_json_object(artifact_paths.get("operator_status_bundle"))
+    portfolio_news_monitor = _load_json_object(artifact_paths.get("portfolio_news_monitor_ingest"))
     intents = [dict(item) for item in action_plan.get("intents") or [] if isinstance(item, Mapping)]
     intent_counts: dict[str, int] = {}
     allowed_count = 0
@@ -773,6 +802,34 @@ def build_pipeline_artifact_rollup(artifact_paths: Mapping[str, str]) -> dict[st
             "blocked_count": _int_value(workflow.get("blocked_count")),
             "submitted_count": _int_value(workflow.get("submitted_count")),
             "excluded_count": _int_value(workflow.get("excluded_count")),
+        },
+        "portfolio_news_monitor": {
+            "queue_count": _int_value(portfolio_news_monitor.get("queue_count")),
+            "high_impact_count": _int_value(portfolio_news_monitor.get("high_impact_count")),
+            "review_trigger_count": _int_value(portfolio_news_monitor.get("review_trigger_count")),
+            "monitored_count": _int_value(portfolio_news_monitor.get("monitored_count")),
+            "articles_checked": _int_value(portfolio_news_monitor.get("articles_checked")),
+            "symbols": [
+                str(symbol)
+                for symbol in portfolio_news_monitor.get("symbols") or []
+                if str(symbol)
+            ],
+            "high_impact_symbols_with_decisions": [
+                str(symbol)
+                for symbol in portfolio_news_monitor.get("high_impact_symbols_with_decisions") or []
+                if str(symbol)
+            ],
+            "warnings": [
+                str(warning)
+                for warning in portfolio_news_monitor.get("warnings") or []
+                if str(warning)
+            ],
+            "top_triggers": [
+                dict(row)
+                for row in portfolio_news_monitor.get("top_triggers") or []
+                if isinstance(row, Mapping)
+            ],
+            "status": str(portfolio_news_monitor.get("status") or "not_supplied"),
         },
         "operator": {
             "agent_next_step": operator_status.get("agent_next_step") or {},
@@ -899,6 +956,10 @@ def _quote(value: str | Path) -> str:
     return subprocess.list2cmdline([str(value)])
 
 
+def _script_path(name: str) -> Path:
+    return Path(__file__).resolve().parents[1] / "scripts" / name
+
+
 def _optional_path_arg(flag: str, value: str | Path | None) -> str:
     if not value:
         return ""
@@ -944,6 +1005,7 @@ __all__ = [
     "build_final_planning_refresh_stage",
     "build_generated_committee_batch_runner_stage",
     "build_paper_preflight_stages",
+    "build_portfolio_news_monitor_ingest_stage",
     "build_research_campaign_stages",
     "run_pipeline_stages",
     "validate_stage_command",

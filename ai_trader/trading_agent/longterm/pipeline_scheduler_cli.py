@@ -41,6 +41,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scheduler-policy-command-template", default="")
     parser.add_argument("--account-refresh-command-template", default="")
     parser.add_argument("--post-run-verification-command-template", default="")
+    parser.add_argument("--portfolio-news-monitor-command-template", default="")
     parser.add_argument("--journal-db", default="")
     parser.add_argument("--ledger-db", default="")
     parser.add_argument("--action-plan", default="")
@@ -104,6 +105,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--recent-research-symbols-file", default="")
     parser.add_argument("--research-as-of-date", default="")
     parser.add_argument("--research-batch-size", type=int, default=None)
+    parser.add_argument(
+        "--portfolio-news-monitor",
+        action="store_true",
+        help="Run the deterministic portfolio news monitor before each pipeline cycle.",
+    )
+    parser.add_argument("--portfolio-news-snapshot-file", default="")
+    parser.add_argument("--portfolio-news-watchlist-ideas", default="")
+    parser.add_argument("--portfolio-news-published-after", default="")
+    parser.add_argument("--portfolio-news-relevance-threshold", type=float, default=0.55)
+    parser.add_argument("--portfolio-news-max-articles-per-symbol", type=int, default=5)
     parser.add_argument("--run-generated-committee-batches", action="store_true")
     parser.add_argument("--no-generated-committee-resume", action="store_true")
     parser.add_argument("--generated-committee-max-batches", type=int, default=None)
@@ -165,6 +176,8 @@ def _validate_ongoing_no_submit_research_bounds(args: argparse.Namespace) -> Non
             "--run-generated-committee-batches with --preset ongoing-no-submit requires "
             "--generated-committee-max-batches to bound LLM committee work."
         )
+    if args.portfolio_news_monitor and not args.portfolio_news_snapshot_file:
+        raise ValueError("--portfolio-news-monitor with --preset ongoing-no-submit requires --portfolio-news-snapshot-file.")
 
 
 def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, str]:
@@ -307,6 +320,34 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
         "--expected-cash-from-portfolio-state",
         args.expected_cash_from_portfolio_state,
     )
+    if args.portfolio_news_monitor:
+        _append_optional_path(pipeline_parts, "--portfolio-news-monitor", "{portfolio_news_monitor}")
+
+    portfolio_news_monitor_parts: list[str] = []
+    if args.portfolio_news_monitor:
+        portfolio_news_monitor_parts = [
+            "python",
+            "scripts/longterm_portfolio_news_monitor.py",
+            "--portfolio-state",
+            "{portfolio_state}",
+            "--snapshot-file",
+            _quote(args.portfolio_news_snapshot_file),
+            "--journal-db",
+            _quote(journal_db),
+            "--output",
+            "{portfolio_news_monitor}",
+            "--relevance-threshold",
+            _format_number(float(args.portfolio_news_relevance_threshold)),
+            "--max-articles-per-symbol",
+            str(int(args.portfolio_news_max_articles_per_symbol)),
+            "--json",
+        ]
+        _append_optional_path(portfolio_news_monitor_parts, "--watchlist-ideas", args.portfolio_news_watchlist_ideas)
+        _append_optional_value(
+            portfolio_news_monitor_parts,
+            "--published-after",
+            args.portfolio_news_published_after,
+        )
 
     scheduler_policy_parts = [
         "python",
@@ -385,9 +426,17 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
                 "last_full_research_at",
             ]
         )
+    if args.portfolio_news_monitor:
+        post_run_verification_parts.extend(
+            [
+                "--require-policy-timestamp",
+                "last_news_monitor_at",
+            ]
+        )
 
     return {
         "pre_pipeline_refresh": pre_refresh,
+        "portfolio_news_monitor": " ".join(portfolio_news_monitor_parts),
         "pipeline": " ".join(pipeline_parts),
         "scheduler_policy": " ".join(scheduler_policy_parts),
         "account_refresh": " ".join(account_refresh_parts),
@@ -403,6 +452,7 @@ def _resolve_command_templates(args: argparse.Namespace) -> dict[str, str]:
         args.scheduler_policy_command_template,
         args.account_refresh_command_template,
         args.post_run_verification_command_template,
+        args.portfolio_news_monitor_command_template,
     ]
     if args.preset == "ongoing-no-submit":
         if any(explicit_templates):
@@ -412,6 +462,7 @@ def _resolve_command_templates(args: argparse.Namespace) -> dict[str, str]:
         raise ValueError("--pipeline-command-template is required unless --preset ongoing-no-submit is used.")
     return {
         "pre_pipeline_refresh": args.pre_pipeline_refresh_command_template,
+        "portfolio_news_monitor": args.portfolio_news_monitor_command_template,
         "pipeline": args.pipeline_command_template,
         "committee_preset_policy": args.committee_preset_policy_command_template,
         "scheduler_policy": args.scheduler_policy_command_template,
@@ -427,6 +478,7 @@ def run_cli(args: argparse.Namespace) -> int:
         PipelineSchedulerInputs(
             output_dir=args.output_dir,
             pre_pipeline_refresh_command_template=templates.get("pre_pipeline_refresh", ""),
+            portfolio_news_monitor_command_template=templates.get("portfolio_news_monitor", ""),
             pipeline_command_template=templates["pipeline"],
             committee_preset_policy_command_template=templates.get("committee_preset_policy", ""),
             scheduler_policy_command_template=templates.get("scheduler_policy", ""),

@@ -38,6 +38,7 @@ class PipelineSchedulerInputs:
     pipeline_command_template: str
     rules_path: str | Path
     pre_pipeline_refresh_command_template: str = ""
+    portfolio_news_monitor_command_template: str = ""
     committee_preset_policy_command_template: str = ""
     scheduler_policy_command_template: str = ""
     account_refresh_command_template: str = ""
@@ -73,6 +74,11 @@ class PipelineSchedulerRunRecord:
     pre_pipeline_refresh_exit_code: int | None = None
     pre_pipeline_refresh_stdout_path: str = ""
     pre_pipeline_refresh_stderr_path: str = ""
+    portfolio_news_monitor_path: str = ""
+    portfolio_news_monitor_command: str = ""
+    portfolio_news_monitor_exit_code: int | None = None
+    portfolio_news_monitor_stdout_path: str = ""
+    portfolio_news_monitor_stderr_path: str = ""
     pipeline_exit_code: int | None = None
     pipeline_stdout_path: str = ""
     pipeline_stderr_path: str = ""
@@ -144,6 +150,12 @@ def run_pipeline_scheduler(
         validate_scheduler_command_template(
             inputs.pre_pipeline_refresh_command_template,
             command_kind="pre_pipeline_refresh",
+            rules_path=rules_path,
+        )
+    if inputs.portfolio_news_monitor_command_template:
+        validate_scheduler_command_template(
+            inputs.portfolio_news_monitor_command_template,
+            command_kind="portfolio_news_monitor",
             rules_path=rules_path,
         )
     if inputs.account_refresh_command_template:
@@ -277,6 +289,10 @@ def validate_scheduler_command_template(
         if "longterm_alpaca_paper_snapshot.py" not in lowered:
             raise ValueError("Pre-pipeline refresh command must call scripts/longterm_alpaca_paper_snapshot.py.")
         _require_flag(command_template, "--portfolio-state-output")
+    elif command_kind == "portfolio_news_monitor":
+        if "longterm_portfolio_news_monitor.py" not in lowered:
+            raise ValueError("Portfolio news monitor command must call scripts/longterm_portfolio_news_monitor.py.")
+        _require_flag(command_template, "--output")
     elif command_kind == "post_run_verification":
         if "longterm_pipeline_scheduler_verify.py" not in lowered:
             raise ValueError("Post-run verification command must call scripts/longterm_pipeline_scheduler_verify.py.")
@@ -311,6 +327,7 @@ def _run_one_scheduler_cycle(
     pipeline_summary_path = run_dir / "pipeline_summary.json"
     pipeline_health_path = run_dir / "pipeline_artifact_health.json"
     portfolio_state_path = run_dir / "paper_portfolio_state.json"
+    portfolio_news_monitor_path = run_dir / "portfolio_news_monitor.json"
     committee_preset_policy_path = run_dir / "committee_preset_policy.json"
     scheduler_policy_path = run_dir / "scheduler_policy.json"
     account_refresh_output_dir = run_dir / "paper_account_refresh"
@@ -323,6 +340,7 @@ def _run_one_scheduler_cycle(
         pipeline_summary_path=pipeline_summary_path,
         pipeline_health_path=pipeline_health_path,
         portfolio_state_path=portfolio_state_path,
+        portfolio_news_monitor_path=portfolio_news_monitor_path,
         committee_preset_policy_path=committee_preset_policy_path,
         scheduler_policy_path=scheduler_policy_path,
         account_refresh_output_dir=account_refresh_output_dir,
@@ -339,6 +357,18 @@ def _run_one_scheduler_cycle(
         if inputs.pre_pipeline_refresh_command_template
         else ""
     )
+    portfolio_news_monitor_command = (
+        _render_command(inputs.portfolio_news_monitor_command_template, context)
+        if inputs.portfolio_news_monitor_command_template
+        else ""
+    )
+    monitor_fields = {
+        "portfolio_news_monitor_path": str(portfolio_news_monitor_path) if portfolio_news_monitor_command else "",
+        "portfolio_news_monitor_command": portfolio_news_monitor_command,
+        "portfolio_news_monitor_exit_code": None,
+        "portfolio_news_monitor_stdout_path": "",
+        "portfolio_news_monitor_stderr_path": "",
+    }
     pipeline_command = _prepare_pipeline_command(inputs.pipeline_command_template, context)
     policy_command = (
         _render_command(inputs.scheduler_policy_command_template, context)
@@ -378,6 +408,7 @@ def _run_one_scheduler_cycle(
             pipeline_summary_path=str(pipeline_summary_path),
             pipeline_health_path=str(pipeline_health_path),
             pre_pipeline_refresh_command=pre_pipeline_refresh_command,
+            **monitor_fields,
             pipeline_command=pipeline_command,
             committee_preset_policy_path=str(committee_preset_policy_path) if committee_command else "",
             committee_preset_policy_command=committee_command,
@@ -415,6 +446,7 @@ def _run_one_scheduler_cycle(
                 pre_pipeline_refresh_exit_code=pre_refresh_exit_code,
                 pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
                 pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
+                **monitor_fields,
                 pipeline_command=pipeline_command,
                 committee_preset_policy_path=str(committee_preset_policy_path) if committee_command else "",
                 committee_preset_policy_command=committee_command,
@@ -422,6 +454,45 @@ def _run_one_scheduler_cycle(
                 scheduler_policy_command=policy_command,
                 account_refresh_command=refresh_command,
                 blocker="pre_pipeline_refresh_command_failed",
+                resource_controls=resource_controls,
+            )
+
+    if portfolio_news_monitor_command:
+        monitor_stdout = run_dir / "portfolio_news_monitor_stdout.txt"
+        monitor_stderr = run_dir / "portfolio_news_monitor_stderr.txt"
+        monitor_exit_code, stdout, stderr = command_runner(portfolio_news_monitor_command)
+        _write_text(monitor_stdout, stdout)
+        _write_text(monitor_stderr, stderr)
+        monitor_fields = {
+            "portfolio_news_monitor_path": str(portfolio_news_monitor_path),
+            "portfolio_news_monitor_command": portfolio_news_monitor_command,
+            "portfolio_news_monitor_exit_code": monitor_exit_code,
+            "portfolio_news_monitor_stdout_path": str(monitor_stdout),
+            "portfolio_news_monitor_stderr_path": str(monitor_stderr),
+        }
+        if monitor_exit_code != 0:
+            return PipelineSchedulerRunRecord(
+                run_number=run_number,
+                scheduler_run_id=scheduler_run_id,
+                started_at=_format_timestamp(started),
+                finished_at=_format_timestamp(now_func()),
+                status="failed",
+                run_dir=str(run_dir),
+                pipeline_output_dir=str(pipeline_output_dir),
+                pipeline_summary_path=str(pipeline_summary_path),
+                pipeline_health_path=str(pipeline_health_path),
+                pre_pipeline_refresh_command=pre_pipeline_refresh_command,
+                pre_pipeline_refresh_exit_code=pre_refresh_exit_code,
+                pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
+                pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
+                **monitor_fields,
+                pipeline_command=pipeline_command,
+                committee_preset_policy_path=str(committee_preset_policy_path) if committee_command else "",
+                committee_preset_policy_command=committee_command,
+                scheduler_policy_path=str(scheduler_policy_path) if policy_command else "",
+                scheduler_policy_command=policy_command,
+                account_refresh_command=refresh_command,
+                blocker="portfolio_news_monitor_command_failed",
                 resource_controls=resource_controls,
             )
 
@@ -447,6 +518,7 @@ def _run_one_scheduler_cycle(
             pre_pipeline_refresh_exit_code=pre_refresh_exit_code,
             pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
             pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
+            **monitor_fields,
             pipeline_command=pipeline_command,
             pipeline_exit_code=exit_code,
             pipeline_stdout_path=str(pipeline_stdout_path),
@@ -486,6 +558,7 @@ def _run_one_scheduler_cycle(
                 pre_pipeline_refresh_exit_code=pre_refresh_exit_code,
                 pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
                 pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
+                **monitor_fields,
                 pipeline_command=pipeline_command,
                 pipeline_exit_code=exit_code,
                 pipeline_stdout_path=str(pipeline_stdout_path),
@@ -528,6 +601,7 @@ def _run_one_scheduler_cycle(
                 pre_pipeline_refresh_exit_code=pre_refresh_exit_code,
                 pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
                 pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
+                **monitor_fields,
                 pipeline_command=pipeline_command,
                 pipeline_exit_code=exit_code,
                 pipeline_stdout_path=str(pipeline_stdout_path),
@@ -573,6 +647,7 @@ def _run_one_scheduler_cycle(
                 pre_pipeline_refresh_exit_code=pre_refresh_exit_code,
                 pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
                 pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
+                **monitor_fields,
                 pipeline_command=pipeline_command,
                 pipeline_exit_code=exit_code,
                 pipeline_stdout_path=str(pipeline_stdout_path),
@@ -609,6 +684,7 @@ def _run_one_scheduler_cycle(
         pre_pipeline_refresh_exit_code=pre_refresh_exit_code,
         pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
         pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
+        **monitor_fields,
         pipeline_command=pipeline_command,
         pipeline_exit_code=exit_code,
         pipeline_stdout_path=str(pipeline_stdout_path),
@@ -777,6 +853,7 @@ def _render_context(
     pipeline_summary_path: Path,
     pipeline_health_path: Path,
     portfolio_state_path: Path,
+    portfolio_news_monitor_path: Path,
     committee_preset_policy_path: Path,
     scheduler_policy_path: Path,
     account_refresh_output_dir: Path,
@@ -794,6 +871,7 @@ def _render_context(
         "pipeline_summary": _quote(pipeline_summary_path),
         "pipeline_health": _quote(pipeline_health_path),
         "portfolio_state": _quote(portfolio_state_path),
+        "portfolio_news_monitor": _quote(portfolio_news_monitor_path),
         "committee_preset_policy": _quote(committee_preset_policy_path),
         "scheduler_policy": _quote(scheduler_policy_path),
         "account_refresh_output_dir": _quote(account_refresh_output_dir),
@@ -864,12 +942,17 @@ def _update_scheduler_policy_state_after_record(
     record: PipelineSchedulerRunRecord,
     rules_path: Path,
 ) -> None:
-    if record.status != "completed":
+    if record.status != "completed" and record.portfolio_news_monitor_exit_code != 0:
         return
     state = _load_json_dict(path)
     state["schema_version"] = 1
     state["updated_at"] = record.finished_at
     state["active_rules_sha256"] = hashlib.sha256(rules_path.read_bytes()).hexdigest()
+    if record.portfolio_news_monitor_exit_code == 0:
+        state["last_news_monitor_at"] = record.finished_at
+    if record.status != "completed":
+        _write_json(path, state)
+        return
     if record.pipeline_exit_code == 0:
         state["last_no_submit_preflight_at"] = record.finished_at
     if record.account_refresh_exit_code == 0:

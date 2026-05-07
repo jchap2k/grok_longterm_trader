@@ -16,6 +16,7 @@ from longterm.research_to_paper_pipeline import (
     build_final_planning_refresh_stage,
     build_generated_committee_batch_runner_stage,
     build_paper_preflight_stages,
+    build_portfolio_news_monitor_ingest_stage,
     build_research_campaign_stages,
     run_pipeline_stages,
     validate_stage_command,
@@ -208,6 +209,95 @@ def test_pipeline_summary_includes_artifact_rollups_for_scheduler_dashboard(tmp_
     assert rollup["paper_preview"]["ready_count"] == 1
     assert rollup["workflow_smoke"]["blocked_count"] == 0
     assert rollup["health"]["missing_count"] == 0
+
+
+def test_portfolio_news_monitor_ingest_stage_rolls_up_queue_for_scheduler_dashboard(tmp_path):
+    report_path = tmp_path / "portfolio_news_monitor.json"
+    ingest_path = tmp_path / "portfolio_news_monitor_ingest.json"
+    write_json_artifact(
+        report_path,
+        {
+            "schema_version": 1,
+            "status": "completed",
+            "generated_at": "2026-05-06T15:00:00Z",
+            "order_submission_enabled": False,
+            "llm_calls_enabled": False,
+            "monitored_symbols": ["ADBE", "MSFT"],
+            "monitored_count": 2,
+            "articles_checked": 3,
+            "enrichment_needed_count": 2,
+            "high_impact_count": 1,
+            "enrichment_needed_queue": [
+                {
+                    "symbol": "ADBE",
+                    "title": "Adobe launches new AI product",
+                    "relevance_score": 0.91,
+                    "impact_category": "Product/Tech - High",
+                    "linked_decision_id": "decision-adbe",
+                    "thesis_impact_hint": "potential_confirmation",
+                    "next_step": "schedule_deeper_enrichment",
+                },
+                {
+                    "symbol": "MSFT",
+                    "title": "Microsoft faces regulatory review",
+                    "relevance_score": 0.84,
+                    "impact_category": "Regulatory - Medium",
+                    "linked_decision_id": "decision-msft",
+                    "thesis_impact_hint": "review_required",
+                    "next_step": "schedule_deeper_enrichment",
+                },
+            ],
+            "warnings": [],
+        },
+    )
+
+    result = run_pipeline_stages(
+        [
+            build_portfolio_news_monitor_ingest_stage(
+                portfolio_news_monitor=report_path,
+                output_dir=tmp_path,
+            )
+        ],
+        output_dir=tmp_path,
+        summary_output=tmp_path / "pipeline_summary.json",
+    )
+
+    stage = result.stage_results[0]
+    rollup = result.artifact_rollup["portfolio_news_monitor"]
+    assert result.status == "completed"
+    assert result.order_submission_enabled is False
+    assert stage.stage_id == "ingest_portfolio_news_monitor"
+    assert stage.artifact_paths["portfolio_news_monitor"] == str(report_path)
+    assert stage.artifact_paths["portfolio_news_monitor_ingest"] == str(ingest_path)
+    assert ingest_path.exists()
+    assert rollup["queue_count"] == 2
+    assert rollup["high_impact_count"] == 1
+    assert rollup["review_trigger_count"] == 1
+    assert rollup["symbols"] == ["ADBE", "MSFT"]
+    assert rollup["high_impact_symbols_with_decisions"] == ["ADBE"]
+    assert rollup["top_triggers"][0]["symbol"] == "ADBE"
+
+
+def test_portfolio_news_monitor_ingest_stage_blocks_on_malformed_report(tmp_path):
+    report_path = tmp_path / "portfolio_news_monitor.json"
+    report_path.write_text("not-json", encoding="utf-8")
+
+    result = run_pipeline_stages(
+        [
+            build_portfolio_news_monitor_ingest_stage(
+                portfolio_news_monitor=report_path,
+                output_dir=tmp_path,
+            )
+        ],
+        output_dir=tmp_path,
+        summary_output=tmp_path / "pipeline_summary.json",
+    )
+
+    stage = result.stage_results[0]
+    assert result.status == "failed"
+    assert result.blocker_count == 1
+    assert stage.blocker == "stage_failed:ingest_portfolio_news_monitor"
+    assert "portfolio news monitor report is not valid JSON" in Path(stage.log_path).read_text(encoding="utf-8")
 
 
 def test_pipeline_artifact_health_reports_missing_and_malformed_artifacts(tmp_path):
@@ -1226,3 +1316,59 @@ def test_pipeline_cli_passes_generated_committee_max_batches(tmp_path, capsys):
     printed = json.loads(capsys.readouterr().out)
     assert code == 0
     assert "--max-batches 1" in printed["stages"][0]["command"]
+
+
+def test_pipeline_cli_ingests_portfolio_news_monitor_before_preflight(tmp_path, capsys):
+    rules_path = tmp_path / "active_rules.txt"
+    action_plan = tmp_path / "account_action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    price_map = tmp_path / "prices.json"
+    monitor = tmp_path / "portfolio_news_monitor.json"
+    for path in (rules_path, action_plan, portfolio, price_map):
+        path.write_text("{}", encoding="utf-8")
+    write_json_artifact(
+        monitor,
+        {
+            "schema_version": 1,
+            "status": "completed",
+            "enrichment_needed_queue": [],
+            "order_submission_enabled": False,
+            "llm_calls_enabled": False,
+        },
+    )
+    summary = tmp_path / "summary.json"
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--output-dir",
+                str(tmp_path / "pipeline"),
+                "--rules-path",
+                str(rules_path),
+                "--action-plan",
+                str(action_plan),
+                "--portfolio-state",
+                str(portfolio),
+                "--journal-db",
+                str(tmp_path / "journal.db"),
+                "--ledger-db",
+                str(tmp_path / "ledger.db"),
+                "--price-map",
+                str(price_map),
+                "--portfolio-news-monitor",
+                str(monitor),
+                "--skip-price-map",
+                "--print-plan-only",
+                "--summary-output",
+                str(summary),
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert printed["stages"][0]["stage_id"] == "ingest_portfolio_news_monitor"
+    assert printed["stages"][1]["stage_id"] == "preflight_rules"
+    assert printed["artifact_paths"]["portfolio_news_monitor"] == str(monitor)
+    assert "--input" in printed["stages"][0]["command"]

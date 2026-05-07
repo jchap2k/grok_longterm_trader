@@ -436,8 +436,12 @@ python scripts/longterm_portfolio_news_monitor.py --portfolio-state path\to\port
 For live daily use, first refresh or reuse the same Polygon/news cache that the
 evidence pipeline uses, then feed the symbol-keyed cache/snapshot into this
 monitor. The monitor itself does not call Perplexity, Grok, Alpaca, or any
-broker. A future scheduler chunk should wire the report path into
-policy-state as `last_news_monitor_at` and into dashboard/operator status.
+broker. When the scheduler runs it, the report is written to
+`run_00N\portfolio_news_monitor.json`, ingested by the no-submit pipeline, and
+durably timestamped in scheduler policy-state as `last_news_monitor_at`.
+The pipeline exposes monitor counts under
+`artifact_rollup.portfolio_news_monitor`, including queue count, high-impact
+count, review-trigger count, affected symbols, and top triggers.
 
 For broad universe work, prefer overnight batches over paid speed upgrades.
 Polygon's free-tier cadence is acceptable when requests are paced in groups of
@@ -756,6 +760,7 @@ action plan:
 python scripts/longterm_research_to_paper_pipeline.py --output-dir path\to\pipeline_artifacts --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --price-map path\to\price_map.json --skip-price-map --print-plan-only --json
 python scripts/longterm_research_to_paper_pipeline.py --output-dir path\to\pipeline_artifacts --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --price-map path\to\price_map.json --skip-price-map --expected-cash 74000 --summary-output path\to\pipeline_artifacts\pipeline_summary.json --json
 python scripts/longterm_research_to_paper_pipeline.py --output-dir path\to\pipeline_artifacts --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --expected-cash-from-portfolio-state --allow-existing-paper-positions --summary-output path\to\pipeline_artifacts\pipeline_summary.json --json
+python scripts/longterm_research_to_paper_pipeline.py --output-dir path\to\pipeline_artifacts --portfolio-news-monitor path\to\portfolio_news_monitor.json --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --expected-cash-from-portfolio-state --allow-existing-paper-positions --summary-output path\to\pipeline_artifacts\pipeline_summary.json --json
 ```
 
 The pipeline wrapper is the scheduler-ready command seam. It composes existing
@@ -858,9 +863,10 @@ python scripts/longterm_pipeline_health.py --pipeline-summary path\to\pipeline_a
 The health command is read-only. It reloads the `artifact_paths` recorded in
 `pipeline_summary.json`, builds scheduler/dashboard counts for research
 selection, committee batches, action-plan intents, paper preview, workflow
-smoke, and operator status, then reports missing or malformed files. A `ready`
-report means the saved artifacts are coherent enough for dashboard/scheduler
-inspection; it is not authorization to submit orders.
+smoke, portfolio-news monitor queues, and operator status, then reports missing
+or malformed files. A `ready` report means the saved artifacts are coherent
+enough for dashboard/scheduler inspection; it is not authorization to submit
+orders.
 
 Run the same no-submit pipeline as a bounded recurring scheduler loop:
 
@@ -880,6 +886,7 @@ the operator does not have to hand-maintain four long command templates:
 ```powershell
 python scripts/longterm_pipeline_scheduler.py --preset ongoing-no-submit --run-once --output-dir path\to\pipeline_scheduler_runs --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --profile-config path\to\roth_ira_profile.json --market-regime-file path\to\market_regime.json --final-planning-refresh --final-planning-timeout-seconds 900 --planning-capital-from-portfolio-state --expected-cash-from-portfolio-state --allow-existing-paper-positions --json
 python scripts/longterm_pipeline_scheduler.py --preset ongoing-no-submit --max-runs 3 --interval-seconds 3600 --output-dir path\to\pipeline_scheduler_runs --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --profile-config path\to\roth_ira_profile.json --market-regime-file path\to\market_regime.json --final-planning-refresh --final-planning-timeout-seconds 900 --planning-capital-from-portfolio-state --expected-cash-from-portfolio-state --allow-existing-paper-positions --json
+python scripts/longterm_pipeline_scheduler.py --preset ongoing-no-submit --run-once --output-dir path\to\pipeline_scheduler_runs --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --profile-config path\to\roth_ira_profile.json --portfolio-news-monitor --portfolio-news-snapshot-file path\to\raw_news_by_symbol.json --portfolio-news-watchlist-ideas path\to\research_queue_selected.json --portfolio-news-published-after 2026-05-01 --final-planning-refresh --final-planning-timeout-seconds 900 --planning-capital-from-portfolio-state --expected-cash-from-portfolio-state --allow-existing-paper-positions --json
 ```
 
 The same preset can also run a bounded upstream research cadence before the
@@ -899,6 +906,13 @@ read-only paper-account/dashboard refresh. It writes per-run
 dashboard can refresh from the latest saved run. The preset still rejects
 submit-capable fragments and never adds `--submit-paper-orders` or
 `--confirm-paper-submit`.
+When `--portfolio-news-monitor` is supplied, the preset also runs
+`longterm_portfolio_news_monitor.py` after the fresh account snapshot and before
+the pipeline. V1 requires `--portfolio-news-snapshot-file`; this keeps the
+monitor cache/snapshot driven instead of inventing a live news provider inside
+the scheduler. The rendered pipeline receives `--portfolio-news-monitor
+{portfolio_news_monitor}`, and the post-run verifier requires
+`last_news_monitor_at` in `scheduler_policy_state.json`.
 It also appends a post-run `longterm_pipeline_scheduler_verify.py` command that
 writes `run_00N\scheduler_cadence_verification.json` after the top-level
 `pipeline_scheduler_summary.json` and `scheduler_policy_state.json` are
