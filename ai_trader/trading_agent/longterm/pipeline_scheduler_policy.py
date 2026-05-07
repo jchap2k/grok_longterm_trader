@@ -194,6 +194,8 @@ def build_pipeline_scheduler_policy_state(
         state["last_full_research_at"] = generated_at
     if _pipeline_summary_has_successful_final_planning(pipeline_summary or {}):
         state["last_final_planning_at"] = generated_at
+    if _pipeline_summary_has_successful_followup_batch_split(pipeline_summary or {}):
+        state["last_followup_batch_split_at"] = generated_at
     return state
 
 
@@ -442,6 +444,19 @@ def _pipeline_summary_has_successful_final_planning(summary: Mapping[str, Any]) 
         if isinstance(stage, Mapping) and str(stage.get("status") or "") in {"passed", "completed"}
     }
     return {"final_planning_refresh", "extract_final_action_plan"}.issubset(passed_stage_ids)
+
+
+def _pipeline_summary_has_successful_followup_batch_split(summary: Mapping[str, Any]) -> bool:
+    if str(summary.get("status") or "") != "completed":
+        return False
+    if _int_value(summary.get("blocker_count")) != 0:
+        return False
+    return any(
+        isinstance(stage, Mapping)
+        and str(stage.get("stage_id") or "") == "portfolio_news_followup_batch_split"
+        and str(stage.get("status") or "") in {"passed", "completed"}
+        for stage in summary.get("stages") or []
+    )
 
 
 def _generated_committee_stage_completed(stage: Mapping[str, Any]) -> bool:

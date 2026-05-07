@@ -411,6 +411,28 @@ def test_scheduler_policy_state_persists_scheduler_history_and_full_research_mar
     assert state["last_final_planning_at"] == decision["generated_at"]
 
 
+def test_scheduler_policy_state_marks_followup_batch_split(tmp_path):
+    decision = build_pipeline_scheduler_policy_decision(
+        rules_path=_rules(tmp_path / "active_rules.txt"),
+        now=NOW,
+        policy_state=_fresh_state(),
+    )
+
+    state = build_pipeline_scheduler_policy_state(
+        decision,
+        pipeline_summary={
+            "status": "completed",
+            "blocker_count": 0,
+            "stages": [
+                {"stage_id": "ingest_portfolio_news_monitor", "status": "passed"},
+                {"stage_id": "portfolio_news_followup_batch_split", "status": "passed"},
+            ],
+        },
+    )
+
+    assert state["last_followup_batch_split_at"] == decision["generated_at"]
+
+
 def test_scheduler_policy_marks_final_planning_due_after_full_research_without_planning(tmp_path):
     decision = build_pipeline_scheduler_policy_decision(
         rules_path=_rules(tmp_path / "active_rules.txt"),

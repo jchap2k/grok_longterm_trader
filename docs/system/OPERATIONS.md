@@ -446,6 +446,11 @@ It also writes `portfolio_news_followup_ideas.json`, a grouped idea batch that
 is compatible with the research-packet intake path. Treat that file as a
 future bounded enrichment/review input, not as permission to call LLMs or change
 account actions automatically.
+When you are ready to stage those follow-ups for later committee review, add
+`--portfolio-news-followup-batches` to the no-submit pipeline or scheduler
+preset. That only splits the validated follow-up ideas into normal research
+batch JSON files and records `last_followup_batch_split_at`; it does not run
+committee agents, call paid providers, mutate action plans, or submit orders.
 
 For broad universe work, prefer overnight batches over paid speed upgrades.
 Polygon's free-tier cadence is acceptable when requests are paced in groups of
@@ -917,6 +922,14 @@ monitor cache/snapshot driven instead of inventing a live news provider inside
 the scheduler. The rendered pipeline receives `--portfolio-news-monitor
 {portfolio_news_monitor}`, and the post-run verifier requires
 `last_news_monitor_at` in `scheduler_policy_state.json`.
+If `--portfolio-news-followup-batches` is also supplied, the rendered pipeline
+adds `--portfolio-news-followup-batches` and
+`--portfolio-news-followup-batch-size`, then splits
+`portfolio_news_followup_ideas.json` into
+`portfolio_news_followup_batches\research-batch-*.json`. The verifier then
+requires `last_followup_batch_split_at`, proving the deterministic handoff
+completed. This is still an artifact-only step; running the generated batches
+through committee review is a later, separately capped action.
 It also appends a post-run `longterm_pipeline_scheduler_verify.py` command that
 writes `run_00N\scheduler_cadence_verification.json` after the top-level
 `pipeline_scheduler_summary.json` and `scheduler_policy_state.json` are

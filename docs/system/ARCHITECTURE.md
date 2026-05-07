@@ -410,7 +410,10 @@ news-monitor report, then exposes monitor queue counts and top triggers in the
 pipeline artifact rollup without creating research decisions, LLM calls, or
 order intents. The ingest stage also writes
 `portfolio_news_followup_ideas.json`, a grouped, packet-validated idea batch for
-later bounded enrichment/review consumption.
+later bounded enrichment/review consumption. When explicitly enabled, a separate
+`portfolio_news_followup_batch_split` stage can split those ideas into normal
+committee batch JSON files; that handoff is artifact-only and still does not run
+committee agents or alter account actions.
 
 `longterm/pipeline_scheduler.py`
 Runs bounded recurring no-submit research-to-paper refresh loops. It validates
@@ -420,9 +423,12 @@ state when configured, can run deterministic portfolio-news monitoring before
 the pipeline, records scheduler-policy state, and can refresh the dashboard
 manifest/site after each run. A successful monitor pass writes
 `last_news_monitor_at` even if a later pipeline stage fails, preserving evidence
-that the daily news check happened. It can also run a post-cycle verifier after
-the scheduler summary and policy-state artifacts are written, causing the cycle
-to fail closed if the no-submit cadence evidence is not ready. The CLI also exposes
+that the daily news check happened. If follow-up batch splitting is enabled and
+passes inside the pipeline, scheduler policy-state records
+`last_followup_batch_split_at` so the post-run verifier can prove the handoff.
+It can also run a post-cycle verifier after the scheduler summary and
+policy-state artifacts are written, causing the cycle to fail closed if the
+no-submit cadence evidence is not ready. The CLI also exposes
 `--preset ongoing-no-submit`, a safe standard command set for the ongoing paper
 review loop. The preset still performs no broker submission; it only builds
 research, paper-preflight, policy, account-refresh, and dashboard artifacts.

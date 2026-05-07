@@ -136,6 +136,11 @@ Perplexity state:
   `research.intake.create_research_packet_from_idea()` before being written,
   but they remain future bounded enrichment/review inputs. The ingest path does
   not fetch news, call LLMs, or create trade intents.
+- `longterm_research_to_paper_pipeline.py --portfolio-news-followup-batches`
+  can split `portfolio_news_followup_ideas.json` into normal
+  `portfolio_news_followup_batches/research-batch-*.json` files. This is only a
+  deterministic artifact handoff for later bounded committee review; it does
+  not run the committee, call paid providers, or alter account actions.
 
 ## 5. Scheduler And Pipeline State
 
@@ -153,12 +158,16 @@ Scheduler-readiness features now exist:
   `run_00N/portfolio_news_monitor.json`, passes that path into
   `longterm_research_to_paper_pipeline.py --portfolio-news-monitor`, and adds
   `last_news_monitor_at` to verifier timestamp requirements.
+- If `--portfolio-news-followup-batches` is enabled, the safe preset forwards
+  the follow-up batch flags into the pipeline, records
+  `last_followup_batch_split_at` after a successful split stage, and requires
+  that timestamp in the post-run verifier.
 - The research-to-paper pipeline now ingests saved monitor reports as
   `ingest_portfolio_news_monitor`. Its artifact rollup exposes
   `portfolio_news_monitor.queue_count`, `high_impact_count`,
   `review_trigger_count`, affected symbols, high-impact journal-linked symbols,
-  `followup_idea_count`, follow-up symbols, warnings, and top triggers while
-  keeping `order_submission_enabled=false`.
+  `followup_idea_count`, follow-up symbols, optional follow-up batch counts,
+  warnings, and top triggers while keeping `order_submission_enabled=false`.
 - The safe preset can optionally pass through bounded upstream research
   campaign, Perplexity, and generated committee batch controls; paid Perplexity
   mode requires `--research-max-pass-count`, and generated committee execution
@@ -247,9 +256,9 @@ Near-term scheduler target:
 - Move from manual supervised scheduler proofs toward a bounded recurring
   no-submit loop using the verifier report as the post-run acceptance check.
 - Feed monitor queue rows into a later explicit deeper-enrichment/review queue;
-  current scheduler wiring surfaces packet-validated follow-up ideas and
-  timestamps the check but does not automatically spend LLM calls or change
-  portfolio decisions.
+  current scheduler wiring surfaces packet-validated follow-up ideas, can split
+  them into bounded research batch files, and timestamps the handoff but does
+  not automatically spend LLM calls or change portfolio decisions.
 - Keep paid provider flags explicit until cost behavior is comfortable.
 - Keep broker submission disabled unless running the supervised paper BUY path.
 

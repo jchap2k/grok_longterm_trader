@@ -16,6 +16,7 @@ from longterm.research_to_paper_pipeline import (
     build_final_planning_refresh_stage,
     build_generated_committee_batch_runner_stage,
     build_paper_preflight_stages,
+    build_portfolio_news_followup_batch_split_stage,
     build_portfolio_news_monitor_ingest_stage,
     build_research_campaign_stages,
     run_pipeline_stages,
@@ -307,6 +308,52 @@ def test_portfolio_news_monitor_ingest_stage_blocks_on_malformed_report(tmp_path
     assert result.blocker_count == 1
     assert stage.blocker == "stage_failed:ingest_portfolio_news_monitor"
     assert "portfolio news monitor report is not valid JSON" in Path(stage.log_path).read_text(encoding="utf-8")
+
+
+def test_portfolio_news_followup_batch_split_stage_creates_bounded_batches(tmp_path):
+    followup_ideas = tmp_path / "portfolio_news_followup_ideas.json"
+    write_json_artifact(
+        followup_ideas,
+        [
+            {"symbol": "ADBE", "company_name": "Adobe", "idea_source": "portfolio_news_monitor"},
+            {"symbol": "MSFT", "company_name": "Microsoft", "idea_source": "portfolio_news_monitor"},
+            {"symbol": "MA", "company_name": "Mastercard", "idea_source": "portfolio_news_monitor"},
+        ],
+    )
+
+    result = run_pipeline_stages(
+        [
+            build_portfolio_news_followup_batch_split_stage(
+                output_dir=tmp_path,
+                followup_ideas=followup_ideas,
+                batch_size=2,
+            )
+        ],
+        output_dir=tmp_path,
+        summary_output=tmp_path / "pipeline_summary.json",
+    )
+
+    stage = result.stage_results[0]
+    rollup = result.artifact_rollup["portfolio_news_monitor"]
+    batch_dir = tmp_path / "portfolio_news_followup_batches"
+    split = tmp_path / "portfolio_news_followup_batch_split.json"
+    first_batch = json.loads((batch_dir / "research-batch-001.json").read_text(encoding="utf-8"))
+    assert result.status == "completed"
+    assert stage.stage_id == "portfolio_news_followup_batch_split"
+    assert stage.artifact_paths["portfolio_news_followup_ideas"] == str(followup_ideas)
+    assert stage.artifact_paths["portfolio_news_followup_batch_dir"] == str(batch_dir)
+    assert stage.artifact_paths["portfolio_news_followup_batch_split"] == str(split)
+    assert split.exists()
+    assert rollup["followup_batch_count"] == 2
+    assert rollup["followup_batch_total_ideas"] == 3
+    assert rollup["followup_batch_dir"] == str(batch_dir)
+    assert first_batch[0]["symbol"] == "ADBE"
+    assert first_batch[0]["idea_source"] == "portfolio_news_monitor"
+
+
+def test_portfolio_news_followup_batch_split_requires_positive_batch_size(tmp_path):
+    with pytest.raises(ValueError, match="batch_size"):
+        build_portfolio_news_followup_batch_split_stage(output_dir=tmp_path, batch_size=0)
 
 
 def test_pipeline_artifact_health_reports_missing_and_malformed_artifacts(tmp_path):
@@ -1381,3 +1428,96 @@ def test_pipeline_cli_ingests_portfolio_news_monitor_before_preflight(tmp_path, 
     assert printed["stages"][1]["stage_id"] == "preflight_rules"
     assert printed["artifact_paths"]["portfolio_news_monitor"] == str(monitor)
     assert "--input" in printed["stages"][0]["command"]
+
+
+def test_pipeline_cli_splits_portfolio_news_followup_batches_after_ingest(tmp_path, capsys):
+    rules_path = tmp_path / "active_rules.txt"
+    action_plan = tmp_path / "account_action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    price_map = tmp_path / "prices.json"
+    monitor = tmp_path / "portfolio_news_monitor.json"
+    for path in (rules_path, action_plan, portfolio, price_map):
+        path.write_text("{}", encoding="utf-8")
+    write_json_artifact(
+        monitor,
+        {
+            "schema_version": 1,
+            "status": "completed",
+            "enrichment_needed_queue": [],
+            "order_submission_enabled": False,
+            "llm_calls_enabled": False,
+        },
+    )
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--output-dir",
+                str(tmp_path / "pipeline"),
+                "--rules-path",
+                str(rules_path),
+                "--action-plan",
+                str(action_plan),
+                "--portfolio-state",
+                str(portfolio),
+                "--journal-db",
+                str(tmp_path / "journal.db"),
+                "--ledger-db",
+                str(tmp_path / "ledger.db"),
+                "--price-map",
+                str(price_map),
+                "--portfolio-news-monitor",
+                str(monitor),
+                "--portfolio-news-followup-batches",
+                "--portfolio-news-followup-batch-size",
+                "2",
+                "--skip-price-map",
+                "--print-plan-only",
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert [stage["stage_id"] for stage in printed["stages"][:3]] == [
+        "ingest_portfolio_news_monitor",
+        "portfolio_news_followup_batch_split",
+        "preflight_rules",
+    ]
+    assert "--batch-size 2" in printed["stages"][1]["command"]
+    assert printed["stages"][1]["artifact_paths"]["portfolio_news_followup_ideas"].endswith(
+        "portfolio_news_followup_ideas.json"
+    )
+
+
+def test_pipeline_cli_requires_monitor_or_explicit_followup_ideas_for_followup_batches(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    action_plan = tmp_path / "account_action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    for path in (rules_path, action_plan, portfolio):
+        path.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="portfolio-news-monitor"):
+        run_cli(
+            build_parser().parse_args(
+                [
+                    "--output-dir",
+                    str(tmp_path / "pipeline"),
+                    "--rules-path",
+                    str(rules_path),
+                    "--action-plan",
+                    str(action_plan),
+                    "--portfolio-state",
+                    str(portfolio),
+                    "--journal-db",
+                    str(tmp_path / "journal.db"),
+                    "--ledger-db",
+                    str(tmp_path / "ledger.db"),
+                    "--portfolio-news-followup-batches",
+                    "--skip-price-map",
+                    "--print-plan-only",
+                    "--json",
+                ]
+            )
+        )

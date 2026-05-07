@@ -71,6 +71,7 @@ def _ready_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
             "last_no_submit_preflight_at": "2026-05-06T12:00:00Z",
             "last_account_refresh_at": "2026-05-06T12:00:00Z",
             "last_final_planning_at": "2026-05-06T12:00:00Z",
+            "last_followup_batch_split_at": "2026-05-06T12:00:00Z",
         },
     )
     return scheduler_summary, pipeline_summary, policy_state
@@ -93,6 +94,8 @@ def test_scheduler_verification_reports_ready_for_no_submit_cadence(tmp_path, ca
                 "last_no_submit_preflight_at",
                 "--require-policy-timestamp",
                 "last_account_refresh_at",
+                "--require-policy-timestamp",
+                "last_followup_batch_split_at",
                 "--report-output",
                 str(report),
                 "--json",
@@ -107,6 +110,7 @@ def test_scheduler_verification_reports_ready_for_no_submit_cadence(tmp_path, ca
     assert printed["blockers"] == []
     assert printed["resource_controls"]["bounded"] is True
     assert printed["latest_run"]["pipeline_exit_code"] == 0
+    assert printed["policy_state_timestamps"]["last_followup_batch_split_at"] == "2026-05-06T12:00:00Z"
     assert saved["next_safe_action"] == "scheduler_run_verified_for_no_submit_cadence"
 
 

@@ -725,6 +725,8 @@ def derive_scheduler_resource_controls(pipeline_command: str) -> dict[str, objec
     generated_committee_max_batches = _int_flag(tokens, "--generated-committee-max-batches")
     final_planning_refresh = "--final-planning-refresh" in tokens
     final_planning_timeout_seconds = _float_flag(tokens, "--final-planning-timeout-seconds")
+    portfolio_news_followup_batches = "--portfolio-news-followup-batches" in tokens
+    portfolio_news_followup_batch_size = _int_flag(tokens, "--portfolio-news-followup-batch-size")
     paid_provider_enabled = provider_mode in {"perplexity", "xai_grok"}
     missing_bounds: list[str] = []
     if paid_provider_enabled and research_max_pass_count is None:
@@ -759,6 +761,8 @@ def derive_scheduler_resource_controls(pipeline_command: str) -> dict[str, objec
         ),
         "generated_committee_batches": generated_committee_batches,
         "generated_committee_max_batches": generated_committee_max_batches,
+        "portfolio_news_followup_batches": portfolio_news_followup_batches,
+        "portfolio_news_followup_batch_size": portfolio_news_followup_batch_size,
         "final_planning_refresh": final_planning_refresh,
         "final_planning_timeout_seconds": final_planning_timeout_seconds,
         "bounded": not missing_bounds,
@@ -959,6 +963,8 @@ def _update_scheduler_policy_state_after_record(
         state["last_account_refresh_at"] = record.finished_at
     if _pipeline_summary_has_successful_final_planning(record.pipeline_summary_path):
         state["last_final_planning_at"] = record.finished_at
+    if _pipeline_summary_has_successful_followup_batch_split(record.pipeline_summary_path):
+        state["last_followup_batch_split_at"] = record.finished_at
     _write_json(path, state)
 
 
@@ -1001,6 +1007,20 @@ def _pipeline_summary_has_successful_final_planning(path_value: str) -> bool:
         if isinstance(stage, dict) and str(stage.get("status") or "") in {"passed", "completed"}
     }
     return {"final_planning_refresh", "extract_final_action_plan"}.issubset(passed_stage_ids)
+
+
+def _pipeline_summary_has_successful_followup_batch_split(path_value: str) -> bool:
+    payload = _load_json_dict(Path(path_value))
+    if str(payload.get("status") or "") != "completed":
+        return False
+    if _int_value(payload.get("blocker_count")) != 0:
+        return False
+    return any(
+        isinstance(stage, dict)
+        and str(stage.get("stage_id") or "") == "portfolio_news_followup_batch_split"
+        and str(stage.get("status") or "") in {"passed", "completed"}
+        for stage in payload.get("stages") or []
+    )
 
 
 def _load_json_dict(path: Path) -> dict[str, object]:

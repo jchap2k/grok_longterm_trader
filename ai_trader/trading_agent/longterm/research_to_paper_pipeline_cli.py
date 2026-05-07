@@ -20,6 +20,7 @@ from longterm.research_to_paper_pipeline import (
     build_final_planning_refresh_stage,
     build_generated_committee_batch_runner_stage,
     build_paper_preflight_stages,
+    build_portfolio_news_followup_batch_split_stage,
     build_portfolio_news_monitor_ingest_stage,
     build_research_campaign_stages,
     run_pipeline_stages,
@@ -81,6 +82,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--portfolio-news-monitor",
         default="",
         help="Optional saved portfolio news monitor report to ingest as follow-up queue context.",
+    )
+    parser.add_argument(
+        "--portfolio-news-followup-batches",
+        action="store_true",
+        help="Split packet-validated portfolio-news follow-up ideas into bounded committee batch files.",
+    )
+    parser.add_argument("--portfolio-news-followup-batch-size", type=int, default=3)
+    parser.add_argument(
+        "--portfolio-news-followup-ideas",
+        default="",
+        help="Optional explicit portfolio-news follow-up ideas JSON file to split instead of the pipeline ingest output.",
     )
     parser.add_argument("--run-generated-committee-batches", action="store_true")
     parser.add_argument(
@@ -184,6 +196,10 @@ def _numeric_cash(payload: dict, *, flag_name: str) -> float:
 def run_cli(args: argparse.Namespace) -> int:
     if args.final_planning_timeout_seconds is not None and args.final_planning_timeout_seconds <= 0:
         raise ValueError("--final-planning-timeout-seconds must be positive when supplied.")
+    if args.portfolio_news_followup_batch_size < 1:
+        raise ValueError("--portfolio-news-followup-batch-size must be positive.")
+    if args.portfolio_news_followup_batches and not args.portfolio_news_monitor and not args.portfolio_news_followup_ideas:
+        raise ValueError("--portfolio-news-followup-batches requires --portfolio-news-monitor or --portfolio-news-followup-ideas.")
     output_dir = Path(args.output_dir)
     summary_output = Path(args.summary_output) if args.summary_output else output_dir / "pipeline_summary.json"
     expected_cash = _resolve_expected_cash(args)
@@ -291,6 +307,14 @@ def run_cli(args: argparse.Namespace) -> int:
             build_portfolio_news_monitor_ingest_stage(
                 portfolio_news_monitor=args.portfolio_news_monitor,
                 output_dir=output_dir,
+            )
+        )
+    if args.portfolio_news_followup_batches:
+        stages.append(
+            build_portfolio_news_followup_batch_split_stage(
+                output_dir=output_dir,
+                followup_ideas=args.portfolio_news_followup_ideas or None,
+                batch_size=args.portfolio_news_followup_batch_size,
             )
         )
     stages.extend(build_paper_preflight_stages(

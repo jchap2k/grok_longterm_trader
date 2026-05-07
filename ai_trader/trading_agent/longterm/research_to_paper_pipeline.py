@@ -412,6 +412,39 @@ def build_portfolio_news_monitor_ingest_stage(
     return stage
 
 
+def build_portfolio_news_followup_batch_split_stage(
+    *,
+    output_dir: str | Path,
+    followup_ideas: str | Path | None = None,
+    batch_size: int = 3,
+) -> PipelineStage:
+    """Split validated portfolio-news follow-up ideas into committee batches."""
+    if int(batch_size or 0) < 1:
+        raise ValueError("batch_size must be a positive integer.")
+    root = Path(output_dir)
+    ideas = Path(followup_ideas) if followup_ideas else root / "portfolio_news_followup_ideas.json"
+    batch_dir = root / "portfolio_news_followup_batches"
+    split_output = root / "portfolio_news_followup_batch_split.json"
+    stage = PipelineStage(
+        stage_id="portfolio_news_followup_batch_split",
+        title="Split portfolio news follow-up ideas into bounded committee batches",
+        command=(
+            f"python {_quote(_script_path('longterm_research_universe.py'))} "
+            f"--research-ideas {_quote(ideas)} "
+            f"--batch-size {int(batch_size)} "
+            f"--output-dir {_quote(batch_dir)}"
+        ),
+        artifact_paths={
+            "portfolio_news_followup_ideas": str(ideas),
+            "portfolio_news_followup_batch_dir": str(batch_dir),
+            "portfolio_news_followup_batch_split": str(split_output),
+        },
+        stdout_artifact_path=str(split_output),
+    )
+    validate_stage_command(stage)
+    return stage
+
+
 def build_paper_preflight_stages(
     *,
     output_dir: str | Path,
@@ -763,6 +796,7 @@ def build_pipeline_artifact_rollup(artifact_paths: Mapping[str, str]) -> dict[st
     workflow = _load_json_object(artifact_paths.get("workflow_smoke"))
     operator_status = _load_json_object(artifact_paths.get("operator_status_bundle"))
     portfolio_news_monitor = _load_json_object(artifact_paths.get("portfolio_news_monitor_ingest"))
+    portfolio_news_followup_split = _load_json_object(artifact_paths.get("portfolio_news_followup_batch_split"))
     intents = [dict(item) for item in action_plan.get("intents") or [] if isinstance(item, Mapping)]
     intent_counts: dict[str, int] = {}
     allowed_count = 0
@@ -828,6 +862,9 @@ def build_pipeline_artifact_rollup(artifact_paths: Mapping[str, str]) -> dict[st
                 for symbol in portfolio_news_monitor.get("followup_symbols") or []
                 if str(symbol)
             ],
+            "followup_batch_count": _int_value(portfolio_news_followup_split.get("batch_count")),
+            "followup_batch_total_ideas": _int_value(portfolio_news_followup_split.get("total_ideas")),
+            "followup_batch_dir": str(artifact_paths.get("portfolio_news_followup_batch_dir") or ""),
             "warnings": [
                 str(warning)
                 for warning in portfolio_news_monitor.get("warnings") or []
@@ -1014,6 +1051,7 @@ __all__ = [
     "build_final_planning_refresh_stage",
     "build_generated_committee_batch_runner_stage",
     "build_paper_preflight_stages",
+    "build_portfolio_news_followup_batch_split_stage",
     "build_portfolio_news_monitor_ingest_stage",
     "build_research_campaign_stages",
     "run_pipeline_stages",

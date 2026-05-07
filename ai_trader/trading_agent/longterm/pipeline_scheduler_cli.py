@@ -115,6 +115,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--portfolio-news-published-after", default="")
     parser.add_argument("--portfolio-news-relevance-threshold", type=float, default=0.55)
     parser.add_argument("--portfolio-news-max-articles-per-symbol", type=int, default=5)
+    parser.add_argument("--portfolio-news-followup-batches", action="store_true")
+    parser.add_argument("--portfolio-news-followup-batch-size", type=int, default=3)
     parser.add_argument("--run-generated-committee-batches", action="store_true")
     parser.add_argument("--no-generated-committee-resume", action="store_true")
     parser.add_argument("--generated-committee-max-batches", type=int, default=None)
@@ -178,6 +180,10 @@ def _validate_ongoing_no_submit_research_bounds(args: argparse.Namespace) -> Non
         )
     if args.portfolio_news_monitor and not args.portfolio_news_snapshot_file:
         raise ValueError("--portfolio-news-monitor with --preset ongoing-no-submit requires --portfolio-news-snapshot-file.")
+    if args.portfolio_news_followup_batches and not args.portfolio_news_monitor:
+        raise ValueError("--portfolio-news-followup-batches with --preset ongoing-no-submit requires --portfolio-news-monitor.")
+    if args.portfolio_news_followup_batch_size < 1:
+        raise ValueError("--portfolio-news-followup-batch-size must be positive.")
 
 
 def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, str]:
@@ -322,6 +328,13 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
     )
     if args.portfolio_news_monitor:
         _append_optional_path(pipeline_parts, "--portfolio-news-monitor", "{portfolio_news_monitor}")
+    _append_optional_flag(pipeline_parts, "--portfolio-news-followup-batches", args.portfolio_news_followup_batches)
+    if args.portfolio_news_followup_batches:
+        _append_optional_value(
+            pipeline_parts,
+            "--portfolio-news-followup-batch-size",
+            args.portfolio_news_followup_batch_size,
+        )
 
     portfolio_news_monitor_parts: list[str] = []
     if args.portfolio_news_monitor:
@@ -431,6 +444,13 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
             [
                 "--require-policy-timestamp",
                 "last_news_monitor_at",
+            ]
+        )
+    if args.portfolio_news_followup_batches:
+        post_run_verification_parts.extend(
+            [
+                "--require-policy-timestamp",
+                "last_followup_batch_split_at",
             ]
         )
 
