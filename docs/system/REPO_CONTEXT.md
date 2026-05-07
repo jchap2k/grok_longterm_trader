@@ -11,9 +11,9 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-06 by Codex after scheduler no-submit cadence
-verification, timeout/cadence-state, enrichment, dashboard, paper-boundary,
-and Grok-collab updates.
+Last updated: 2026-05-06 by Codex after scheduler post-run verifier wiring,
+no-submit cadence verification, timeout/cadence-state, enrichment, dashboard,
+paper-boundary, and Grok-collab updates.
 
 ## 1. Project Identity
 
@@ -129,7 +129,9 @@ Scheduler-readiness features now exist:
 - `longterm_pipeline_scheduler.py --preset ongoing-no-submit` builds the
   standard safe chain from core paths: fresh Alpaca paper snapshot, no-submit
   research-to-paper pipeline, advisory scheduler policy, and read-only
-  account/dashboard refresh.
+  account/dashboard refresh. The preset now also appends a post-run
+  `longterm_pipeline_scheduler_verify.py` command after the scheduler summary
+  and policy-state artifacts are written.
 - The safe preset can optionally pass through bounded upstream research
   campaign, Perplexity, and generated committee batch controls; paid Perplexity
   mode requires `--research-max-pass-count`, and generated committee execution
@@ -150,6 +152,10 @@ Scheduler-readiness features now exist:
 - Dashboard manifests can carry the top-level pipeline scheduler summary path,
   allowing `/api/pipeline-health.json` and the Safety / Preflight card to show
   scheduler resource-control state once the scheduler summary is finalized.
+- Scheduler run records can carry post-run verification path, command,
+  stdout/stderr paths, and exit code. If the verifier exits non-zero after an
+  otherwise completed no-submit run, the scheduler marks the run failed with
+  `post_run_verification_command_failed`.
 - Scheduler policy treats unbounded paid/provider resource controls as a
   high-urgency `resource_control_review` blocker, while bounded paid runs carry
   a warning for operator awareness. Operator status bundles and markdown surface
@@ -176,6 +182,10 @@ Scheduler-readiness features now exist:
     skipping the 10 already-handled batches, final planning passed with a
     900-second timeout bound, pipeline artifact health was `ready`, and the new
     scheduler cadence verifier reported `status=ready` with no blockers.
+  - `%TEMP%\longterm_postrun_verifier_plan_20260506_171300`: print-plan smoke
+    proved the safe scheduler preset now renders the automatic post-run
+    verifier with resource, account-refresh, preflight, and final-planning
+    timestamp checks.
 - Policy-state artifacts track `last_full_research_at`,
   `last_no_submit_preflight_at`, `last_account_refresh_at`, and
   `last_final_planning_at`. The scheduler updates account/preflight timestamps
@@ -186,6 +196,11 @@ Scheduler-readiness features now exist:
   no-submit cadence runs. It checks scheduler/pipeline status, no-submit command
   fragments, bounded resource controls, final-planning timeout, workflow-smoke
   submitted count, and required policy-state timestamps.
+- Simulator cadence policy: Python refreshes can run often (roughly every
+  15-60 minutes during market hours), portfolio/watchlist news checks should be
+  daily and deterministic/cache-first, deeper enrichment should be weekly or
+  event-triggered, and LLM committee decisions should stay sparse/event-driven
+  rather than continuously active.
 - Scheduler policy now emits `cadence_recommendations` for account refresh,
   no-submit preflight, full research, and final planning. Final planning becomes
   due when active rules change, when final planning is older than the latest

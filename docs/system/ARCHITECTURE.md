@@ -403,7 +403,10 @@ Runs bounded recurring no-submit research-to-paper refresh loops. It validates
 command templates before execution, rejects submit-capable fragments and shell
 chaining, writes isolated per-run artifact folders, refreshes paper portfolio
 state when configured, records scheduler-policy state, and can refresh the
-dashboard manifest/site after each run. The CLI also exposes
+dashboard manifest/site after each run. It can also run a post-cycle verifier
+after the scheduler summary and policy-state artifacts are written, causing the
+cycle to fail closed if the no-submit cadence evidence is not ready. The CLI
+also exposes
 `--preset ongoing-no-submit`, a safe standard command set for the ongoing paper
 review loop. The preset still performs no broker submission; it only builds
 research, paper-preflight, policy, account-refresh, and dashboard artifacts.

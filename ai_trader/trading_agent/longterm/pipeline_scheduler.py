@@ -7,7 +7,7 @@ import json
 import shlex
 import subprocess
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
@@ -41,6 +41,7 @@ class PipelineSchedulerInputs:
     committee_preset_policy_command_template: str = ""
     scheduler_policy_command_template: str = ""
     account_refresh_command_template: str = ""
+    post_run_verification_command_template: str = ""
     summary_output: str | Path | None = None
 
 
@@ -89,6 +90,11 @@ class PipelineSchedulerRunRecord:
     account_refresh_exit_code: int | None = None
     account_refresh_stdout_path: str = ""
     account_refresh_stderr_path: str = ""
+    post_run_verification_path: str = ""
+    post_run_verification_command: str = ""
+    post_run_verification_exit_code: int | None = None
+    post_run_verification_stdout_path: str = ""
+    post_run_verification_stderr_path: str = ""
     blocker: str = ""
     resource_controls: dict[str, object] = field(default_factory=dict)
 
@@ -158,6 +164,12 @@ def run_pipeline_scheduler(
             command_kind="scheduler_policy",
             rules_path=rules_path,
         )
+    if inputs.post_run_verification_command_template:
+        validate_scheduler_command_template(
+            inputs.post_run_verification_command_template,
+            command_kind="post_run_verification",
+            rules_path=rules_path,
+        )
 
     records: list[PipelineSchedulerRunRecord] = []
     for run_number in range(1, scheduler_config.max_runs + 1):
@@ -199,6 +211,17 @@ def run_pipeline_scheduler(
                 rules_path=rules_path,
             )
             write_pipeline_scheduler_summary(_build_summary(output_dir=output_dir, records=records), summary_output_path)
+            verified_record = _run_post_run_verification_after_summary(
+                record,
+                command_runner=runner,
+                now_func=now,
+            )
+            if verified_record != record:
+                records[-1] = verified_record
+                write_pipeline_scheduler_summary(
+                    _build_summary(output_dir=output_dir, records=records),
+                    summary_output_path,
+                )
         finally:
             try:
                 lock_path.unlink()
@@ -254,6 +277,11 @@ def validate_scheduler_command_template(
         if "longterm_alpaca_paper_snapshot.py" not in lowered:
             raise ValueError("Pre-pipeline refresh command must call scripts/longterm_alpaca_paper_snapshot.py.")
         _require_flag(command_template, "--portfolio-state-output")
+    elif command_kind == "post_run_verification":
+        if "longterm_pipeline_scheduler_verify.py" not in lowered:
+            raise ValueError("Post-run verification command must call scripts/longterm_pipeline_scheduler_verify.py.")
+        _require_flag(command_template, "--pipeline-scheduler-summary")
+        _require_flag(command_template, "--report-output")
     else:
         raise ValueError(f"Unknown scheduler command kind: {command_kind}")
 
@@ -286,6 +314,7 @@ def _run_one_scheduler_cycle(
     committee_preset_policy_path = run_dir / "committee_preset_policy.json"
     scheduler_policy_path = run_dir / "scheduler_policy.json"
     account_refresh_output_dir = run_dir / "paper_account_refresh"
+    post_run_verification_path = run_dir / "scheduler_cadence_verification.json"
     dashboard_manifest_path = run_dir / "dashboard_manifest.json"
     dashboard_site_output_dir = run_dir / "operator_dashboard_site"
     context = _render_context(
@@ -297,6 +326,7 @@ def _run_one_scheduler_cycle(
         committee_preset_policy_path=committee_preset_policy_path,
         scheduler_policy_path=scheduler_policy_path,
         account_refresh_output_dir=account_refresh_output_dir,
+        post_run_verification_path=post_run_verification_path,
         dashboard_manifest_path=dashboard_manifest_path,
         dashboard_site_output_dir=dashboard_site_output_dir,
         scheduler_run_id=scheduler_run_id,
@@ -330,6 +360,11 @@ def _run_one_scheduler_cycle(
         if inputs.account_refresh_command_template
         else ""
     )
+    post_run_verification_command = (
+        _render_command(inputs.post_run_verification_command_template, context)
+        if inputs.post_run_verification_command_template
+        else ""
+    )
     resource_controls = derive_scheduler_resource_controls(pipeline_command)
     if config.print_plan_only:
         return PipelineSchedulerRunRecord(
@@ -349,6 +384,8 @@ def _run_one_scheduler_cycle(
             scheduler_policy_path=str(scheduler_policy_path) if policy_command else "",
             scheduler_policy_command=policy_command,
             account_refresh_command=refresh_command,
+            post_run_verification_path=str(post_run_verification_path) if post_run_verification_command else "",
+            post_run_verification_command=post_run_verification_command,
             resource_controls=resource_controls,
         )
 
@@ -590,6 +627,8 @@ def _run_one_scheduler_cycle(
         account_refresh_exit_code=refresh_exit_code,
         account_refresh_stdout_path=refresh_stdout_path,
         account_refresh_stderr_path=refresh_stderr_path,
+        post_run_verification_path=str(post_run_verification_path) if post_run_verification_command else "",
+        post_run_verification_command=post_run_verification_command,
         resource_controls=resource_controls,
     )
 
@@ -741,6 +780,7 @@ def _render_context(
     committee_preset_policy_path: Path,
     scheduler_policy_path: Path,
     account_refresh_output_dir: Path,
+    post_run_verification_path: Path,
     dashboard_manifest_path: Path,
     dashboard_site_output_dir: Path,
     scheduler_run_id: str,
@@ -757,6 +797,7 @@ def _render_context(
         "committee_preset_policy": _quote(committee_preset_policy_path),
         "scheduler_policy": _quote(scheduler_policy_path),
         "account_refresh_output_dir": _quote(account_refresh_output_dir),
+        "post_run_verification": _quote(post_run_verification_path),
         "dashboard_manifest": _quote(dashboard_manifest_path),
         "dashboard_site_output_dir": _quote(dashboard_site_output_dir),
         "scheduler_run_id": scheduler_run_id,
@@ -836,6 +877,33 @@ def _update_scheduler_policy_state_after_record(
     if _pipeline_summary_has_successful_final_planning(record.pipeline_summary_path):
         state["last_final_planning_at"] = record.finished_at
     _write_json(path, state)
+
+
+def _run_post_run_verification_after_summary(
+    record: PipelineSchedulerRunRecord,
+    *,
+    command_runner: CommandRunner,
+    now_func: NowFunc,
+) -> PipelineSchedulerRunRecord:
+    if record.status != "completed" or not record.post_run_verification_command:
+        return record
+    run_dir = Path(record.run_dir)
+    stdout_path = run_dir / "post_run_verification_stdout.txt"
+    stderr_path = run_dir / "post_run_verification_stderr.txt"
+    exit_code, stdout, stderr = command_runner(record.post_run_verification_command)
+    _write_text(stdout_path, stdout)
+    _write_text(stderr_path, stderr)
+    status = "completed" if exit_code == 0 else "failed"
+    blocker = "" if exit_code == 0 else "post_run_verification_command_failed"
+    return replace(
+        record,
+        finished_at=_format_timestamp(now_func()),
+        status=status,
+        blocker=blocker,
+        post_run_verification_exit_code=exit_code,
+        post_run_verification_stdout_path=str(stdout_path),
+        post_run_verification_stderr_path=str(stderr_path),
+    )
 
 
 def _pipeline_summary_has_successful_final_planning(path_value: str) -> bool:

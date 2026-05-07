@@ -40,6 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--committee-preset-policy-command-template", default="")
     parser.add_argument("--scheduler-policy-command-template", default="")
     parser.add_argument("--account-refresh-command-template", default="")
+    parser.add_argument("--post-run-verification-command-template", default="")
     parser.add_argument("--journal-db", default="")
     parser.add_argument("--ledger-db", default="")
     parser.add_argument("--action-plan", default="")
@@ -353,11 +354,44 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
     ]
     _append_optional_path(account_refresh_parts, "--market-regime", args.market_regime_file)
 
+    post_run_verification_parts = [
+        "python",
+        "scripts/longterm_pipeline_scheduler_verify.py",
+        "--pipeline-scheduler-summary",
+        "{scheduler_summary}",
+        "--policy-state",
+        "{scheduler_policy_state}",
+        "--require-resource-bounded",
+        "--require-policy-timestamp",
+        "last_no_submit_preflight_at",
+        "--require-policy-timestamp",
+        "last_account_refresh_at",
+        "--report-output",
+        "{post_run_verification}",
+        "--json",
+    ]
+    if args.final_planning_refresh:
+        post_run_verification_parts.extend(
+            [
+                "--require-final-planning-bound",
+                "--require-policy-timestamp",
+                "last_final_planning_at",
+            ]
+        )
+    if args.run_generated_committee_batches:
+        post_run_verification_parts.extend(
+            [
+                "--require-policy-timestamp",
+                "last_full_research_at",
+            ]
+        )
+
     return {
         "pre_pipeline_refresh": pre_refresh,
         "pipeline": " ".join(pipeline_parts),
         "scheduler_policy": " ".join(scheduler_policy_parts),
         "account_refresh": " ".join(account_refresh_parts),
+        "post_run_verification": " ".join(post_run_verification_parts),
     }
 
 
@@ -368,6 +402,7 @@ def _resolve_command_templates(args: argparse.Namespace) -> dict[str, str]:
         args.committee_preset_policy_command_template,
         args.scheduler_policy_command_template,
         args.account_refresh_command_template,
+        args.post_run_verification_command_template,
     ]
     if args.preset == "ongoing-no-submit":
         if any(explicit_templates):
@@ -381,6 +416,7 @@ def _resolve_command_templates(args: argparse.Namespace) -> dict[str, str]:
         "committee_preset_policy": args.committee_preset_policy_command_template,
         "scheduler_policy": args.scheduler_policy_command_template,
         "account_refresh": args.account_refresh_command_template,
+        "post_run_verification": args.post_run_verification_command_template,
     }
 
 
@@ -395,6 +431,7 @@ def run_cli(args: argparse.Namespace) -> int:
             committee_preset_policy_command_template=templates.get("committee_preset_policy", ""),
             scheduler_policy_command_template=templates.get("scheduler_policy", ""),
             account_refresh_command_template=templates.get("account_refresh", ""),
+            post_run_verification_command_template=templates.get("post_run_verification", ""),
             rules_path=args.rules_path,
             summary_output=args.summary_output or None,
         ),

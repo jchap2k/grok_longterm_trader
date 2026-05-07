@@ -851,8 +851,9 @@ $snapshot = "python scripts/longterm_alpaca_paper_snapshot.py --portfolio-state-
 $pipeline = "python scripts/longterm_research_to_paper_pipeline.py --output-dir {pipeline_output_dir} --research-source-file path\to\nasdaqtrader.txt --research-source nasdaq_trader --research-campaign-dir path\to\research_campaign --research-resume --research-run-until research_queue_ready --run-generated-committee-batches --generated-committee-max-batches 1 --final-planning-refresh --market-regime-file path\to\market_regime.json --planning-capital-from-portfolio-state --action-plan path\to\account_action_plan.json --portfolio-state {portfolio_state} --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --allow-existing-paper-positions --expected-cash-from-portfolio-state --json"
 $policy = "python scripts/longterm_pipeline_scheduler_policy.py --rules-path {rules_path} --policy-state {scheduler_policy_state} --state-output {scheduler_policy_state} --market-regime path\to\market_regime.json --journal-db path\to\journal.db --pipeline-scheduler-summary {scheduler_summary} --pipeline-summary {pipeline_summary} --report-output {scheduler_policy} --json"
 $refresh = "python scripts/longterm_paper_account_refresh.py --journal-db path\to\journal.db --action-plan path\to\account_action_plan.json --paper-ledger-db path\to\paper_ledger.db --pipeline-summary {pipeline_summary} --output-dir {account_refresh_output_dir} --dashboard-manifest-output path\to\dashboard_manifest.json --json"
-python scripts/longterm_pipeline_scheduler.py --run-once --output-dir path\to\pipeline_scheduler_runs --rules-path path\to\active_rules.txt --pre-pipeline-refresh-command-template $snapshot --pipeline-command-template $pipeline --scheduler-policy-command-template $policy --account-refresh-command-template $refresh --json
-python scripts/longterm_pipeline_scheduler.py --max-runs 3 --interval-seconds 3600 --output-dir path\to\pipeline_scheduler_runs --rules-path path\to\active_rules.txt --pre-pipeline-refresh-command-template $snapshot --pipeline-command-template $pipeline --scheduler-policy-command-template $policy --account-refresh-command-template $refresh --json
+$verify = "python scripts/longterm_pipeline_scheduler_verify.py --pipeline-scheduler-summary {scheduler_summary} --policy-state {scheduler_policy_state} --require-resource-bounded --require-policy-timestamp last_no_submit_preflight_at --require-policy-timestamp last_account_refresh_at --report-output {post_run_verification} --json"
+python scripts/longterm_pipeline_scheduler.py --run-once --output-dir path\to\pipeline_scheduler_runs --rules-path path\to\active_rules.txt --pre-pipeline-refresh-command-template $snapshot --pipeline-command-template $pipeline --scheduler-policy-command-template $policy --account-refresh-command-template $refresh --post-run-verification-command-template $verify --json
+python scripts/longterm_pipeline_scheduler.py --max-runs 3 --interval-seconds 3600 --output-dir path\to\pipeline_scheduler_runs --rules-path path\to\active_rules.txt --pre-pipeline-refresh-command-template $snapshot --pipeline-command-template $pipeline --scheduler-policy-command-template $policy --account-refresh-command-template $refresh --post-run-verification-command-template $verify --json
 ```
 
 For the standard ongoing paper-review loop, prefer the built-in safe preset so
@@ -880,6 +881,11 @@ read-only paper-account/dashboard refresh. It writes per-run
 dashboard can refresh from the latest saved run. The preset still rejects
 submit-capable fragments and never adds `--submit-paper-orders` or
 `--confirm-paper-submit`.
+It also appends a post-run `longterm_pipeline_scheduler_verify.py` command that
+writes `run_00N\scheduler_cadence_verification.json` after the top-level
+`pipeline_scheduler_summary.json` and `scheduler_policy_state.json` are
+updated. If that verifier fails, the scheduler run is marked failed instead of
+green.
 When `--final-planning-refresh` is supplied, the preset forwards
 `--final-planning-timeout-seconds`; if the operator omits it, the preset uses a
 900-second default. The rendered `resource_controls` object records both
@@ -945,6 +951,22 @@ preflight timestamps. It marks `last_final_planning_at` only when the saved
 pipeline summary completed both `final_planning_refresh` and
 `extract_final_action_plan` with zero blockers. A timeout or partial extract
 does not advance that timestamp.
+If a post-run verifier template is supplied, the scheduler first writes the
+provisional finalized summary and policy-state, then runs the verifier, records
+its stdout/stderr and exit code on the run record, and writes the final summary
+again. This is the recommended acceptance check for a bounded no-submit
+simulator loop.
+
+Recommended simulator cadence:
+- Python account/price/regime refresh: every 15-60 minutes during market hours.
+- Portfolio/watchlist news scan: daily, using deterministic providers and
+  cached article relevance before any paid LLM.
+- Deeper enrichment: weekly or event-triggered when fresh recommendations,
+  thesis-breaking news, earnings, panic-regime changes, or review-due holdings
+  appear.
+- Committee LLM decisions: sparse and event-driven, normally `decision_4`;
+  escalate to `decision_6` only for large sizing, new thesis, borderline
+  valuation, complex sell/rebalance, or choppy macro decisions.
 
 Verify a completed no-submit cadence run before treating it as scheduler-ready:
 

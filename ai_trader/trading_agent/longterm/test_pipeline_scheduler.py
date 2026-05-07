@@ -72,6 +72,16 @@ def _safe_scheduler_policy_template() -> str:
     )
 
 
+def _safe_post_run_verification_template() -> str:
+    return (
+        "python scripts/longterm_pipeline_scheduler_verify.py "
+        "--pipeline-scheduler-summary {scheduler_summary} "
+        "--policy-state {scheduler_policy_state} "
+        "--report-output {post_run_verification} "
+        "--json"
+    )
+
+
 def _safe_committee_preset_policy_template() -> str:
     return (
         "python scripts/longterm_committee_preset_policy.py "
@@ -185,6 +195,41 @@ def test_validate_committee_preset_policy_template_requires_policy_script_and_ou
         validate_scheduler_command_template(
             _safe_committee_preset_policy_template().replace("--report-output {committee_preset_policy} ", ""),
             command_kind="committee_preset_policy",
+            rules_path=rules_path,
+        )
+
+
+def test_validate_post_run_verification_template_requires_verifier_summary_and_output(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+
+    validate_scheduler_command_template(
+        _safe_post_run_verification_template(),
+        command_kind="post_run_verification",
+        rules_path=rules_path,
+    )
+    with pytest.raises(ValueError, match="longterm_pipeline_scheduler_verify.py"):
+        validate_scheduler_command_template(
+            _safe_post_run_verification_template().replace(
+                "longterm_pipeline_scheduler_verify.py",
+                "longterm_pipeline_scheduler_policy.py",
+            ),
+            command_kind="post_run_verification",
+            rules_path=rules_path,
+        )
+    with pytest.raises(ValueError, match="--pipeline-scheduler-summary"):
+        validate_scheduler_command_template(
+            _safe_post_run_verification_template().replace(
+                "--pipeline-scheduler-summary {scheduler_summary} ",
+                "",
+            ),
+            command_kind="post_run_verification",
+            rules_path=rules_path,
+        )
+    with pytest.raises(ValueError, match="--report-output"):
+        validate_scheduler_command_template(
+            _safe_post_run_verification_template().replace("--report-output {post_run_verification} ", ""),
+            command_kind="post_run_verification",
             rules_path=rules_path,
         )
 
@@ -361,6 +406,86 @@ def test_successful_scheduler_run_updates_cadence_state_after_account_refresh(tm
     assert state["last_account_refresh_at"] == summary.runs[0].finished_at
     assert state["last_final_planning_at"] == summary.runs[0].finished_at
     assert state["active_rules_sha256"]
+
+
+def test_post_run_verification_runs_after_summary_and_updates_record(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    calls: list[str] = []
+
+    def fake_runner(command: str) -> tuple[int, str, str]:
+        calls.append(command)
+        if "longterm_research_to_paper_pipeline.py" in command:
+            summary_path = Path(command.split("--summary-output ", 1)[1].split(" --", 1)[0].strip('"'))
+            summary_path.write_text(
+                json.dumps({"status": "completed", "blocker_count": 0, "artifact_paths": {}}),
+                encoding="utf-8",
+            )
+            return 0, "pipeline", ""
+        if "longterm_pipeline_scheduler_verify.py" in command:
+            scheduler_path = Path(command.split("--pipeline-scheduler-summary ", 1)[1].split(" ", 1)[0].strip('"'))
+            report_path = Path(command.split("--report-output ", 1)[1].split(" --", 1)[0].strip('"'))
+            assert scheduler_path.exists()
+            report_path.write_text(json.dumps({"status": "ready", "blockers": []}), encoding="utf-8")
+            return 0, "verified", ""
+        raise AssertionError(f"unexpected command: {command}")
+
+    summary = run_pipeline_scheduler(
+        PipelineSchedulerInputs(
+            output_dir=tmp_path / "scheduler",
+            pipeline_command_template=_safe_pipeline_template(),
+            post_run_verification_command_template=_safe_post_run_verification_template(),
+            rules_path=rules_path,
+        ),
+        PipelineSchedulerConfig(max_runs=1),
+        command_runner=fake_runner,
+        now_func=FakeClock().now,
+    )
+
+    run = summary.runs[0]
+    saved = json.loads((tmp_path / "scheduler" / "pipeline_scheduler_summary.json").read_text(encoding="utf-8"))
+    assert summary.status == "completed"
+    assert "longterm_pipeline_scheduler_verify.py" in calls[-1]
+    assert run.post_run_verification_exit_code == 0
+    assert Path(run.post_run_verification_path).exists()
+    assert Path(run.post_run_verification_stdout_path).read_text(encoding="utf-8") == "verified"
+    assert saved["runs"][0]["post_run_verification_exit_code"] == 0
+
+
+def test_post_run_verification_failure_marks_scheduler_run_failed(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+
+    def fake_runner(command: str) -> tuple[int, str, str]:
+        if "longterm_research_to_paper_pipeline.py" in command:
+            summary_path = Path(command.split("--summary-output ", 1)[1].split(" --", 1)[0].strip('"'))
+            summary_path.write_text(
+                json.dumps({"status": "completed", "blocker_count": 0, "artifact_paths": {}}),
+                encoding="utf-8",
+            )
+            return 0, "pipeline", ""
+        if "longterm_pipeline_scheduler_verify.py" in command:
+            return 3, "", "not ready"
+        raise AssertionError(f"unexpected command: {command}")
+
+    summary = run_pipeline_scheduler(
+        PipelineSchedulerInputs(
+            output_dir=tmp_path / "scheduler",
+            pipeline_command_template=_safe_pipeline_template(),
+            post_run_verification_command_template=_safe_post_run_verification_template(),
+            rules_path=rules_path,
+        ),
+        PipelineSchedulerConfig(max_runs=1),
+        command_runner=fake_runner,
+        now_func=FakeClock().now,
+    )
+
+    run = summary.runs[0]
+    assert summary.status == "failed"
+    assert run.status == "failed"
+    assert run.blocker == "post_run_verification_command_failed"
+    assert run.post_run_verification_exit_code == 3
+    assert "not ready" in Path(run.post_run_verification_stderr_path).read_text(encoding="utf-8")
 
 
 def test_scheduler_policy_runs_between_pipeline_and_account_refresh_and_is_passed_to_refresh(tmp_path):
@@ -616,6 +741,31 @@ def test_print_plan_only_renders_pre_pipeline_refresh_command(tmp_path):
     assert "paper_portfolio_state.json" in run.pre_pipeline_refresh_command
 
 
+def test_print_plan_only_renders_post_run_verification_command(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+
+    summary = run_pipeline_scheduler(
+        PipelineSchedulerInputs(
+            output_dir=tmp_path / "scheduler",
+            pipeline_command_template=_safe_pipeline_template(),
+            post_run_verification_command_template=_safe_post_run_verification_template(),
+            rules_path=rules_path,
+        ),
+        PipelineSchedulerConfig(max_runs=1, print_plan_only=True),
+        command_runner=lambda command: (0, "", ""),
+        now_func=FakeClock().now,
+    )
+
+    run = summary.runs[0]
+    assert "longterm_pipeline_scheduler_verify.py" in run.post_run_verification_command
+    assert "--pipeline-scheduler-summary" in run.post_run_verification_command
+    assert "pipeline_scheduler_summary.json" in run.post_run_verification_command
+    assert "--report-output" in run.post_run_verification_command
+    assert "scheduler_cadence_verification.json" in run.post_run_verification_command
+    assert "{post_run_verification}" not in run.post_run_verification_command
+
+
 def test_scheduler_policy_template_can_use_stable_summary_and_state_placeholders(tmp_path):
     rules_path = tmp_path / "active_rules.txt"
     rules_path.write_text("<rules />", encoding="utf-8")
@@ -829,6 +979,38 @@ def test_pipeline_scheduler_cli_accepts_pre_pipeline_refresh_template(tmp_path, 
     assert "paper_portfolio_state.json" in run["pipeline_command"]
 
 
+def test_pipeline_scheduler_cli_accepts_post_run_verification_template(tmp_path, capsys):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    summary_output = tmp_path / "summary.json"
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--output-dir",
+                str(tmp_path / "scheduler"),
+                "--rules-path",
+                str(rules_path),
+                "--pipeline-command-template",
+                _safe_pipeline_template(),
+                "--post-run-verification-command-template",
+                _safe_post_run_verification_template(),
+                "--print-plan-only",
+                "--summary-output",
+                str(summary_output),
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    run = printed["runs"][0]
+    assert code == 0
+    assert run["status"] == "planned"
+    assert "longterm_pipeline_scheduler_verify.py" in run["post_run_verification_command"]
+    assert "scheduler_cadence_verification.json" in run["post_run_verification_command"]
+
+
 def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_safe_commands(tmp_path, capsys):
     rules_path = tmp_path / "active_rules.txt"
     rules_path.write_text("<rules />", encoding="utf-8")
@@ -878,6 +1060,7 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_safe_commands(t
             run["pipeline_command"],
             run["scheduler_policy_command"],
             run["account_refresh_command"],
+            run["post_run_verification_command"],
         ]
     ).lower()
     assert code == 0
@@ -899,6 +1082,13 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_safe_commands(t
     assert "longterm_paper_account_refresh.py" in run["account_refresh_command"]
     assert "--scheduler-policy" in run["account_refresh_command"]
     assert "dashboard_manifest.json" in run["account_refresh_command"]
+    assert "longterm_pipeline_scheduler_verify.py" in run["post_run_verification_command"]
+    assert "--require-resource-bounded" in run["post_run_verification_command"]
+    assert "--require-final-planning-bound" in run["post_run_verification_command"]
+    assert "--require-policy-timestamp last_no_submit_preflight_at" in run["post_run_verification_command"]
+    assert "--require-policy-timestamp last_account_refresh_at" in run["post_run_verification_command"]
+    assert "--require-policy-timestamp last_final_planning_at" in run["post_run_verification_command"]
+    assert "scheduler_cadence_verification.json" in run["post_run_verification_command"]
     assert "--submit-paper-orders" not in all_commands
     assert "--confirm-paper-submit" not in all_commands
     assert "longterm_paper_execution.py" not in all_commands
@@ -990,8 +1180,9 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_passes_bounded_research
     )
 
     printed = json.loads(capsys.readouterr().out)
-    pipeline_command = printed["runs"][0]["pipeline_command"]
-    controls = printed["runs"][0]["resource_controls"]
+    run = printed["runs"][0]
+    pipeline_command = run["pipeline_command"]
+    controls = run["resource_controls"]
     assert code == 0
     assert "--research-source-file" in pipeline_command
     assert str(source_file) in pipeline_command
@@ -1008,6 +1199,7 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_passes_bounded_research
     assert "--perplexity-credits-purchased-to-date 12.5" in pipeline_command
     assert "--run-generated-committee-batches" in pipeline_command
     assert "--generated-committee-max-batches 1" in pipeline_command
+    assert "--require-policy-timestamp last_full_research_at" in run["post_run_verification_command"]
     assert "--submit-paper-orders" not in pipeline_command.lower()
     assert "--confirm-paper-submit" not in pipeline_command.lower()
     assert controls["provider_mode"] == "perplexity"
