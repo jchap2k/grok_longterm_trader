@@ -62,6 +62,7 @@ Important modules:
 - `longterm/discovery_enrichment.py`
 - `longterm/research_automation_campaign.py`
 - `longterm/research_evidence_brief.py`
+- `longterm/portfolio_news_monitor.py`
 - `longterm/research_runner.py`
 - `longterm/committee_batch_runner.py`
 - `longterm/committee_preset_policy.py`
@@ -121,6 +122,12 @@ Perplexity state:
   broad enrichment.
 - Recent 25-name smoke produced full Perplexity research objects with article
   evidence and no malformed fallback rows.
+- `longterm_portfolio_news_monitor.py` now provides a deterministic daily
+  portfolio/watchlist news-monitor artifact. It reuses relevant-news scoring,
+  excludes protected holdings by default, links queued portfolio symbols to the
+  latest journal decision when available, and writes an
+  `enrichment_needed_queue` without broker calls, LLM calls, or order intents.
+  Scheduler wiring for `last_news_monitor_at` is still a near-term follow-up.
 
 ## 5. Scheduler And Pipeline State
 

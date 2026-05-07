@@ -421,6 +421,24 @@ Live Polygon mode, when `POLYGON_API_KEY` is configured:
 python scripts/longterm_news_relevance_enrichment.py --idea-batch path\to\research_ideas.fundamentals_enriched.json --cache-path path\to\polygon_news_cache.json --published-after 2026-04-01 --output path\to\research_ideas.news_enriched.json --rate-limit-batch-size 5 --rate-limit-pause-seconds 66
 ```
 
+Daily portfolio/watchlist news monitoring is separate from broad enrichment.
+It should be cheap and deterministic: read the current portfolio, optional
+watchlist/evidence ideas, and cached/snapshot news rows; then write an
+`enrichment_needed_queue` only for high-signal articles. Queue rows are review
+triggers, not trade intents. They keep `order_submission_enabled=false` and
+`llm_escalation_allowed=false` by default so the later scheduler can decide
+whether deeper enrichment is justified.
+
+```powershell
+python scripts/longterm_portfolio_news_monitor.py --portfolio-state path\to\portfolio.json --watchlist-ideas path\to\research_queue_selected.json --snapshot-file path\to\raw_news.json --journal-db path\to\journal.db --output path\to\portfolio_news_monitor.json --as-of-date 2026-05-06 --json
+```
+
+For live daily use, first refresh or reuse the same Polygon/news cache that the
+evidence pipeline uses, then feed the symbol-keyed cache/snapshot into this
+monitor. The monitor itself does not call Perplexity, Grok, Alpaca, or any
+broker. A future scheduler chunk should wire the report path into
+policy-state as `last_news_monitor_at` and into dashboard/operator status.
+
 For broad universe work, prefer overnight batches over paid speed upgrades.
 Polygon's free-tier cadence is acceptable when requests are paced in groups of
 five with a little more than one minute of pause, cached, and resumable; a

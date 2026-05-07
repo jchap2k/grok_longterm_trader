@@ -212,6 +212,14 @@ Adds a source-backed Grok catalyst synthesis layer for wider-universe names, esp
 `longterm/news_relevance_enrichment.py`
 Fetches or replays raw ticker news, filters price-action noise and duplicate URLs, applies a primary-company subject gate, scores long-term thesis relevance, classifies catalyst impact, and attaches a compact `relevant_news` list to research ideas. Polygon is the first live provider seam, with optional daily JSON caching and offline snapshot mode for repeatable tests. This news layer is meant to run before Grok catalyst synthesis so Grok sees only high-signal articles about the target company instead of generic headline noise or peer-only mentions.
 
+`longterm/portfolio_news_monitor.py`
+Builds a deterministic, no-submit daily news watch report for current
+portfolio holdings and optional watchlist/evidence ideas. It reuses the
+relevant-news scorer, excludes protected holdings by default, links queued
+portfolio rows to the latest journal decision when available, and writes an
+`enrichment_needed_queue` for later deeper enrichment or thesis review. It does
+not call brokers, does not call LLMs, and does not create order intents.
+
 `longterm/fundamental_metrics_enrichment.py`
 Computes Fool-like financial metric sections from provider data in Python before any Grok synthesis. It normalizes growth CAGRs, TTM valuation multiples, profitability ratios, TTM financials with YoY changes, balance-sheet notes, and simple quality/valuation scores. Snapshot mode is provider-neutral and testable; an optional yfinance fetch path provides a free fallback for non-Fool tickers. These metrics are factual research context, not LLM-invented numbers.
 
