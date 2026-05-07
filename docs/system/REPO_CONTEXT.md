@@ -11,9 +11,8 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-07 by Codex after portfolio-news follow-up batches were
-made committee-reviewable through explicit capped no-submit scheduler/pipeline
-controls.
+Last updated: 2026-05-07 by Codex after adding Kronos to the post-scheduler
+roadmap as an optional local market-language advisory layer.
 
 ## 1. Project Identity
 
@@ -96,6 +95,20 @@ Grok 4.1 fast models are being deprecated on 2026-05-15. Current policy:
 - Use Perplexity Sonar as explicit opt-in broad enrichment when deterministic
   data and free sources are insufficient.
 - Keep paid enrichment capped, resumable, and tracked for cost/API usage.
+
+Future local model candidate:
+- Kronos is queued after scheduler readiness as an optional local
+  market-language layer, not as a critical-path dependency.
+- It needs OHLCV bars from yfinance, Polygon, Alpaca read APIs, or cached
+  artifacts; it does not require a paid LLM API.
+- First milestone should be an isolated smoke on 2-3 symbols that writes compact
+  JSON signals only.
+- Intended uses, if validated: pre-deep-enrichment prioritization for broad
+  universe candidates, daily current-position regime/divergence sensing, and
+  compact context for high-stakes `decision_6` reviews.
+- Kronos must remain advisory and must not create trade intents, override
+  active rules, or bypass benchmark, buy-promotion, scheduler, protected-symbol,
+  paper, or live gates.
 
 ## 4. Universe And Enrichment State
 
@@ -275,6 +288,9 @@ Near-term scheduler target:
   not automatically spend LLM calls or change portfolio decisions.
 - Keep paid provider flags explicit until cost behavior is comfortable.
 - Keep broker submission disabled unless running the supervised paper BUY path.
+- Keep Kronos out of scheduler-critical path until recurring no-submit operation
+  is stable; then add it as a local advisory sensor for enrichment priority and
+  current-position review triggers.
 
 ## 6. Paper Execution Boundary
 
@@ -350,6 +366,9 @@ Non-negotiable:
 Useful next work:
 - Run the longer no-submit scheduler cadence in a supervised window.
 - Continue hardening the scheduler path toward automatic daily/weekly operation.
+- After scheduler readiness, prototype the Kronos market-language advisory pass
+  with saved OHLCV and compare it side-by-side with existing enrichment/committee
+  outcomes before feeding it into any decision context.
 - Keep `REPO_CONTEXT.md`, `ARCHITECTURE.md`, `OPERATIONS.md`, and
   `project_manifest.json` synchronized after major changes.
 - Expand dashboard data freshness and portfolio state refresh.

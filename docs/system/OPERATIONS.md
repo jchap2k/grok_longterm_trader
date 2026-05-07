@@ -392,6 +392,27 @@ superscore, investing type, and rough drawdown band.
 python scripts/longterm_quality_growth_scorecard.py --idea-batch path\to\research_ideas.news_enriched.json --output path\to\research_ideas.scorecard_enriched.json
 ```
 
+Future roadmap: add Kronos as an optional local market-language pass after the
+scheduler/no-submit loop is stable. Kronos should not block scheduler readiness
+and should not be wired to broker actions first. The planned sequence is:
+
+1. Clone and smoke-test Kronos locally against 2-3 saved daily/weekly OHLCV
+   histories, using yfinance/Polygon/Alpaca read data or cached bar artifacts.
+2. Save a compact JSON signal per symbol, such as expected-return range,
+   volatility regime, trend divergence, confidence, and warnings.
+3. Use that signal before deep enrichment to prioritize which top first-pass
+   candidates deserve Perplexity/Grok and committee spend.
+4. Reuse the same signal in the daily current-position scan so unusual
+   price/volume regime changes can queue off-schedule LLM review when the
+   thesis may need attention.
+5. Only after side-by-side validation, surface a compact Kronos context block
+   to `decision_6`; keep `decision_4` routine decisions cheap unless the signal
+   is conflicting or position impact is large.
+
+Kronos is advisory. It must not create order intents, override active rules,
+sell/rebalance positions by itself, bypass `FXAIX` protection, or replace the
+buy-promotion, benchmark, scheduler, and Stage 6B execution gates.
+
 Then add latest-earnings context from the same relevant-news and fundamentals
 payload. This creates a structured recent-earnings section with key financial
 takeaways, thesis-positive developments, thesis-negative developments, source

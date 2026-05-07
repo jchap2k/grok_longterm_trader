@@ -9,6 +9,7 @@ flowchart TD
         MF["Motley Fool Premium Capture"]
         MAN["Manual Watchlists"]
         POLY["Polygon / News / yfinance / Finnhub"]
+        OHLCV["Cached OHLCV / yfinance / Polygon / Alpaca Bars"]
         ALPACA_READ["Alpaca Paper Read API"]
     end
 
@@ -24,6 +25,7 @@ flowchart TD
         NEWS["Relevant News Filter"]
         EARN["Latest Earnings Context"]
         SCORE["Quality-Growth Scorecard"]
+        KRONOS["Kronos Market-Language Signal (future optional)"]
         GROK_ENRICH["Grok Catalyst Synthesis"]
         BRIEF["Research Evidence Brief"]
     end
@@ -83,6 +85,7 @@ flowchart TD
     MAN --> DISC
     POLY --> FUND
     POLY --> NEWS
+    OHLCV --> KRONOS
     DISC --> DISC_ENRICH --> BATCH
 
     BATCH --> MF_COMPANY
@@ -94,6 +97,7 @@ flowchart TD
     NEWS --> GROK_ENRICH --> BRIEF
     EARN --> BRIEF
     SCORE --> BRIEF
+    KRONOS -. "advisory signal only" .-> BRIEF
 
     BRIEF --> PACKET
     PACKET --> REVIEWERS
@@ -241,6 +245,19 @@ Computes Fool-like financial metric sections from provider data in Python before
 
 `longterm/quality_growth_scorecard.py`
 Builds a deterministic non-Fool scorecard from Python fundamentals and relevant-news context. It produces quality, growth, valuation, safety, market-attention, superscore, investing-type, drawdown-band, and score-reason fields with `basis=deterministic_model`. This closes part of the Motley-Fool-style "at a glance" gap for non-Fool tickers while keeping the scores auditable and clearly separate from proprietary Fool data.
+
+Future: `longterm/kronos_market_language.py`
+Reserved roadmap slot for an optional local Kronos market-language layer. Kronos
+would consume cached daily/weekly OHLCV bars from yfinance, Polygon, Alpaca read
+APIs, or saved artifacts and emit an advisory price/volume regime signal such as
+expected-return range, volatility/regime warning, trend divergence, and
+thesis-alignment notes. It should be introduced after scheduler readiness as an
+isolated smoke/prototype first, then as a pre-deep-enrichment priority input for
+shortlists and as a daily current-position sensor that can trigger off-schedule
+LLM review when market-language divergence is significant. Kronos output must
+never be a direct buy/sell/rebalance authority and must not override active
+rules, protected holdings, benchmark discipline, buy-promotion gates, or
+paper/live execution boundaries.
 
 `longterm/latest_earnings_enrichment.py`
 Builds structured latest-earnings context from filtered relevant-news articles and Python fundamental metrics. It extracts the latest available quarter when visible, key financial takeaways, positive and negative thesis developments, source URLs, warnings, and confidence. This gives non-Fool tickers a Fool-like recent-earnings section while preserving source and confidence boundaries.
@@ -536,7 +553,7 @@ Checks review due dates and whether current evidence matches invalidation condit
 
 ## Decision Flow
 
-Universe sources -> discovery queue -> research packet enrichment -> research batches -> research campaign manifest -> `ResearchPacket` completeness gate -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> buy-promotion review gate -> rebalance outcome analysis -> Alpaca paper/read-only portfolio snapshot -> paper reconciliation -> benchmark guard -> dry-run account action plan -> paper order preview -> paper preview ledger -> paper execution eligibility -> supervised Stage 6B paper execution boundary -> paper order status refresh -> paper outcomes/lifecycle summaries -> feedback refresh -> scheduler-readiness checklist -> operator status bundle -> next-actions/report artifacts and on-demand position intelligence reports.
+Universe sources -> discovery queue -> research packet enrichment -> research batches -> research campaign manifest -> optional future Kronos market-language advisory signal -> `ResearchPacket` completeness gate -> deterministic reviews -> CGH committee -> parsed JSON decision -> journal -> recommendation table builder/enrichment/review status -> buy-promotion review gate -> rebalance outcome analysis -> Alpaca paper/read-only portfolio snapshot -> paper reconciliation -> benchmark guard -> dry-run account action plan -> paper order preview -> paper preview ledger -> paper execution eligibility -> supervised Stage 6B paper execution boundary -> paper order status refresh -> paper outcomes/lifecycle summaries -> feedback refresh -> scheduler-readiness checklist -> operator status bundle -> next-actions/report artifacts and on-demand position intelligence reports.
 
 ## Data Flow Safety
 
