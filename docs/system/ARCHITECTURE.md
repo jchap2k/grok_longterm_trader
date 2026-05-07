@@ -220,6 +220,22 @@ portfolio rows to the latest journal decision when available, and writes an
 `enrichment_needed_queue` for later deeper enrichment or thesis review. It does
 not call brokers, does not call LLMs, and does not create order intents.
 
+`longterm/portfolio_news_monitor_ingest.py`
+Validates a saved portfolio-news monitor report, summarizes high-impact and
+review-trigger rows, and writes packet-validated
+`portfolio_news_followup_ideas.json` for later bounded committee review. This
+ingest path is deterministic and no-submit; it does not fetch new articles,
+call LLMs, refresh account actions, or create trade intents.
+
+`longterm/committee_batch_runner.py`
+Runs already-generated research batch files through the existing one-cycle
+committee path with artifact-based resume and optional `--max-batches` caps.
+The research-to-paper pipeline uses one runner stage for generated broad
+research batches and a separate stage for portfolio-news follow-up batches.
+The follow-up stage writes distinct artifacts and can journal committee
+decisions, but it intentionally leaves buy-promotion, final-planning, and
+broker submission to separate explicit gates.
+
 `longterm/fundamental_metrics_enrichment.py`
 Computes Fool-like financial metric sections from provider data in Python before any Grok synthesis. It normalizes growth CAGRs, TTM valuation multiples, profitability ratios, TTM financials with YoY changes, balance-sheet notes, and simple quality/valuation scores. Snapshot mode is provider-neutral and testable; an optional yfinance fetch path provides a free fallback for non-Fool tickers. These metrics are factual research context, not LLM-invented numbers.
 
@@ -243,6 +259,14 @@ Creates the operator-facing dry-run next-actions report from the journal, portfo
 
 `longterm/scheduler_operating_model.py`
 Defines the dry-run cadence model for daily, weekly, and as-needed operator routines. It covers discovery refresh, Motley Fool intake, research batches, thesis reviews, benchmark/capital checks, next-actions/rebalance refreshes, and Grok plan review touchpoints. It is guidance and artifact generation only, not a cron engine and not broker execution.
+
+`longterm/pipeline_scheduler.py`
+Runs bounded no-submit command chains into isolated scheduler run folders. It
+can refresh the paper account snapshot, run the research-to-paper pipeline,
+execute deterministic portfolio-news monitoring, run capped generated or
+portfolio-news follow-up committee batches, refresh read-only dashboard/account
+artifacts, and invoke the cadence verifier. Its resource-control summary marks
+paid provider and committee caps visible before any recurring run is trusted.
 
 `agent/configs/longterm_trading_agent_specs.json`
 Defines the long-term CGH domain roles and presets:

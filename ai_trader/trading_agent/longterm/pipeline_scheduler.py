@@ -727,6 +727,8 @@ def derive_scheduler_resource_controls(pipeline_command: str) -> dict[str, objec
     final_planning_timeout_seconds = _float_flag(tokens, "--final-planning-timeout-seconds")
     portfolio_news_followup_batches = "--portfolio-news-followup-batches" in tokens
     portfolio_news_followup_batch_size = _int_flag(tokens, "--portfolio-news-followup-batch-size")
+    portfolio_news_followup_committee_batches = "--run-portfolio-news-followup-committee-batches" in tokens
+    portfolio_news_followup_max_batches = _int_flag(tokens, "--portfolio-news-followup-max-batches")
     paid_provider_enabled = provider_mode in {"perplexity", "xai_grok"}
     missing_bounds: list[str] = []
     if paid_provider_enabled and research_max_pass_count is None:
@@ -735,6 +737,8 @@ def derive_scheduler_resource_controls(pipeline_command: str) -> dict[str, objec
         missing_bounds.append("generated_committee_max_batches")
     if final_planning_refresh and final_planning_timeout_seconds is None:
         missing_bounds.append("final_planning_timeout_seconds")
+    if portfolio_news_followup_committee_batches and portfolio_news_followup_max_batches is None:
+        missing_bounds.append("portfolio_news_followup_max_batches")
 
     return {
         "schema_version": 1,
@@ -763,6 +767,8 @@ def derive_scheduler_resource_controls(pipeline_command: str) -> dict[str, objec
         "generated_committee_max_batches": generated_committee_max_batches,
         "portfolio_news_followup_batches": portfolio_news_followup_batches,
         "portfolio_news_followup_batch_size": portfolio_news_followup_batch_size,
+        "portfolio_news_followup_committee_batches": portfolio_news_followup_committee_batches,
+        "portfolio_news_followup_max_batches": portfolio_news_followup_max_batches,
         "final_planning_refresh": final_planning_refresh,
         "final_planning_timeout_seconds": final_planning_timeout_seconds,
         "bounded": not missing_bounds,
@@ -965,6 +971,8 @@ def _update_scheduler_policy_state_after_record(
         state["last_final_planning_at"] = record.finished_at
     if _pipeline_summary_has_successful_followup_batch_split(record.pipeline_summary_path):
         state["last_followup_batch_split_at"] = record.finished_at
+    if _pipeline_summary_has_successful_followup_committee(record.pipeline_summary_path):
+        state["last_followup_committee_at"] = record.finished_at
     _write_json(path, state)
 
 
@@ -1021,6 +1029,36 @@ def _pipeline_summary_has_successful_followup_batch_split(path_value: str) -> bo
         and str(stage.get("status") or "") in {"passed", "completed"}
         for stage in payload.get("stages") or []
     )
+
+
+def _pipeline_summary_has_successful_followup_committee(path_value: str) -> bool:
+    payload = _load_json_dict(Path(path_value))
+    if str(payload.get("status") or "") != "completed":
+        return False
+    if _int_value(payload.get("blocker_count")) != 0:
+        return False
+    for stage in payload.get("stages") or []:
+        if not isinstance(stage, dict):
+            continue
+        if str(stage.get("stage_id") or "") != "portfolio_news_followup_committee_batches":
+            continue
+        if str(stage.get("status") or "") not in {"passed", "completed"}:
+            continue
+        artifact_paths = stage.get("artifact_paths") or {}
+        if not isinstance(artifact_paths, dict):
+            return False
+        summary = _load_json_dict(
+            Path(str(artifact_paths.get("portfolio_news_followup_committee_batch_run_summary") or ""))
+        )
+        if not summary:
+            return False
+        if str(summary.get("status") or "") not in {"completed", "partial"}:
+            return False
+        if _int_value(summary.get("failed_count")) != 0:
+            return False
+        processed = _int_value(summary.get("completed_count")) + _int_value(summary.get("skipped_count"))
+        return processed > 0
+    return False
 
 
 def _load_json_dict(path: Path) -> dict[str, object]:

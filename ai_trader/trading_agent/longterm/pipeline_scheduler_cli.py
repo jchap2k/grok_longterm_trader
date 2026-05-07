@@ -117,6 +117,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--portfolio-news-max-articles-per-symbol", type=int, default=5)
     parser.add_argument("--portfolio-news-followup-batches", action="store_true")
     parser.add_argument("--portfolio-news-followup-batch-size", type=int, default=3)
+    parser.add_argument("--run-portfolio-news-followup-committee-batches", action="store_true")
+    parser.add_argument("--portfolio-news-followup-max-batches", type=int, default=None)
+    parser.add_argument("--portfolio-news-followup-agent-preset", default="decision_4")
+    parser.add_argument("--no-portfolio-news-followup-committee-resume", action="store_true")
     parser.add_argument("--run-generated-committee-batches", action="store_true")
     parser.add_argument("--no-generated-committee-resume", action="store_true")
     parser.add_argument("--generated-committee-max-batches", type=int, default=None)
@@ -184,6 +188,17 @@ def _validate_ongoing_no_submit_research_bounds(args: argparse.Namespace) -> Non
         raise ValueError("--portfolio-news-followup-batches with --preset ongoing-no-submit requires --portfolio-news-monitor.")
     if args.portfolio_news_followup_batch_size < 1:
         raise ValueError("--portfolio-news-followup-batch-size must be positive.")
+    if args.run_portfolio_news_followup_committee_batches:
+        if not args.portfolio_news_monitor or not args.portfolio_news_followup_batches:
+            raise ValueError(
+                "--run-portfolio-news-followup-committee-batches with --preset ongoing-no-submit requires "
+                "--portfolio-news-monitor and --portfolio-news-followup-batches."
+            )
+        if args.portfolio_news_followup_max_batches is None or args.portfolio_news_followup_max_batches < 1:
+            raise ValueError(
+                "--run-portfolio-news-followup-committee-batches with --preset ongoing-no-submit requires "
+                "--portfolio-news-followup-max-batches to bound LLM committee work."
+            )
 
 
 def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, str]:
@@ -335,6 +350,27 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
             "--portfolio-news-followup-batch-size",
             args.portfolio_news_followup_batch_size,
         )
+    _append_optional_flag(
+        pipeline_parts,
+        "--run-portfolio-news-followup-committee-batches",
+        args.run_portfolio_news_followup_committee_batches,
+    )
+    if args.run_portfolio_news_followup_committee_batches:
+        _append_optional_value(
+            pipeline_parts,
+            "--portfolio-news-followup-max-batches",
+            args.portfolio_news_followup_max_batches,
+        )
+        _append_optional_value(
+            pipeline_parts,
+            "--portfolio-news-followup-agent-preset",
+            args.portfolio_news_followup_agent_preset,
+        )
+        _append_optional_flag(
+            pipeline_parts,
+            "--no-portfolio-news-followup-committee-resume",
+            args.no_portfolio_news_followup_committee_resume,
+        )
 
     portfolio_news_monitor_parts: list[str] = []
     if args.portfolio_news_monitor:
@@ -451,6 +487,13 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
             [
                 "--require-policy-timestamp",
                 "last_followup_batch_split_at",
+            ]
+        )
+    if args.run_portfolio_news_followup_committee_batches:
+        post_run_verification_parts.extend(
+            [
+                "--require-policy-timestamp",
+                "last_followup_committee_at",
             ]
         )
 

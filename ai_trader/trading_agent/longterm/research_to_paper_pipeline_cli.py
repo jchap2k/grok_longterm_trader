@@ -20,6 +20,7 @@ from longterm.research_to_paper_pipeline import (
     build_final_planning_refresh_stage,
     build_generated_committee_batch_runner_stage,
     build_paper_preflight_stages,
+    build_portfolio_news_followup_committee_batch_runner_stage,
     build_portfolio_news_followup_batch_split_stage,
     build_portfolio_news_monitor_ingest_stage,
     build_research_campaign_stages,
@@ -94,6 +95,24 @@ def build_parser() -> argparse.ArgumentParser:
         default="",
         help="Optional explicit portfolio-news follow-up ideas JSON file to split instead of the pipeline ingest output.",
     )
+    parser.add_argument(
+        "--run-portfolio-news-followup-committee-batches",
+        action="store_true",
+        help="Run a capped number of portfolio-news follow-up batches through committee review.",
+    )
+    parser.add_argument(
+        "--portfolio-news-followup-max-batches",
+        type=int,
+        default=None,
+        help="Required cap for --run-portfolio-news-followup-committee-batches.",
+    )
+    parser.add_argument(
+        "--portfolio-news-followup-batch-dir",
+        default="",
+        help="Optional explicit follow-up committee batch directory to review.",
+    )
+    parser.add_argument("--portfolio-news-followup-agent-preset", default="decision_4")
+    parser.add_argument("--no-portfolio-news-followup-committee-resume", action="store_true")
     parser.add_argument("--run-generated-committee-batches", action="store_true")
     parser.add_argument(
         "--no-generated-committee-resume",
@@ -200,6 +219,17 @@ def run_cli(args: argparse.Namespace) -> int:
         raise ValueError("--portfolio-news-followup-batch-size must be positive.")
     if args.portfolio_news_followup_batches and not args.portfolio_news_monitor and not args.portfolio_news_followup_ideas:
         raise ValueError("--portfolio-news-followup-batches requires --portfolio-news-monitor or --portfolio-news-followup-ideas.")
+    if args.run_portfolio_news_followup_committee_batches:
+        if args.portfolio_news_followup_max_batches is None or args.portfolio_news_followup_max_batches < 1:
+            raise ValueError(
+                "--run-portfolio-news-followup-committee-batches requires "
+                "--portfolio-news-followup-max-batches as a positive cap."
+            )
+        if not args.portfolio_news_followup_batches and not args.portfolio_news_followup_batch_dir:
+            raise ValueError(
+                "--run-portfolio-news-followup-committee-batches requires "
+                "--portfolio-news-followup-batches or --portfolio-news-followup-batch-dir."
+            )
     output_dir = Path(args.output_dir)
     summary_output = Path(args.summary_output) if args.summary_output else output_dir / "pipeline_summary.json"
     expected_cash = _resolve_expected_cash(args)
@@ -315,6 +345,21 @@ def run_cli(args: argparse.Namespace) -> int:
                 output_dir=output_dir,
                 followup_ideas=args.portfolio_news_followup_ideas or None,
                 batch_size=args.portfolio_news_followup_batch_size,
+            )
+        )
+    if args.run_portfolio_news_followup_committee_batches:
+        stages.append(
+            build_portfolio_news_followup_committee_batch_runner_stage(
+                output_dir=output_dir,
+                followup_batch_dir=args.portfolio_news_followup_batch_dir or None,
+                journal_db=args.journal_db,
+                portfolio_state=args.portfolio_state,
+                market_regime_file=args.market_regime_file or None,
+                motley_fool_config=args.motley_fool_config or None,
+                agent_preset=args.portfolio_news_followup_agent_preset,
+                profile_config=args.profile_config,
+                resume=not args.no_portfolio_news_followup_committee_resume,
+                max_batches=args.portfolio_news_followup_max_batches,
             )
         )
     stages.extend(build_paper_preflight_stages(

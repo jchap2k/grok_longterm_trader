@@ -155,6 +155,7 @@ def build_scheduler_cadence_verification_report(
                 "last_final_planning_at",
                 "last_news_monitor_at",
                 "last_followup_batch_split_at",
+                "last_followup_committee_at",
             )
             if key in policy
         },

@@ -451,6 +451,20 @@ When you are ready to stage those follow-ups for later committee review, add
 preset. That only splits the validated follow-up ideas into normal research
 batch JSON files and records `last_followup_batch_split_at`; it does not run
 committee agents, call paid providers, mutate action plans, or submit orders.
+When the operator intentionally wants committee review of those follow-up
+batches, add the separate capped runner flags. This journals no-submit
+committee decisions from at most the requested number of pending batches, but
+still does not refresh final account actions or authorize broker orders:
+
+```powershell
+python scripts/longterm_research_to_paper_pipeline.py --output-dir path\to\pipeline_artifacts --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-news-followup-batch-dir path\to\portfolio_news_followup_batches --run-portfolio-news-followup-committee-batches --portfolio-news-followup-max-batches 1 --skip-price-map --json
+```
+
+Use `--portfolio-news-followup-agent-preset decision_6` only for unusually
+complex holdings or large possible portfolio implications. The default remains
+`decision_4` so daily news follow-up review does not become an expensive hidden
+LLM loop. Final-planning refresh remains a separate explicit action after the
+operator reviews the new committee decisions.
 
 For broad universe work, prefer overnight batches over paid speed upgrades.
 Polygon's free-tier cadence is acceptable when requests are paced in groups of
@@ -930,6 +944,17 @@ adds `--portfolio-news-followup-batches` and
 requires `last_followup_batch_split_at`, proving the deterministic handoff
 completed. This is still an artifact-only step; running the generated batches
 through committee review is a later, separately capped action.
+If `--run-portfolio-news-followup-committee-batches` is also supplied, the
+preset requires `--portfolio-news-followup-max-batches` and forwards the same
+cap into the no-submit pipeline. The follow-up committee stage writes
+`portfolio_news_followup_committee_batches\committee_batch_run_summary.json`,
+records progress in `artifact_rollup.portfolio_news_monitor`, and the verifier
+requires `last_followup_committee_at`. A capped run may legitimately finish
+with `remaining_count > 0`; that means the batch runner stopped at the operator
+cap, not that the scheduler should continue spending. The stage can journal
+committee review decisions, but it does not run final planning, refresh
+buy-promotion/account actions, or submit orders unless those other existing
+gates are invoked explicitly.
 It also appends a post-run `longterm_pipeline_scheduler_verify.py` command that
 writes `run_00N\scheduler_cadence_verification.json` after the top-level
 `pipeline_scheduler_summary.json` and `scheduler_policy_state.json` are

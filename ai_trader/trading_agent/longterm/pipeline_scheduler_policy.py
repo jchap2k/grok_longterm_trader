@@ -196,6 +196,8 @@ def build_pipeline_scheduler_policy_state(
         state["last_final_planning_at"] = generated_at
     if _pipeline_summary_has_successful_followup_batch_split(pipeline_summary or {}):
         state["last_followup_batch_split_at"] = generated_at
+    if _pipeline_summary_has_successful_followup_committee(pipeline_summary or {}):
+        state["last_followup_committee_at"] = generated_at
     return state
 
 
@@ -457,6 +459,34 @@ def _pipeline_summary_has_successful_followup_batch_split(summary: Mapping[str, 
         and str(stage.get("status") or "") in {"passed", "completed"}
         for stage in summary.get("stages") or []
     )
+
+
+def _pipeline_summary_has_successful_followup_committee(summary: Mapping[str, Any]) -> bool:
+    if str(summary.get("status") or "") != "completed":
+        return False
+    if _int_value(summary.get("blocker_count")) != 0:
+        return False
+    for stage in summary.get("stages") or []:
+        if not isinstance(stage, Mapping):
+            continue
+        if str(stage.get("stage_id") or "") != "portfolio_news_followup_committee_batches":
+            continue
+        if str(stage.get("status") or "") not in {"passed", "completed"}:
+            continue
+        artifact_paths = stage.get("artifact_paths") or {}
+        if not isinstance(artifact_paths, Mapping):
+            return False
+        run_summary = _load_json_mapping(artifact_paths.get("portfolio_news_followup_committee_batch_run_summary"))
+        if not run_summary:
+            return False
+        if str(run_summary.get("status") or "") not in {"completed", "partial"}:
+            return False
+        if _int_value(run_summary.get("failed_count")) != 0:
+            return False
+        completed_count = _int_value(run_summary.get("completed_count"))
+        skipped_count = _int_value(run_summary.get("skipped_count"))
+        return completed_count + skipped_count > 0
+    return False
 
 
 def _generated_committee_stage_completed(stage: Mapping[str, Any]) -> bool:

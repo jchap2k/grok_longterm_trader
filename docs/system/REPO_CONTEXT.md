@@ -11,10 +11,9 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-06 by Codex after portfolio-news monitor scheduler
-wiring, scheduler post-run verifier wiring, no-submit cadence verification,
-timeout/cadence-state, enrichment, dashboard, paper-boundary, and Grok-collab
-updates.
+Last updated: 2026-05-07 by Codex after portfolio-news follow-up batches were
+made committee-reviewable through explicit capped no-submit scheduler/pipeline
+controls.
 
 ## 1. Project Identity
 
@@ -141,6 +140,12 @@ Perplexity state:
   `portfolio_news_followup_batches/research-batch-*.json` files. This is only a
   deterministic artifact handoff for later bounded committee review; it does
   not run the committee, call paid providers, or alter account actions.
+- `longterm_research_to_paper_pipeline.py
+  --run-portfolio-news-followup-committee-batches
+  --portfolio-news-followup-max-batches N` can now run a capped number of those
+  follow-up batches through the existing no-submit committee runner. This may
+  journal review decisions, but it still does not refresh buy-promotion/final
+  action planning, mutate account actions, or submit broker orders.
 
 ## 5. Scheduler And Pipeline State
 
@@ -162,19 +167,27 @@ Scheduler-readiness features now exist:
   the follow-up batch flags into the pipeline, records
   `last_followup_batch_split_at` after a successful split stage, and requires
   that timestamp in the post-run verifier.
+- If `--run-portfolio-news-followup-committee-batches` is enabled, the safe
+  preset requires `--portfolio-news-followup-max-batches`, forwards the cap
+  into the pipeline, records `last_followup_committee_at` after a successful
+  no-failure capped committee run, and requires that timestamp in the post-run
+  verifier. `remaining_count > 0` is acceptable when the run stopped at the
+  explicit cap.
 - The research-to-paper pipeline now ingests saved monitor reports as
   `ingest_portfolio_news_monitor`. Its artifact rollup exposes
   `portfolio_news_monitor.queue_count`, `high_impact_count`,
   `review_trigger_count`, affected symbols, high-impact journal-linked symbols,
   `followup_idea_count`, follow-up symbols, optional follow-up batch counts,
-  warnings, and top triggers while keeping `order_submission_enabled=false`.
+  follow-up committee progress counts, warnings, and top triggers while keeping
+  `order_submission_enabled=false`.
 - The safe preset can optionally pass through bounded upstream research
   campaign, Perplexity, and generated committee batch controls; paid Perplexity
   mode requires `--research-max-pass-count`, and generated committee execution
   requires `--generated-committee-max-batches`.
 - Scheduler run records include a `resource_controls` summary that surfaces the
   visible provider mode, paid-provider status, research/evidence/committee caps,
-  bounded status, and an intentionally unknown pre-run cost estimate.
+  portfolio-news follow-up committee cap, bounded status, and an intentionally
+  unknown pre-run cost estimate.
 - Final-planning refresh can be subprocess-timeout bounded. The pipeline stage
   records `timeout_seconds`; on timeout it fails closed with
   `stage_timeout:final_planning_refresh`, stops downstream stages, writes the
@@ -224,8 +237,9 @@ Scheduler-readiness features now exist:
     timestamp checks.
 - Policy-state artifacts track `last_full_research_at`,
   `last_no_submit_preflight_at`, `last_account_refresh_at`, and
-  `last_final_planning_at`; when the portfolio-news monitor is enabled they
-  also track `last_news_monitor_at`. The scheduler updates account/preflight
+  `last_final_planning_at`; when portfolio-news features are enabled they also
+  track `last_news_monitor_at`, `last_followup_batch_split_at`, and
+  `last_followup_committee_at`. The scheduler updates account/preflight
   timestamps after each completed cycle, writes `last_news_monitor_at` after a
   successful monitor pass even if a later pipeline stage fails, and marks final
   planning complete only when the saved pipeline summary completed both

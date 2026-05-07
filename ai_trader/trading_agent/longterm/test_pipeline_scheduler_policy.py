@@ -433,6 +433,92 @@ def test_scheduler_policy_state_marks_followup_batch_split(tmp_path):
     assert state["last_followup_batch_split_at"] == decision["generated_at"]
 
 
+def test_scheduler_policy_state_marks_followup_committee_review_for_capped_success(tmp_path):
+    committee_summary = tmp_path / "portfolio_news_followup_committee" / "committee_batch_run_summary.json"
+    committee_summary.parent.mkdir(parents=True, exist_ok=True)
+    committee_summary.write_text(
+        json.dumps(
+            {
+                "status": "partial",
+                "batch_count": 5,
+                "completed_count": 2,
+                "failed_count": 0,
+                "skipped_count": 0,
+                "remaining_count": 3,
+                "order_submission_enabled": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    decision = build_pipeline_scheduler_policy_decision(
+        rules_path=_rules(tmp_path / "active_rules.txt"),
+        now=NOW,
+        policy_state=_fresh_state(),
+    )
+
+    state = build_pipeline_scheduler_policy_state(
+        decision,
+        pipeline_summary={
+            "status": "completed",
+            "blocker_count": 0,
+            "stages": [
+                {
+                    "stage_id": "portfolio_news_followup_committee_batches",
+                    "status": "passed",
+                    "artifact_paths": {
+                        "portfolio_news_followup_committee_batch_run_summary": str(committee_summary)
+                    },
+                },
+            ],
+        },
+    )
+
+    assert state["last_followup_committee_at"] == decision["generated_at"]
+    assert "last_full_research_at" not in state
+
+
+def test_scheduler_policy_state_does_not_mark_followup_committee_for_failed_batch(tmp_path):
+    committee_summary = tmp_path / "portfolio_news_followup_committee" / "committee_batch_run_summary.json"
+    committee_summary.parent.mkdir(parents=True, exist_ok=True)
+    committee_summary.write_text(
+        json.dumps(
+            {
+                "status": "failed",
+                "batch_count": 2,
+                "completed_count": 1,
+                "failed_count": 1,
+                "remaining_count": 0,
+                "order_submission_enabled": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    decision = build_pipeline_scheduler_policy_decision(
+        rules_path=_rules(tmp_path / "active_rules.txt"),
+        now=NOW,
+        policy_state=_fresh_state(),
+    )
+
+    state = build_pipeline_scheduler_policy_state(
+        decision,
+        pipeline_summary={
+            "status": "completed",
+            "blocker_count": 0,
+            "stages": [
+                {
+                    "stage_id": "portfolio_news_followup_committee_batches",
+                    "status": "passed",
+                    "artifact_paths": {
+                        "portfolio_news_followup_committee_batch_run_summary": str(committee_summary)
+                    },
+                },
+            ],
+        },
+    )
+
+    assert "last_followup_committee_at" not in state
+
+
 def test_scheduler_policy_marks_final_planning_due_after_full_research_without_planning(tmp_path):
     decision = build_pipeline_scheduler_policy_decision(
         rules_path=_rules(tmp_path / "active_rules.txt"),

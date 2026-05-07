@@ -268,6 +268,60 @@ def build_generated_committee_batch_runner_stage(
     return stage
 
 
+def build_portfolio_news_followup_committee_batch_runner_stage(
+    *,
+    output_dir: str | Path,
+    journal_db: str | Path,
+    portfolio_state: str | Path,
+    followup_batch_dir: str | Path | None = None,
+    market_regime_file: str | Path | None = None,
+    motley_fool_config: str | Path | None = None,
+    agent_preset: str = "decision_4",
+    profile_config: str | Path | None = None,
+    resume: bool = True,
+    max_batches: int,
+) -> PipelineStage:
+    """Run bounded portfolio-news follow-up batches through committee review.
+
+    This stage journals no-submit committee decisions for already-split
+    portfolio-news follow-up ideas. It intentionally does not refresh final
+    account actions or submit broker orders.
+    """
+    if max_batches < 1:
+        raise ValueError("portfolio news follow-up max_batches must be a positive integer.")
+    pipeline_root = Path(output_dir)
+    batch_dir = Path(followup_batch_dir) if followup_batch_dir else pipeline_root / "portfolio_news_followup_batches"
+    runner_output_dir = pipeline_root / "portfolio_news_followup_committee_batches"
+    summary_output = runner_output_dir / "committee_batch_run_summary.json"
+    command = (
+        "python scripts/longterm_committee_batch_runner.py "
+        f"--committee-batch-dir {_quote(batch_dir)} "
+        f"--output-dir {_quote(runner_output_dir)} "
+        f"--journal-db {_quote(journal_db)} "
+        f"--portfolio-state {_quote(portfolio_state)} "
+        "--campaign-id portfolio_news_followup "
+        f"--agent-preset {agent_preset} "
+        f"--summary-output {_quote(summary_output)} "
+        f"{_optional_path_arg('--market-regime-file', market_regime_file)}"
+        f"{_optional_path_arg('--motley-fool-config', motley_fool_config)}"
+        f"{_optional_path_arg('--profile-config', profile_config)}"
+        f" --max-batches {max_batches}"
+        f"{' --resume' if resume else ''} --json"
+    )
+    stage = PipelineStage(
+        stage_id="portfolio_news_followup_committee_batches",
+        title="Run capped portfolio-news follow-up batches through committee review",
+        command=command,
+        artifact_paths={
+            "portfolio_news_followup_batch_dir": str(batch_dir),
+            "portfolio_news_followup_committee_batch_run_summary": str(summary_output),
+        },
+        stdout_artifact_path=str(runner_output_dir / "committee_batch_runner_stdout.json"),
+    )
+    validate_stage_command(stage)
+    return stage
+
+
 def build_committee_batch_stages(
     *,
     committee_batch_dir: str | Path,
@@ -797,6 +851,9 @@ def build_pipeline_artifact_rollup(artifact_paths: Mapping[str, str]) -> dict[st
     operator_status = _load_json_object(artifact_paths.get("operator_status_bundle"))
     portfolio_news_monitor = _load_json_object(artifact_paths.get("portfolio_news_monitor_ingest"))
     portfolio_news_followup_split = _load_json_object(artifact_paths.get("portfolio_news_followup_batch_split"))
+    portfolio_news_followup_committee = _load_json_object(
+        artifact_paths.get("portfolio_news_followup_committee_batch_run_summary")
+    )
     intents = [dict(item) for item in action_plan.get("intents") or [] if isinstance(item, Mapping)]
     intent_counts: dict[str, int] = {}
     allowed_count = 0
@@ -865,6 +922,16 @@ def build_pipeline_artifact_rollup(artifact_paths: Mapping[str, str]) -> dict[st
             "followup_batch_count": _int_value(portfolio_news_followup_split.get("batch_count")),
             "followup_batch_total_ideas": _int_value(portfolio_news_followup_split.get("total_ideas")),
             "followup_batch_dir": str(artifact_paths.get("portfolio_news_followup_batch_dir") or ""),
+            "followup_committee_batch_count": _int_value(portfolio_news_followup_committee.get("batch_count")),
+            "followup_committee_completed_count": _int_value(
+                portfolio_news_followup_committee.get("completed_count")
+            ),
+            "followup_committee_failed_count": _int_value(portfolio_news_followup_committee.get("failed_count")),
+            "followup_committee_skipped_count": _int_value(portfolio_news_followup_committee.get("skipped_count")),
+            "followup_committee_remaining_count": _int_value(
+                portfolio_news_followup_committee.get("remaining_count")
+            ),
+            "followup_committee_status": str(portfolio_news_followup_committee.get("status") or "not_run"),
             "warnings": [
                 str(warning)
                 for warning in portfolio_news_monitor.get("warnings") or []
@@ -1051,6 +1118,7 @@ __all__ = [
     "build_final_planning_refresh_stage",
     "build_generated_committee_batch_runner_stage",
     "build_paper_preflight_stages",
+    "build_portfolio_news_followup_committee_batch_runner_stage",
     "build_portfolio_news_followup_batch_split_stage",
     "build_portfolio_news_monitor_ingest_stage",
     "build_research_campaign_stages",

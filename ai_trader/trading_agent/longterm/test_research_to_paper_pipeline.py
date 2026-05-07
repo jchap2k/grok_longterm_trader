@@ -16,6 +16,7 @@ from longterm.research_to_paper_pipeline import (
     build_final_planning_refresh_stage,
     build_generated_committee_batch_runner_stage,
     build_paper_preflight_stages,
+    build_portfolio_news_followup_committee_batch_runner_stage,
     build_portfolio_news_followup_batch_split_stage,
     build_portfolio_news_monitor_ingest_stage,
     build_research_campaign_stages,
@@ -787,6 +788,43 @@ def test_generated_committee_batch_runner_stage_requires_one_batch_source(tmp_pa
         )
 
 
+def test_portfolio_news_followup_committee_batch_runner_stage_is_capped_no_submit(tmp_path):
+    stage = build_portfolio_news_followup_committee_batch_runner_stage(
+        output_dir=tmp_path / "pipeline",
+        followup_batch_dir=tmp_path / "pipeline" / "portfolio_news_followup_batches",
+        journal_db=tmp_path / "journal.db",
+        portfolio_state=tmp_path / "portfolio.json",
+        market_regime_file=tmp_path / "market.json",
+        motley_fool_config=tmp_path / "missing_fool.json",
+        profile_config=tmp_path / "profile.json",
+        agent_preset="decision_4",
+        max_batches=2,
+    )
+
+    assert stage.stage_id == "portfolio_news_followup_committee_batches"
+    assert "scripts/longterm_committee_batch_runner.py" in stage.command
+    assert "--campaign-id portfolio_news_followup" in stage.command
+    assert "--max-batches 2" in stage.command
+    assert "--resume" in stage.command
+    assert "--submit-paper-orders" not in stage.command
+    assert stage.artifact_paths["portfolio_news_followup_batch_dir"].endswith(
+        "portfolio_news_followup_batches"
+    )
+    assert stage.artifact_paths["portfolio_news_followup_committee_batch_run_summary"].endswith(
+        "committee_batch_run_summary.json"
+    )
+
+
+def test_portfolio_news_followup_committee_batch_runner_requires_positive_cap(tmp_path):
+    with pytest.raises(ValueError, match="max_batches"):
+        build_portfolio_news_followup_committee_batch_runner_stage(
+            output_dir=tmp_path / "pipeline",
+            journal_db=tmp_path / "journal.db",
+            portfolio_state=tmp_path / "portfolio.json",
+            max_batches=0,
+        )
+
+
 def test_final_planning_action_plan_extract_stage_writes_action_plan(tmp_path):
     output_dir = tmp_path / "pipeline"
     output_dir.mkdir()
@@ -1489,6 +1527,101 @@ def test_pipeline_cli_splits_portfolio_news_followup_batches_after_ingest(tmp_pa
     assert printed["stages"][1]["artifact_paths"]["portfolio_news_followup_ideas"].endswith(
         "portfolio_news_followup_ideas.json"
     )
+
+
+def test_pipeline_cli_runs_capped_portfolio_news_followup_committee_after_split(tmp_path, capsys):
+    rules_path = tmp_path / "active_rules.txt"
+    action_plan = tmp_path / "account_action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    price_map = tmp_path / "prices.json"
+    monitor = tmp_path / "portfolio_news_monitor.json"
+    for path in (rules_path, action_plan, portfolio, price_map):
+        path.write_text("{}", encoding="utf-8")
+    write_json_artifact(
+        monitor,
+        {
+            "schema_version": 1,
+            "status": "completed",
+            "enrichment_needed_queue": [],
+            "order_submission_enabled": False,
+            "llm_calls_enabled": False,
+        },
+    )
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--output-dir",
+                str(tmp_path / "pipeline"),
+                "--rules-path",
+                str(rules_path),
+                "--action-plan",
+                str(action_plan),
+                "--portfolio-state",
+                str(portfolio),
+                "--journal-db",
+                str(tmp_path / "journal.db"),
+                "--ledger-db",
+                str(tmp_path / "ledger.db"),
+                "--price-map",
+                str(price_map),
+                "--portfolio-news-monitor",
+                str(monitor),
+                "--portfolio-news-followup-batches",
+                "--run-portfolio-news-followup-committee-batches",
+                "--portfolio-news-followup-max-batches",
+                "1",
+                "--skip-price-map",
+                "--print-plan-only",
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert [stage["stage_id"] for stage in printed["stages"][:4]] == [
+        "ingest_portfolio_news_monitor",
+        "portfolio_news_followup_batch_split",
+        "portfolio_news_followup_committee_batches",
+        "preflight_rules",
+    ]
+    assert "--max-batches 1" in printed["stages"][2]["command"]
+    assert "--submit-paper-orders" not in printed["stages"][2]["command"].lower()
+
+
+def test_pipeline_cli_requires_cap_for_portfolio_news_followup_committee(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    action_plan = tmp_path / "account_action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    followup_dir = tmp_path / "followup_batches"
+    for path in (rules_path, action_plan, portfolio):
+        path.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="portfolio-news-followup-max-batches"):
+        run_cli(
+            build_parser().parse_args(
+                [
+                    "--output-dir",
+                    str(tmp_path / "pipeline"),
+                    "--rules-path",
+                    str(rules_path),
+                    "--action-plan",
+                    str(action_plan),
+                    "--portfolio-state",
+                    str(portfolio),
+                    "--journal-db",
+                    str(tmp_path / "journal.db"),
+                    "--ledger-db",
+                    str(tmp_path / "ledger.db"),
+                    "--portfolio-news-followup-batch-dir",
+                    str(followup_dir),
+                    "--run-portfolio-news-followup-committee-batches",
+                    "--skip-price-map",
+                    "--print-plan-only",
+                ]
+            )
+        )
 
 
 def test_pipeline_cli_requires_monitor_or_explicit_followup_ideas_for_followup_batches(tmp_path):

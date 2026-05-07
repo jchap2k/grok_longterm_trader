@@ -604,6 +604,66 @@ def test_successful_followup_batch_split_updates_cadence_state(tmp_path):
     assert state["last_followup_batch_split_at"] == summary.runs[0].finished_at
 
 
+def test_successful_followup_committee_updates_cadence_state(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+
+    def fake_runner(command: str) -> tuple[int, str, str]:
+        if "longterm_research_to_paper_pipeline.py" in command:
+            summary_path = Path(command.split("--summary-output ", 1)[1].split(" --", 1)[0].strip('"'))
+            committee_summary = summary_path.parent / "followup_committee_summary.json"
+            committee_summary.write_text(
+                json.dumps(
+                    {
+                        "status": "partial",
+                        "batch_count": 4,
+                        "completed_count": 1,
+                        "failed_count": 0,
+                        "skipped_count": 0,
+                        "remaining_count": 3,
+                        "order_submission_enabled": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            summary_path.write_text(
+                json.dumps(
+                    {
+                        "status": "completed",
+                        "blocker_count": 0,
+                        "artifact_paths": {},
+                        "stages": [
+                            {
+                                "stage_id": "portfolio_news_followup_committee_batches",
+                                "status": "passed",
+                                "artifact_paths": {
+                                    "portfolio_news_followup_committee_batch_run_summary": str(committee_summary)
+                                },
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            return 0, "pipeline", ""
+        return 0, "refresh", ""
+
+    summary = run_pipeline_scheduler(
+        PipelineSchedulerInputs(
+            output_dir=tmp_path / "scheduler",
+            pipeline_command_template=_safe_pipeline_template(),
+            rules_path=rules_path,
+        ),
+        PipelineSchedulerConfig(max_runs=1),
+        command_runner=fake_runner,
+        now_func=FakeClock().now,
+    )
+
+    state = json.loads((tmp_path / "scheduler" / "scheduler_policy_state.json").read_text(encoding="utf-8"))
+    assert summary.runs[0].status == "completed"
+    assert state["last_followup_committee_at"] == summary.runs[0].finished_at
+
+
 def test_post_run_verification_runs_after_summary_and_updates_record(tmp_path):
     rules_path = tmp_path / "active_rules.txt"
     rules_path.write_text("<rules />", encoding="utf-8")
@@ -1415,6 +1475,52 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_portfolio_news_
     assert "--require-policy-timestamp last_followup_batch_split_at" in run["post_run_verification_command"]
 
 
+def test_pipeline_scheduler_cli_ongoing_no_submit_preset_runs_capped_followup_committee(tmp_path, capsys):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    snapshot = tmp_path / "news_snapshot.json"
+    snapshot.write_text("{}", encoding="utf-8")
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--preset",
+                "ongoing-no-submit",
+                "--output-dir",
+                str(tmp_path / "scheduler"),
+                "--rules-path",
+                str(rules_path),
+                "--journal-db",
+                str(tmp_path / "journal.db"),
+                "--ledger-db",
+                str(tmp_path / "paper_ledger.db"),
+                "--action-plan",
+                str(tmp_path / "account_action_plan.json"),
+                "--portfolio-news-monitor",
+                "--portfolio-news-snapshot-file",
+                str(snapshot),
+                "--portfolio-news-followup-batches",
+                "--run-portfolio-news-followup-committee-batches",
+                "--portfolio-news-followup-max-batches",
+                "2",
+                "--print-plan-only",
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    run = printed["runs"][0]
+    assert code == 0
+    assert "--run-portfolio-news-followup-committee-batches" in run["pipeline_command"]
+    assert "--portfolio-news-followup-max-batches 2" in run["pipeline_command"]
+    assert "--require-policy-timestamp last_followup_committee_at" in run["post_run_verification_command"]
+    assert "--submit-paper-orders" not in run["pipeline_command"].lower()
+    assert run["resource_controls"]["portfolio_news_followup_committee_batches"] is True
+    assert run["resource_controls"]["portfolio_news_followup_max_batches"] == 2
+    assert run["resource_controls"]["bounded"] is True
+
+
 def test_pipeline_scheduler_cli_ongoing_no_submit_preset_requires_news_snapshot_when_enabled(tmp_path):
     rules_path = tmp_path / "active_rules.txt"
     rules_path.write_text("<rules />", encoding="utf-8")
@@ -1463,6 +1569,39 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_requires_monitor_for_fo
                     "--action-plan",
                     str(tmp_path / "account_action_plan.json"),
                     "--portfolio-news-followup-batches",
+                    "--print-plan-only",
+                ]
+            )
+        )
+
+
+def test_pipeline_scheduler_cli_ongoing_no_submit_preset_requires_cap_for_followup_committee(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    snapshot = tmp_path / "news_snapshot.json"
+    snapshot.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="portfolio-news-followup-max-batches"):
+        run_cli(
+            build_parser().parse_args(
+                [
+                    "--preset",
+                    "ongoing-no-submit",
+                    "--output-dir",
+                    str(tmp_path / "scheduler"),
+                    "--rules-path",
+                    str(rules_path),
+                    "--journal-db",
+                    str(tmp_path / "journal.db"),
+                    "--ledger-db",
+                    str(tmp_path / "paper_ledger.db"),
+                    "--action-plan",
+                    str(tmp_path / "account_action_plan.json"),
+                    "--portfolio-news-monitor",
+                    "--portfolio-news-snapshot-file",
+                    str(snapshot),
+                    "--portfolio-news-followup-batches",
+                    "--run-portfolio-news-followup-committee-batches",
                     "--print-plan-only",
                 ]
             )
