@@ -264,6 +264,13 @@ Scheduler-readiness features now exist:
     holdings plus `$67,641.28` cash. The first attempted launch from the repo
     root failed safely because generated preset commands expect the scheduler
     cwd to be `ai_trader/trading_agent`.
+  - `%TEMP%\longterm_scheduler_root_cwd_smoke_20260507_201015`: repo-root
+    launch smoke proved the preset now renders absolute script paths,
+    normalizes user-supplied paths before child commands run, and executes
+    subprocesses from `ai_trader/trading_agent`. The one-cycle no-submit run
+    completed with `error_count=0`, `order_submission_enabled=false`,
+    pre-pipeline snapshot `0`, pipeline `0`, scheduler policy `0`, post-run
+    verifier `0`, and account/dashboard refresh `0`.
 - Policy-state artifacts track `last_full_research_at`,
   `last_no_submit_preflight_at`, `last_account_refresh_at`, and
   `last_final_planning_at`; when portfolio-news features are enabled they also
@@ -291,6 +298,9 @@ Scheduler-readiness features now exist:
   all generated committee batches in a bounded run.
 - A saved-action-plan recurring no-submit watch has now completed two cycles
   with the automatic post-run verifier and dashboard refresh enabled.
+- The safe scheduler preset can be launched from the repo root via
+  `python ai_trader\trading_agent\scripts\longterm_pipeline_scheduler.py ...`;
+  generated child commands use absolute script paths and a trading-agent cwd.
 - One longer full no-submit execute was intentionally stopped after wrapper
   timeout while the empty-batch final-planning refresh was still running; use
   longer supervised windows, existing saved action plans, or smaller resumable

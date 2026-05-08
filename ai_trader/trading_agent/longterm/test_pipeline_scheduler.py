@@ -6,6 +6,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from longterm import pipeline_scheduler as pipeline_scheduler_module
 from longterm.pipeline_scheduler import (
     PipelineSchedulerConfig,
     PipelineSchedulerInputs,
@@ -102,6 +103,33 @@ def _safe_committee_preset_policy_template() -> str:
         "--report-output {committee_preset_policy} "
         "--json"
     )
+
+
+def test_default_scheduler_command_runner_uses_trading_agent_cwd(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class Completed:
+        returncode = 0
+        stdout = "ok"
+        stderr = ""
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured.update(kwargs)
+        return Completed()
+
+    monkeypatch.setattr(pipeline_scheduler_module.subprocess, "run", fake_run)
+
+    code, stdout, stderr = pipeline_scheduler_module._run_command("python scripts/example.py")
+
+    assert code == 0
+    assert stdout == "ok"
+    assert stderr == ""
+    assert captured["command"] == "python scripts/example.py"
+    assert captured["cwd"] == Path(__file__).resolve().parents[1]
+    assert captured["shell"] is True
+    assert captured["text"] is True
+    assert captured["capture_output"] is True
 
 
 def test_validate_scheduler_command_template_rejects_submit_and_chaining_fragments(tmp_path):
@@ -1388,6 +1416,105 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_safe_commands(t
     assert controls["final_planning_timeout_seconds"] == 45
     assert controls["generated_committee_batches"] is False
     assert controls["bounded"] is True
+
+
+def test_pipeline_scheduler_cli_ongoing_no_submit_preset_uses_absolute_script_paths(tmp_path, capsys):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--preset",
+                "ongoing-no-submit",
+                "--output-dir",
+                str(tmp_path / "scheduler"),
+                "--rules-path",
+                str(rules_path),
+                "--journal-db",
+                str(tmp_path / "journal.db"),
+                "--ledger-db",
+                str(tmp_path / "paper_ledger.db"),
+                "--action-plan",
+                str(tmp_path / "account_action_plan.json"),
+                "--print-plan-only",
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    run = printed["runs"][0]
+    scripts_dir = Path(__file__).resolve().parents[1] / "scripts"
+    assert code == 0
+    for field, script_name in [
+        ("pre_pipeline_refresh_command", "longterm_alpaca_paper_snapshot.py"),
+        ("pipeline_command", "longterm_research_to_paper_pipeline.py"),
+        ("scheduler_policy_command", "longterm_pipeline_scheduler_policy.py"),
+        ("account_refresh_command", "longterm_paper_account_refresh.py"),
+        ("post_run_verification_command", "longterm_pipeline_scheduler_verify.py"),
+    ]:
+        command = run[field]
+        assert str(scripts_dir / script_name) in command
+        assert f"python scripts/{script_name}" not in command.replace("\\", "/")
+
+
+def test_pipeline_scheduler_cli_ongoing_no_submit_preset_normalizes_relative_user_paths(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    monkeypatch.chdir(tmp_path)
+    rules_path = Path("active_rules.txt")
+    rules_path.write_text("<rules />", encoding="utf-8")
+    journal = Path("journal.db")
+    ledger = Path("paper_ledger.db")
+    action_plan = Path("account_action_plan.json")
+    profile = Path("profile.json")
+    market_regime = Path("market_regime.json")
+    profile.write_text("{}", encoding="utf-8")
+    market_regime.write_text("{}", encoding="utf-8")
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--preset",
+                "ongoing-no-submit",
+                "--output-dir",
+                "scheduler",
+                "--rules-path",
+                str(rules_path),
+                "--journal-db",
+                str(journal),
+                "--ledger-db",
+                str(ledger),
+                "--action-plan",
+                str(action_plan),
+                "--profile-config",
+                str(profile),
+                "--market-regime-file",
+                str(market_regime),
+                "--print-plan-only",
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    run = printed["runs"][0]
+    all_commands = "\n".join(
+        [
+            run["pre_pipeline_refresh_command"],
+            run["pipeline_command"],
+            run["scheduler_policy_command"],
+            run["account_refresh_command"],
+        ]
+    )
+    assert code == 0
+    for path in [journal, ledger, action_plan, profile, market_regime]:
+        assert str(path.resolve()) in all_commands
+    assert "--profile-config profile.json" not in all_commands
+    assert "--market-regime-file market_regime.json" not in all_commands
 
 
 def test_pipeline_scheduler_cli_ongoing_no_submit_preset_requires_core_paths(tmp_path):

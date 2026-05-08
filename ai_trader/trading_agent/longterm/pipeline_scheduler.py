@@ -28,6 +28,7 @@ FORBIDDEN_SCHEDULER_FRAGMENTS = (
     "paper_execution.py",
 )
 FORBIDDEN_COMMAND_SEPARATORS = ("&&", "|", ";", "`", "\n", "\r")
+TRADING_AGENT_DIR = Path(__file__).resolve().parents[1]
 
 
 @dataclass(frozen=True)
@@ -1102,7 +1103,13 @@ def _require_flag(command: str, flag: str) -> None:
 
 
 def _run_command(command: str) -> tuple[int, str, str]:
-    completed = subprocess.run(command, shell=True, text=True, capture_output=True)
+    completed = subprocess.run(
+        command,
+        shell=True,
+        text=True,
+        capture_output=True,
+        cwd=TRADING_AGENT_DIR,
+    )
     return completed.returncode, completed.stdout, completed.stderr
 
 

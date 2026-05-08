@@ -22,6 +22,7 @@ from longterm.pipeline_scheduler import (
 
 
 DEFAULT_FINAL_PLANNING_TIMEOUT_SECONDS = 900.0
+SCRIPT_DIR = Path(__file__).resolve().parents[1] / "scripts"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -143,16 +144,31 @@ def _quote(value: str | Path) -> str:
     return subprocess.list2cmdline([str(value)])
 
 
+def _normalize_path_arg(value: str | Path) -> str:
+    text = str(value)
+    if text.startswith("{") or "://" in text:
+        return text
+    return str(Path(text).expanduser().resolve())
+
+
+def _quote_path_arg(value: str | Path) -> str:
+    return _quote(_normalize_path_arg(value))
+
+
+def _script_path(script_name: str) -> str:
+    return _quote(SCRIPT_DIR / script_name)
+
+
 def _require_preset_path(args: argparse.Namespace, attr: str, flag: str) -> str:
     value = getattr(args, attr, "")
     if not value:
         raise ValueError(f"{flag} is required when --preset ongoing-no-submit is used.")
-    return value
+    return _normalize_path_arg(value)
 
 
 def _append_optional_path(parts: list[str], flag: str, value: str) -> None:
     if value:
-        parts.extend([flag, _quote(value)])
+        parts.extend([flag, _quote_path_arg(value)])
 
 
 def _append_optional_value(parts: list[str], flag: str, value: object | None) -> None:
@@ -206,15 +222,15 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
     journal_db = _require_preset_path(args, "journal_db", "--journal-db")
     ledger_db = _require_preset_path(args, "ledger_db", "--ledger-db")
     action_plan = _require_preset_path(args, "action_plan", "--action-plan")
-    profile_config = args.profile_config or str(DEFAULT_PROFILE_PATH)
+    profile_config = _normalize_path_arg(args.profile_config or str(DEFAULT_PROFILE_PATH))
     _validate_ongoing_no_submit_research_bounds(args)
 
     pre_refresh = " ".join(
         [
             "python",
-            "scripts/longterm_alpaca_paper_snapshot.py",
+            _script_path("longterm_alpaca_paper_snapshot.py"),
             "--profile-config",
-            _quote(profile_config),
+            _quote_path_arg(profile_config),
             "--portfolio-state-output",
             "{portfolio_state}",
         ]
@@ -222,19 +238,19 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
 
     pipeline_parts = [
         "python",
-        "scripts/longterm_research_to_paper_pipeline.py",
+        _script_path("longterm_research_to_paper_pipeline.py"),
         "--output-dir",
         "{pipeline_output_dir}",
         "--action-plan",
-        _quote(action_plan),
+        _quote_path_arg(action_plan),
         "--portfolio-state",
         "{portfolio_state}",
         "--journal-db",
-        _quote(journal_db),
+        _quote_path_arg(journal_db),
         "--ledger-db",
-        _quote(ledger_db),
+        _quote_path_arg(ledger_db),
         "--profile-config",
-        _quote(profile_config),
+        _quote_path_arg(profile_config),
         "--json",
     ]
     _append_optional_path(pipeline_parts, "--research-source-file", args.research_source_file)
@@ -376,13 +392,13 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
     if args.portfolio_news_monitor:
         portfolio_news_monitor_parts = [
             "python",
-            "scripts/longterm_portfolio_news_monitor.py",
+            _script_path("longterm_portfolio_news_monitor.py"),
             "--portfolio-state",
             "{portfolio_state}",
             "--snapshot-file",
-            _quote(args.portfolio_news_snapshot_file),
+            _quote_path_arg(args.portfolio_news_snapshot_file),
             "--journal-db",
-            _quote(journal_db),
+            _quote_path_arg(journal_db),
             "--output",
             "{portfolio_news_monitor}",
             "--relevance-threshold",
@@ -400,11 +416,11 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
 
     scheduler_policy_parts = [
         "python",
-        "scripts/longterm_pipeline_scheduler_policy.py",
+        _script_path("longterm_pipeline_scheduler_policy.py"),
         "--rules-path",
         "{rules_path}",
         "--journal-db",
-        _quote(journal_db),
+        _quote_path_arg(journal_db),
         "--policy-state",
         "{scheduler_policy_state}",
         "--state-output",
@@ -421,15 +437,15 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
 
     account_refresh_parts = [
         "python",
-        "scripts/longterm_paper_account_refresh.py",
+        _script_path("longterm_paper_account_refresh.py"),
         "--profile-config",
-        _quote(profile_config),
+        _quote_path_arg(profile_config),
         "--journal-db",
-        _quote(journal_db),
+        _quote_path_arg(journal_db),
         "--action-plan",
-        _quote(action_plan),
+        _quote_path_arg(action_plan),
         "--paper-ledger-db",
-        _quote(ledger_db),
+        _quote_path_arg(ledger_db),
         "--pipeline-summary",
         "{pipeline_summary}",
         "--pipeline-scheduler-summary",
@@ -446,7 +462,7 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
 
     post_run_verification_parts = [
         "python",
-        "scripts/longterm_pipeline_scheduler_verify.py",
+        _script_path("longterm_pipeline_scheduler_verify.py"),
         "--pipeline-scheduler-summary",
         "{scheduler_summary}",
         "--policy-state",
