@@ -83,6 +83,19 @@ def _safe_post_run_verification_template() -> str:
     )
 
 
+def _safe_scheduler_review_bundle_template() -> str:
+    return (
+        "python scripts/longterm_scheduler_review_bundle.py "
+        "--dashboard-manifest {dashboard_manifest} "
+        "--scheduler-handoff scheduler_handoff.json "
+        "--pipeline-scheduler-summary {scheduler_summary} "
+        "--position-review-queue {position_review_queue} "
+        "--post-run-verification {post_run_verification} "
+        "--output-dir {scheduler_review_bundle_output_dir} "
+        "--json"
+    )
+
+
 def _safe_portfolio_news_monitor_template() -> str:
     return (
         "python scripts/longterm_portfolio_news_monitor.py "
@@ -281,6 +294,38 @@ def test_validate_post_run_verification_template_requires_verifier_summary_and_o
         validate_scheduler_command_template(
             _safe_post_run_verification_template().replace("--report-output {post_run_verification} ", ""),
             command_kind="post_run_verification",
+            rules_path=rules_path,
+        )
+
+
+def test_validate_scheduler_review_bundle_template_requires_script_and_core_flags(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+
+    validate_scheduler_command_template(
+        _safe_scheduler_review_bundle_template(),
+        command_kind="scheduler_review_bundle",
+        rules_path=rules_path,
+    )
+    with pytest.raises(ValueError, match="longterm_scheduler_review_bundle.py"):
+        validate_scheduler_command_template(
+            _safe_scheduler_review_bundle_template().replace(
+                "longterm_scheduler_review_bundle.py",
+                "not_the_bundle.py",
+            ),
+            command_kind="scheduler_review_bundle",
+            rules_path=rules_path,
+        )
+    with pytest.raises(ValueError, match="--post-run-verification"):
+        validate_scheduler_command_template(
+            _safe_scheduler_review_bundle_template().replace("--post-run-verification {post_run_verification} ", ""),
+            command_kind="scheduler_review_bundle",
+            rules_path=rules_path,
+        )
+    with pytest.raises(ValueError, match="--output-dir"):
+        validate_scheduler_command_template(
+            _safe_scheduler_review_bundle_template().replace("--output-dir {scheduler_review_bundle_output_dir} ", ""),
+            command_kind="scheduler_review_bundle",
             rules_path=rules_path,
         )
 
@@ -887,6 +932,143 @@ def test_post_run_verification_failure_marks_scheduler_run_failed(tmp_path):
     assert run.blocker == "post_run_verification_command_failed"
     assert run.post_run_verification_exit_code == 3
     assert "not ready" in Path(run.post_run_verification_stderr_path).read_text(encoding="utf-8")
+
+
+def test_scheduler_review_bundle_runs_after_successful_post_run_verification(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    calls: list[str] = []
+
+    def fake_runner(command: str) -> tuple[int, str, str]:
+        calls.append(command)
+        if "longterm_research_to_paper_pipeline.py" in command:
+            summary_path = Path(command.split("--summary-output ", 1)[1].split(" --", 1)[0].strip('"'))
+            summary_path.write_text(
+                json.dumps({"status": "completed", "blocker_count": 0, "artifact_paths": {}}),
+                encoding="utf-8",
+            )
+            return 0, "pipeline", ""
+        if "longterm_pipeline_scheduler_verify.py" in command:
+            report_path = Path(command.split("--report-output ", 1)[1].split(" --", 1)[0].strip('"'))
+            report_path.write_text(
+                json.dumps(
+                    {
+                        "status": "ready",
+                        "blockers": [],
+                        "resource_controls": {"bounded": True},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            return 0, "verified", ""
+        if "longterm_scheduler_review_bundle.py" in command:
+            output_dir = Path(command.split("--output-dir ", 1)[1].split(" --", 1)[0].strip('"'))
+            assert any("longterm_pipeline_scheduler_verify.py" in call for call in calls[:-1])
+            (output_dir / "scheduler_review_bundle.json").parent.mkdir(parents=True, exist_ok=True)
+            (output_dir / "scheduler_review_bundle.json").write_text(
+                json.dumps({"status": "ready_for_manual_review"}),
+                encoding="utf-8",
+            )
+            return 0, "bundled", ""
+        raise AssertionError(f"unexpected command: {command}")
+
+    summary = run_pipeline_scheduler(
+        PipelineSchedulerInputs(
+            output_dir=tmp_path / "scheduler",
+            pipeline_command_template=_safe_pipeline_template(),
+            post_run_verification_command_template=_safe_post_run_verification_template(),
+            scheduler_review_bundle_command_template=_safe_scheduler_review_bundle_template(),
+            rules_path=rules_path,
+        ),
+        PipelineSchedulerConfig(max_runs=1),
+        command_runner=fake_runner,
+        now_func=FakeClock().now,
+    )
+
+    run = summary.runs[0]
+    saved = json.loads((tmp_path / "scheduler" / "pipeline_scheduler_summary.json").read_text(encoding="utf-8"))
+    assert summary.status == "completed"
+    assert "longterm_scheduler_review_bundle.py" in calls[-1]
+    assert run.scheduler_review_bundle_exit_code == 0
+    assert Path(run.scheduler_review_bundle_path).exists()
+    assert Path(run.scheduler_review_bundle_stdout_path).read_text(encoding="utf-8") == "bundled"
+    assert saved["runs"][0]["scheduler_review_bundle_exit_code"] == 0
+
+
+def test_scheduler_review_bundle_does_not_run_when_post_run_verification_fails(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    calls: list[str] = []
+
+    def fake_runner(command: str) -> tuple[int, str, str]:
+        calls.append(command)
+        if "longterm_research_to_paper_pipeline.py" in command:
+            summary_path = Path(command.split("--summary-output ", 1)[1].split(" --", 1)[0].strip('"'))
+            summary_path.write_text(
+                json.dumps({"status": "completed", "blocker_count": 0, "artifact_paths": {}}),
+                encoding="utf-8",
+            )
+            return 0, "pipeline", ""
+        if "longterm_pipeline_scheduler_verify.py" in command:
+            return 3, "", "not ready"
+        raise AssertionError(f"unexpected command: {command}")
+
+    summary = run_pipeline_scheduler(
+        PipelineSchedulerInputs(
+            output_dir=tmp_path / "scheduler",
+            pipeline_command_template=_safe_pipeline_template(),
+            post_run_verification_command_template=_safe_post_run_verification_template(),
+            scheduler_review_bundle_command_template=_safe_scheduler_review_bundle_template(),
+            rules_path=rules_path,
+        ),
+        PipelineSchedulerConfig(max_runs=1),
+        command_runner=fake_runner,
+        now_func=FakeClock().now,
+    )
+
+    run = summary.runs[0]
+    assert summary.status == "failed"
+    assert run.blocker == "post_run_verification_command_failed"
+    assert run.scheduler_review_bundle_exit_code is None
+    assert not any("longterm_scheduler_review_bundle.py" in call for call in calls)
+
+
+def test_scheduler_review_bundle_failure_marks_scheduler_run_failed(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+
+    def fake_runner(command: str) -> tuple[int, str, str]:
+        if "longterm_research_to_paper_pipeline.py" in command:
+            summary_path = Path(command.split("--summary-output ", 1)[1].split(" --", 1)[0].strip('"'))
+            summary_path.write_text(
+                json.dumps({"status": "completed", "blocker_count": 0, "artifact_paths": {}}),
+                encoding="utf-8",
+            )
+            return 0, "pipeline", ""
+        if "longterm_pipeline_scheduler_verify.py" in command:
+            return 0, "verified", ""
+        if "longterm_scheduler_review_bundle.py" in command:
+            return 5, "", "bundle blocked"
+        raise AssertionError(f"unexpected command: {command}")
+
+    summary = run_pipeline_scheduler(
+        PipelineSchedulerInputs(
+            output_dir=tmp_path / "scheduler",
+            pipeline_command_template=_safe_pipeline_template(),
+            post_run_verification_command_template=_safe_post_run_verification_template(),
+            scheduler_review_bundle_command_template=_safe_scheduler_review_bundle_template(),
+            rules_path=rules_path,
+        ),
+        PipelineSchedulerConfig(max_runs=1),
+        command_runner=fake_runner,
+        now_func=FakeClock().now,
+    )
+
+    run = summary.runs[0]
+    assert summary.status == "failed"
+    assert run.blocker == "scheduler_review_bundle_command_failed"
+    assert run.scheduler_review_bundle_exit_code == 5
+    assert "bundle blocked" in Path(run.scheduler_review_bundle_stderr_path).read_text(encoding="utf-8")
 
 
 def test_scheduler_policy_runs_between_pipeline_and_account_refresh_and_is_passed_to_refresh(tmp_path):
@@ -1967,6 +2149,61 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_position_review
     assert "--paper-submit-mode-plan" in run["account_refresh_command"]
     assert str(submit_plan.resolve()) in run["account_refresh_command"]
     assert "--require-policy-timestamp last_position_review_at" in run["post_run_verification_command"]
+
+
+def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_scheduler_review_bundle(tmp_path, capsys):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    snapshot = tmp_path / "news_snapshot.json"
+    snapshot.write_text("{}", encoding="utf-8")
+    handoff = tmp_path / "scheduler_handoff.json"
+    handoff.write_text("{}", encoding="utf-8")
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--preset",
+                "ongoing-no-submit",
+                "--output-dir",
+                str(tmp_path / "scheduler"),
+                "--rules-path",
+                str(rules_path),
+                "--journal-db",
+                str(tmp_path / "journal.db"),
+                "--ledger-db",
+                str(tmp_path / "paper_ledger.db"),
+                "--action-plan",
+                str(tmp_path / "account_action_plan.json"),
+                "--scheduler-handoff",
+                str(handoff),
+                "--portfolio-news-monitor",
+                "--portfolio-news-snapshot-file",
+                str(snapshot),
+                "--position-review-queue",
+                "--scheduler-review-bundle",
+                "--print-plan-only",
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    run = printed["runs"][0]
+    assert code == 0
+    assert "longterm_scheduler_review_bundle.py" in run["scheduler_review_bundle_command"]
+    assert "--dashboard-manifest" in run["scheduler_review_bundle_command"]
+    assert "dashboard_manifest.json" in run["scheduler_review_bundle_command"]
+    assert "--scheduler-handoff" in run["scheduler_review_bundle_command"]
+    assert str(handoff.resolve()) in run["scheduler_review_bundle_command"]
+    assert "--pipeline-scheduler-summary" in run["scheduler_review_bundle_command"]
+    assert "pipeline_scheduler_summary.json" in run["scheduler_review_bundle_command"]
+    assert "--position-review-queue" in run["scheduler_review_bundle_command"]
+    assert "position_review_queue.json" in run["scheduler_review_bundle_command"]
+    assert "--post-run-verification" in run["scheduler_review_bundle_command"]
+    assert "scheduler_cadence_verification.json" in run["scheduler_review_bundle_command"]
+    assert "--output-dir" in run["scheduler_review_bundle_command"]
+    assert "scheduler_review_bundle" in run["scheduler_review_bundle_command"]
+    assert "--submit-paper-orders" not in run["scheduler_review_bundle_command"]
 
 
 def test_pipeline_scheduler_cli_ongoing_no_submit_preset_runs_capped_followup_committee(tmp_path, capsys):

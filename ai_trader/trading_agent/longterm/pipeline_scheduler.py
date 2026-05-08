@@ -45,6 +45,7 @@ class PipelineSchedulerInputs:
     scheduler_policy_command_template: str = ""
     account_refresh_command_template: str = ""
     post_run_verification_command_template: str = ""
+    scheduler_review_bundle_command_template: str = ""
     summary_output: str | Path | None = None
 
 
@@ -108,6 +109,12 @@ class PipelineSchedulerRunRecord:
     post_run_verification_exit_code: int | None = None
     post_run_verification_stdout_path: str = ""
     post_run_verification_stderr_path: str = ""
+    scheduler_review_bundle_path: str = ""
+    scheduler_review_bundle_output_dir: str = ""
+    scheduler_review_bundle_command: str = ""
+    scheduler_review_bundle_exit_code: int | None = None
+    scheduler_review_bundle_stdout_path: str = ""
+    scheduler_review_bundle_stderr_path: str = ""
     blocker: str = ""
     resource_controls: dict[str, object] = field(default_factory=dict)
 
@@ -195,6 +202,17 @@ def run_pipeline_scheduler(
             command_kind="post_run_verification",
             rules_path=rules_path,
         )
+    if inputs.scheduler_review_bundle_command_template:
+        if not inputs.post_run_verification_command_template:
+            raise ValueError(
+                "scheduler_review_bundle_command_template requires post_run_verification_command_template "
+                "so the bundle can be built only after verification passes."
+            )
+        validate_scheduler_command_template(
+            inputs.scheduler_review_bundle_command_template,
+            command_kind="scheduler_review_bundle",
+            rules_path=rules_path,
+        )
 
     records: list[PipelineSchedulerRunRecord] = []
     for run_number in range(1, scheduler_config.max_runs + 1):
@@ -243,6 +261,17 @@ def run_pipeline_scheduler(
             )
             if verified_record != record:
                 records[-1] = verified_record
+                write_pipeline_scheduler_summary(
+                    _build_summary(output_dir=output_dir, records=records),
+                    summary_output_path,
+                )
+            bundled_record = _run_scheduler_review_bundle_after_verification(
+                records[-1],
+                command_runner=runner,
+                now_func=now,
+            )
+            if bundled_record != records[-1]:
+                records[-1] = bundled_record
                 write_pipeline_scheduler_summary(
                     _build_summary(output_dir=output_dir, records=records),
                     summary_output_path,
@@ -316,6 +345,15 @@ def validate_scheduler_command_template(
             raise ValueError("Post-run verification command must call scripts/longterm_pipeline_scheduler_verify.py.")
         _require_flag(command_template, "--pipeline-scheduler-summary")
         _require_flag(command_template, "--report-output")
+    elif command_kind == "scheduler_review_bundle":
+        if "longterm_scheduler_review_bundle.py" not in lowered:
+            raise ValueError("Scheduler review bundle command must call scripts/longterm_scheduler_review_bundle.py.")
+        _require_flag(command_template, "--dashboard-manifest")
+        _require_flag(command_template, "--scheduler-handoff")
+        _require_flag(command_template, "--pipeline-scheduler-summary")
+        _require_flag(command_template, "--position-review-queue")
+        _require_flag(command_template, "--post-run-verification")
+        _require_flag(command_template, "--output-dir")
     else:
         raise ValueError(f"Unknown scheduler command kind: {command_kind}")
 
@@ -351,6 +389,10 @@ def _run_one_scheduler_cycle(
     scheduler_policy_path = run_dir / "scheduler_policy.json"
     account_refresh_output_dir = run_dir / "paper_account_refresh"
     post_run_verification_path = run_dir / "scheduler_cadence_verification.json"
+    scheduler_review_bundle_output_dir = run_dir / "scheduler_review_bundle"
+    scheduler_review_bundle_path = scheduler_review_bundle_output_dir / "scheduler_review_bundle.json"
+    dashboard_review_gates_manifest_path = scheduler_review_bundle_output_dir / "dashboard_review_gates_manifest.json"
+    paper_submit_mode_plan_path = scheduler_review_bundle_output_dir / "paper_submit_mode_plan.json"
     dashboard_manifest_path = run_dir / "dashboard_manifest.json"
     dashboard_site_output_dir = run_dir / "operator_dashboard_site"
     context = _render_context(
@@ -365,6 +407,10 @@ def _run_one_scheduler_cycle(
         scheduler_policy_path=scheduler_policy_path,
         account_refresh_output_dir=account_refresh_output_dir,
         post_run_verification_path=post_run_verification_path,
+        scheduler_review_bundle_output_dir=scheduler_review_bundle_output_dir,
+        scheduler_review_bundle_path=scheduler_review_bundle_path,
+        dashboard_review_gates_manifest_path=dashboard_review_gates_manifest_path,
+        paper_submit_mode_plan_path=paper_submit_mode_plan_path,
         dashboard_manifest_path=dashboard_manifest_path,
         dashboard_site_output_dir=dashboard_site_output_dir,
         scheduler_run_id=scheduler_run_id,
@@ -427,6 +473,23 @@ def _run_one_scheduler_cycle(
         if inputs.post_run_verification_command_template
         else ""
     )
+    scheduler_review_bundle_command = (
+        _render_command(inputs.scheduler_review_bundle_command_template, context)
+        if inputs.scheduler_review_bundle_command_template
+        else ""
+    )
+    scheduler_review_bundle_fields = {
+        "scheduler_review_bundle_path": str(scheduler_review_bundle_path)
+        if scheduler_review_bundle_command
+        else "",
+        "scheduler_review_bundle_output_dir": str(scheduler_review_bundle_output_dir)
+        if scheduler_review_bundle_command
+        else "",
+        "scheduler_review_bundle_command": scheduler_review_bundle_command,
+        "scheduler_review_bundle_exit_code": None,
+        "scheduler_review_bundle_stdout_path": "",
+        "scheduler_review_bundle_stderr_path": "",
+    }
     resource_controls = derive_scheduler_resource_controls(pipeline_command)
     if config.print_plan_only:
         return PipelineSchedulerRunRecord(
@@ -450,6 +513,7 @@ def _run_one_scheduler_cycle(
             account_refresh_command=refresh_command,
             post_run_verification_path=str(post_run_verification_path) if post_run_verification_command else "",
             post_run_verification_command=post_run_verification_command,
+            **scheduler_review_bundle_fields,
             resource_controls=resource_controls,
         )
 
@@ -487,6 +551,7 @@ def _run_one_scheduler_cycle(
                 scheduler_policy_path=str(scheduler_policy_path) if policy_command else "",
                 scheduler_policy_command=policy_command,
                 account_refresh_command=refresh_command,
+                **scheduler_review_bundle_fields,
                 blocker="pre_pipeline_refresh_command_failed",
                 resource_controls=resource_controls,
             )
@@ -526,6 +591,7 @@ def _run_one_scheduler_cycle(
                 scheduler_policy_path=str(scheduler_policy_path) if policy_command else "",
                 scheduler_policy_command=policy_command,
                 account_refresh_command=refresh_command,
+                **scheduler_review_bundle_fields,
                 blocker="portfolio_news_monitor_command_failed",
                 resource_controls=resource_controls,
             )
@@ -566,6 +632,7 @@ def _run_one_scheduler_cycle(
                 scheduler_policy_path=str(scheduler_policy_path) if policy_command else "",
                 scheduler_policy_command=policy_command,
                 account_refresh_command=refresh_command,
+                **scheduler_review_bundle_fields,
                 blocker="position_review_queue_command_failed",
                 resource_controls=resource_controls,
             )
@@ -603,6 +670,7 @@ def _run_one_scheduler_cycle(
             scheduler_policy_path=str(scheduler_policy_path) if policy_command else "",
             scheduler_policy_command=policy_command,
             account_refresh_command=refresh_command,
+            **scheduler_review_bundle_fields,
             blocker="pipeline_command_failed",
             resource_controls=resource_controls,
         )
@@ -647,6 +715,7 @@ def _run_one_scheduler_cycle(
                 scheduler_policy_path=str(scheduler_policy_path) if policy_command else "",
                 scheduler_policy_command=policy_command,
                 account_refresh_command=refresh_command,
+                **scheduler_review_bundle_fields,
                 blocker="committee_preset_policy_command_failed",
                 resource_controls=resource_controls,
             )
@@ -694,6 +763,7 @@ def _run_one_scheduler_cycle(
                 scheduler_policy_stdout_path=policy_stdout_path,
                 scheduler_policy_stderr_path=policy_stderr_path,
                 account_refresh_command=refresh_command,
+                **scheduler_review_bundle_fields,
                 blocker="scheduler_policy_command_failed",
                 resource_controls=resource_controls,
             )
@@ -744,6 +814,7 @@ def _run_one_scheduler_cycle(
                 account_refresh_exit_code=refresh_exit_code,
                 account_refresh_stdout_path=refresh_stdout_path,
                 account_refresh_stderr_path=refresh_stderr_path,
+                **scheduler_review_bundle_fields,
                 blocker="account_refresh_command_failed",
                 resource_controls=resource_controls,
             )
@@ -784,6 +855,7 @@ def _run_one_scheduler_cycle(
         account_refresh_stderr_path=refresh_stderr_path,
         post_run_verification_path=str(post_run_verification_path) if post_run_verification_command else "",
         post_run_verification_command=post_run_verification_command,
+        **scheduler_review_bundle_fields,
         resource_controls=resource_controls,
     )
 
@@ -948,6 +1020,10 @@ def _render_context(
     scheduler_policy_path: Path,
     account_refresh_output_dir: Path,
     post_run_verification_path: Path,
+    scheduler_review_bundle_output_dir: Path,
+    scheduler_review_bundle_path: Path,
+    dashboard_review_gates_manifest_path: Path,
+    paper_submit_mode_plan_path: Path,
     dashboard_manifest_path: Path,
     dashboard_site_output_dir: Path,
     scheduler_run_id: str,
@@ -967,6 +1043,10 @@ def _render_context(
         "scheduler_policy": _quote(scheduler_policy_path),
         "account_refresh_output_dir": _quote(account_refresh_output_dir),
         "post_run_verification": _quote(post_run_verification_path),
+        "scheduler_review_bundle_output_dir": _quote(scheduler_review_bundle_output_dir),
+        "scheduler_review_bundle": _quote(scheduler_review_bundle_path),
+        "dashboard_review_gates_manifest": _quote(dashboard_review_gates_manifest_path),
+        "paper_submit_mode_plan": _quote(paper_submit_mode_plan_path),
         "dashboard_manifest": _quote(dashboard_manifest_path),
         "dashboard_site_output_dir": _quote(dashboard_site_output_dir),
         "scheduler_run_id": scheduler_run_id,
@@ -1083,6 +1163,35 @@ def _run_post_run_verification_after_summary(
         post_run_verification_exit_code=exit_code,
         post_run_verification_stdout_path=str(stdout_path),
         post_run_verification_stderr_path=str(stderr_path),
+    )
+
+
+def _run_scheduler_review_bundle_after_verification(
+    record: PipelineSchedulerRunRecord,
+    *,
+    command_runner: CommandRunner,
+    now_func: NowFunc,
+) -> PipelineSchedulerRunRecord:
+    if record.status != "completed" or not record.scheduler_review_bundle_command:
+        return record
+    if record.post_run_verification_exit_code != 0:
+        return record
+    run_dir = Path(record.run_dir)
+    stdout_path = run_dir / "scheduler_review_bundle_stdout.txt"
+    stderr_path = run_dir / "scheduler_review_bundle_stderr.txt"
+    exit_code, stdout, stderr = command_runner(record.scheduler_review_bundle_command)
+    _write_text(stdout_path, stdout)
+    _write_text(stderr_path, stderr)
+    status = "completed" if exit_code == 0 else "failed"
+    blocker = "" if exit_code == 0 else "scheduler_review_bundle_command_failed"
+    return replace(
+        record,
+        finished_at=_format_timestamp(now_func()),
+        status=status,
+        blocker=blocker,
+        scheduler_review_bundle_exit_code=exit_code,
+        scheduler_review_bundle_stdout_path=str(stdout_path),
+        scheduler_review_bundle_stderr_path=str(stderr_path),
     )
 
 

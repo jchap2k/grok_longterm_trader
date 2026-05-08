@@ -52,6 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scheduler-policy-command-template", default="")
     parser.add_argument("--account-refresh-command-template", default="")
     parser.add_argument("--post-run-verification-command-template", default="")
+    parser.add_argument("--scheduler-review-bundle-command-template", default="")
     parser.add_argument("--portfolio-news-monitor-command-template", default="")
     parser.add_argument("--journal-db", default="")
     parser.add_argument("--ledger-db", default="")
@@ -134,6 +135,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--position-review-queue",
         action="store_true",
         help="Build a deterministic no-submit sell/rebalance/news review queue after portfolio-news monitoring.",
+    )
+    parser.add_argument(
+        "--scheduler-review-bundle",
+        action="store_true",
+        help=(
+            "After post-run verification passes, assemble the no-submit operator scheduler review bundle "
+            "from the dashboard manifest, handoff, position queue, and verifier report."
+        ),
     )
     parser.add_argument("--portfolio-news-followup-batches", action="store_true")
     parser.add_argument("--portfolio-news-followup-batch-size", type=int, default=3)
@@ -226,6 +235,11 @@ def _validate_ongoing_no_submit_research_bounds(args: argparse.Namespace) -> Non
         raise ValueError("--portfolio-news-monitor with --preset ongoing-no-submit requires --portfolio-news-snapshot-file.")
     if args.position_review_queue and not args.portfolio_news_monitor:
         raise ValueError("--position-review-queue with --preset ongoing-no-submit requires --portfolio-news-monitor.")
+    if args.scheduler_review_bundle:
+        if not args.position_review_queue:
+            raise ValueError("--scheduler-review-bundle with --preset ongoing-no-submit requires --position-review-queue.")
+        if not args.scheduler_handoff:
+            raise ValueError("--scheduler-review-bundle with --preset ongoing-no-submit requires --scheduler-handoff.")
     if args.portfolio_news_followup_batches and not args.portfolio_news_monitor:
         raise ValueError("--portfolio-news-followup-batches with --preset ongoing-no-submit requires --portfolio-news-monitor.")
     if args.portfolio_news_followup_batch_size < 1:
@@ -630,6 +644,26 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
             ]
         )
 
+    scheduler_review_bundle_parts: list[str] = []
+    if args.scheduler_review_bundle:
+        scheduler_review_bundle_parts = [
+            "python",
+            _script_path("longterm_scheduler_review_bundle.py"),
+            "--dashboard-manifest",
+            "{dashboard_manifest}",
+            "--scheduler-handoff",
+            _quote_path_arg(args.scheduler_handoff),
+            "--pipeline-scheduler-summary",
+            "{scheduler_summary}",
+            "--position-review-queue",
+            "{position_review_queue}",
+            "--post-run-verification",
+            "{post_run_verification}",
+            "--output-dir",
+            "{scheduler_review_bundle_output_dir}",
+            "--json",
+        ]
+
     return {
         "pre_pipeline_refresh": pre_refresh,
         "portfolio_news_monitor": " ".join(portfolio_news_monitor_parts),
@@ -638,6 +672,7 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
         "scheduler_policy": " ".join(scheduler_policy_parts),
         "account_refresh": " ".join(account_refresh_parts),
         "post_run_verification": " ".join(post_run_verification_parts),
+        "scheduler_review_bundle": " ".join(scheduler_review_bundle_parts),
     }
 
 
@@ -649,6 +684,7 @@ def _resolve_command_templates(args: argparse.Namespace) -> dict[str, str]:
         args.scheduler_policy_command_template,
         args.account_refresh_command_template,
         args.post_run_verification_command_template,
+        args.scheduler_review_bundle_command_template,
         args.portfolio_news_monitor_command_template,
     ]
     if args.preset == "ongoing-no-submit":
@@ -665,6 +701,7 @@ def _resolve_command_templates(args: argparse.Namespace) -> dict[str, str]:
         "scheduler_policy": args.scheduler_policy_command_template,
         "account_refresh": args.account_refresh_command_template,
         "post_run_verification": args.post_run_verification_command_template,
+        "scheduler_review_bundle": args.scheduler_review_bundle_command_template,
     }
 
 
@@ -685,6 +722,7 @@ def validate_resolved_scheduler_config(args: argparse.Namespace) -> dict[str, ob
         ("scheduler_policy", "scheduler_policy"),
         ("account_refresh", "account_refresh"),
         ("post_run_verification", "post_run_verification"),
+        ("scheduler_review_bundle", "scheduler_review_bundle"),
     ]
     for template_key, command_kind in command_kinds:
         command = templates.get(template_key, "")
@@ -733,6 +771,7 @@ def run_cli(args: argparse.Namespace) -> int:
             scheduler_policy_command_template=templates.get("scheduler_policy", ""),
             account_refresh_command_template=templates.get("account_refresh", ""),
             post_run_verification_command_template=templates.get("post_run_verification", ""),
+            scheduler_review_bundle_command_template=templates.get("scheduler_review_bundle", ""),
             rules_path=args.rules_path,
             summary_output=args.summary_output or None,
         ),

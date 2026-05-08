@@ -142,6 +142,8 @@ def build_scheduler_cadence_verification_report(
             "position_review_queue_exit_code": latest_run.get("position_review_queue_exit_code"),
             "scheduler_policy_exit_code": latest_run.get("scheduler_policy_exit_code"),
             "account_refresh_exit_code": latest_run.get("account_refresh_exit_code"),
+            "post_run_verification_exit_code": latest_run.get("post_run_verification_exit_code"),
+            "scheduler_review_bundle_exit_code": latest_run.get("scheduler_review_bundle_exit_code"),
             "blocker": latest_run.get("blocker", ""),
         }
         if latest_run
@@ -203,6 +205,8 @@ def _check_latest_run(*, latest_run: dict[str, Any], blockers: list[str]) -> Non
         "pipeline_exit_code",
         "scheduler_policy_exit_code",
         "account_refresh_exit_code",
+        "post_run_verification_exit_code",
+        "scheduler_review_bundle_exit_code",
     ):
         value = latest_run.get(key)
         if value is not None and _int_value(value) != 0:
@@ -222,6 +226,7 @@ def _check_no_submit_commands(*, latest_run: dict[str, Any], blockers: list[str]
             "portfolio_news_monitor_command",
             "position_review_queue_command",
             "post_run_verification_command",
+            "scheduler_review_bundle_command",
             "account_refresh_command",
         )
     ).lower()

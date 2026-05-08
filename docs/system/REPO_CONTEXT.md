@@ -11,9 +11,9 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-08 by Codex after adding the no-submit scheduler review
-bundle that joins post-run verification, position-review, handoff, scheduler
-policy, and disabled submit-mode readiness artifacts for dashboard review.
+Last updated: 2026-05-08 by Codex after wiring the no-submit scheduler review
+bundle into the recurring scheduler chain after successful post-run
+verification.
 
 ## 1. Project Identity
 
@@ -225,6 +225,12 @@ Scheduler-readiness features now exist:
   stdout/stderr paths, and exit code. If the verifier exits non-zero after an
   otherwise completed no-submit run, the scheduler marks the run failed with
   `post_run_verification_command_failed`.
+- Scheduler run records can now also carry a `scheduler_review_bundle_command`
+  and output/log fields. When supplied, the bundle runs only after a completed
+  scheduler cycle has written its summary and the post-run verifier exits `0`.
+  If the bundle fails, the scheduler marks the run failed with
+  `scheduler_review_bundle_command_failed`; if the verifier fails, the bundle is
+  not run.
 - Scheduler run records can carry a deterministic
   `position_review_queue_command` stage after portfolio-news monitoring and
   before the pipeline. The stage writes `run_00N/position_review_queue.json`,
@@ -251,6 +257,11 @@ Scheduler-readiness features now exist:
   and disabled submit-mode plan are clean. It can optionally block on supplied
   buy-promotion/final-action artifacts. It never emits submit commands,
   enables a submit profile, calls a broker, or calls an LLM.
+- The safe `ongoing-no-submit` scheduler preset can render this bundler behind
+  `--scheduler-review-bundle`, which requires `--position-review-queue` and a
+  saved `--scheduler-handoff`. The preset writes bundle outputs under
+  `run_00N/scheduler_review_bundle/` and scans the rendered command for
+  submit-capable fragments like every other scheduler stage.
 - Scheduler policy treats unbounded paid/provider resource controls as a
   high-urgency `resource_control_review` blocker, while bounded paid runs carry
   a warning for operator awareness. Operator status bundles and markdown surface
