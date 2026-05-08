@@ -400,6 +400,14 @@ Book-principle context:
   this as a margin-of-safety, Mr. Market, normalized-earnings, and permanent
   capital-loss guardrail layer on top of Lynch, Quality Investing, and
   Greenblatt/QARP context.
+- `longterm/reviewers.py` now includes `MarginOfSafetyReviewer` in the
+  deterministic review stack passed to the CGH committee. It is advisory and
+  scores valuation support, normalized earnings/cash-flow evidence, overpayment
+  risk, and permanent capital-loss risk.
+- `longterm/buy_promotion.py` now records `margin_of_safety_score` and routes a
+  first-pass BUY/ADD with weak margin-of-safety support to
+  `WATCHLIST_PENDING_CONFIRMATION` via `margin_of_safety_review`, rather than
+  turning it into an actionable BUY intent.
 - `scripts/longterm_scheduler_profile.py` renders a local scheduler JSON
   profile from `ongoing_no_submit_scheduler.example.json` using explicit
   `--set key=value` plus boolean `--enable` / `--disable` overrides. It keeps

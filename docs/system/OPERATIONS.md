@@ -561,11 +561,14 @@ not proof that the full article page was opened or read.
 After the committee produces first-pass `BUY` / `ADD` rows, run them through the
 buy-promotion review gate before treating them as account-planning candidates.
 The gate checks protected symbols, whether the symbol is already held,
-confidence, positive suggested size, valuation context, and whether the packet
-has a versioned evidence brief with article-level support. Promotion output is
-operator-facing only: `ACTIONABLE_BUY` means "ready for the next dry-run planning
-stage," not "submit an order." Weak or thin-evidence names remain in watchlist or
-existing-position review states until more evidence is collected.
+confidence, positive suggested size, valuation context, margin-of-safety
+support, and whether the packet has a versioned evidence brief with
+article-level support. Promotion output is operator-facing only:
+`ACTIONABLE_BUY` means "ready for the next dry-run planning stage," not "submit
+an order." Weak or thin-evidence names remain in watchlist or existing-position
+review states until more evidence is collected. Weak margin-of-safety support is
+handled as `WATCHLIST_PENDING_CONFIRMATION`, not as a hard broker blocker, so the
+system gets Graham-style price discipline without starving the research funnel.
 
 Render the current promotion report from a journal and portfolio snapshot:
 
@@ -575,10 +578,11 @@ python scripts/longterm_buy_promotion.py --journal-db path\to\journal.db --portf
 ```
 
 Account-action plans and next-actions also consult the promotion review. A
-first-pass `BUY` that is missing article evidence, has low confidence, or carries
-an enrichment warning becomes a review/enrichment task with `order_intent=NONE`
-instead of a dry-run buy. It is also excluded from rebalance targets until it
-clears promotion. This keeps the sequence explicit:
+first-pass `BUY` that is missing article evidence, has low confidence, carries
+an enrichment warning, or lacks margin-of-safety support becomes a
+review/enrichment task with `order_intent=NONE` instead of a dry-run buy. It is
+also excluded from rebalance targets until it clears promotion. This keeps the
+sequence explicit:
 research committee says "interesting buy" -> promotion gate says "actionable
 enough" -> account planning sizes the candidate -> Stage 6B eligibility
 revalidates again before any supervised paper submission.

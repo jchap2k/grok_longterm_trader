@@ -99,6 +99,53 @@ def test_buy_promotion_requires_article_evidence_for_actionable_buy():
     assert "missing_article_evidence" in review.followups
 
 
+def test_buy_promotion_surfaces_margin_of_safety_followup_without_hard_block():
+    review = BuyPromotionReviewer().evaluate_decision_row(
+        _row(symbol="HYPE", confidence=82),
+        packet=_packet(
+            symbol="HYPE",
+            valuation_score=22,
+            evidence_brief=(
+                "research_evidence_brief_v1 | HYPE\n"
+                "Fundamentals: extreme P/E and valuation score 22.\n"
+                "Article evidence: Hype article (source Reuters, confidence 0.8, basis snippet_grounded).\n"
+                "Grok catalyst synthesis: Fast growth, but shares are priced for perfection."
+            ),
+            balance_sheet_assessment="High leverage and weak cash conversion.",
+            source_notes=["Optimistic forward estimates and dilution risk."],
+        ),
+        profile=_profile(),
+        portfolio_state=PortfolioState(cash=10000, protected_symbols=["FXAIX"]),
+    )
+
+    assert review.promotion_decision == "WATCHLIST_PENDING_CONFIRMATION"
+    assert "margin_of_safety_review" in review.followups
+    assert review.margin_of_safety_score < 60
+    assert any("margin of safety" in reason.lower() for reason in review.reasons)
+
+
+def test_buy_promotion_records_missing_margin_detail_without_starving_clean_buy():
+    review = BuyPromotionReviewer().evaluate_decision_row(
+        _row(symbol="AMZN", confidence=78, suggested_size_pct=2.5),
+        packet=_packet(
+            symbol="AMZN",
+            valuation_score=None,
+            evidence_brief=(
+                "research_evidence_brief_v1 | AMZN\n"
+                "Fundamentals: durable growth and acceptable leverage.\n"
+                "Article evidence: Amazon article (source Reuters, confidence 0.8, basis snippet_grounded).\n"
+                "Grok catalyst synthesis: AWS and advertising durability."
+            ),
+        ),
+        profile=_profile(),
+        portfolio_state=PortfolioState(cash=10000, protected_symbols=["FXAIX"]),
+    )
+
+    assert review.promotion_decision == "ACTIONABLE_BUY"
+    assert "margin_of_safety_review" not in review.followups
+    assert review.margin_of_safety_score < 60
+
+
 def test_buy_promotion_keeps_warning_marked_buy_on_watchlist():
     review = BuyPromotionReviewer().evaluate_decision_row(
         _row(),
@@ -163,6 +210,7 @@ def test_buy_promotion_markdown_renders_operator_table():
 
     assert "# Buy Promotion Review" in markdown
     assert "| NVDA | ACTIONABLE_BUY | BUY | 75 |" in markdown
+    assert "Margin Safety" in markdown
     assert "First-pass BUY cleared" in markdown
 
 
@@ -177,6 +225,7 @@ def test_buy_promotion_review_serializes_to_json_dict():
     payload = review.to_dict()
 
     assert json.loads(json.dumps(payload))["promotion_decision"] == "ACTIONABLE_BUY"
+    assert "margin_of_safety_score" in payload
 
 
 def test_build_buy_promotion_reviews_from_journal(tmp_path):

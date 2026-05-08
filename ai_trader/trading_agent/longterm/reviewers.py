@@ -132,6 +132,100 @@ class QualityAtReasonablePriceReviewer:
         )
 
 
+class MarginOfSafetyReviewer:
+    """Graham-style advisory check for overpayment and permanent-loss risk."""
+
+    NORMALIZED_SUPPORT_TERMS = (
+        "normalized earnings",
+        "normalized free cash flow",
+        "free cash flow",
+        "earnings yield",
+        "reasonable p/e",
+        "reasonable pe",
+        "reasonable valuation",
+        "staged buying",
+        "staged sizing",
+        "starter position",
+    )
+    OVERPAYMENT_TERMS = (
+        "extreme p/e",
+        "extreme pe",
+        "overvalued",
+        "overpayment",
+        "euphoria",
+        "priced for perfection",
+        "optimistic forward estimates",
+        "valuation mistake",
+    )
+    PERMANENT_LOSS_TERMS = (
+        "high leverage",
+        "dilution",
+        "weak cash conversion",
+        "accounting",
+        "fraud",
+        "disruption",
+        "refinancing risk",
+        "thesis fragility",
+    )
+
+    def review(self, packet: ResearchPacket) -> ReviewResult:
+        quality = float(packet.quality_score or 0.0)
+        valuation = float(packet.valuation_score or 0.0)
+        text = _packet_text(packet)
+        score = 50.0
+        support: list[str] = []
+        objections: list[str] = []
+
+        if valuation >= 70:
+            score += 20
+            support.append("Margin of safety appears supported by valuation discipline.")
+        elif valuation >= 50:
+            score += 10
+            support.append("Margin of safety is plausible but should be sized carefully.")
+        elif valuation > 0:
+            score -= 20
+            objections.append("Overpayment risk: valuation score leaves little margin of safety.")
+        else:
+            score -= 10
+            objections.append("Margin of safety is unclear because valuation evidence is missing.")
+
+        if quality >= 80 and valuation >= 45:
+            score += 8
+            support.append("Business quality can support a moderate premium if evidence holds.")
+        elif quality >= 80 and valuation < 45:
+            objections.append("High quality does not fully offset weak price support.")
+
+        if _contains_any(text, self.NORMALIZED_SUPPORT_TERMS):
+            score += 12
+            support.append("Normalized earnings or cash-flow support is present.")
+        else:
+            objections.append("Normalized earnings/cash-flow support is not explicit.")
+
+        if _contains_any(text, BalanceSheetReviewer.GOOD_TERMS):
+            score += 8
+            support.append("Balance sheet reduces permanent capital loss risk.")
+
+        if _contains_any(text, self.OVERPAYMENT_TERMS):
+            score -= 20
+            objections.append("Overpayment risk: market quote may already assume too much.")
+
+        if _contains_any(text, self.PERMANENT_LOSS_TERMS):
+            score -= 22
+            objections.append("Permanent capital loss risk needs explicit thesis review.")
+
+        if not support:
+            objections.append("No Graham-style margin-of-safety support was identified.")
+
+        bounded = max(0.0, min(score, 100.0))
+        return ReviewResult(
+            reviewer="MarginOfSafetyReviewer",
+            score=round(bounded, 2),
+            passed=bounded >= 60.0,
+            support=support,
+            objections=objections,
+        )
+
+
 class QualityDurabilityReviewer:
     """Look for quality-investing patterns and common quality traps."""
 
@@ -196,3 +290,19 @@ class QualityDurabilityReviewer:
             support=support,
             objections=objections,
         )
+
+
+def _packet_text(packet: ResearchPacket) -> str:
+    return " ".join(
+        [
+            packet.business_summary,
+            packet.thesis_summary,
+            packet.primary_growth_driver,
+            packet.industry_context,
+            packet.balance_sheet_assessment,
+            " ".join(packet.source_notes),
+            " ".join(packet.confirming_signals),
+            " ".join(packet.invalidation_conditions),
+            packet.evidence_brief,
+        ]
+    ).lower()

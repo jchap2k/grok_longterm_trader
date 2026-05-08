@@ -8,11 +8,35 @@ from typing import Any, Mapping
 
 from longterm.decision_journal import LongTermDecisionJournal
 from longterm.portfolio_state import PortfolioState
+from longterm.reviewers import MarginOfSafetyReviewer
 from portfolio.portfolio_profile import PortfolioProfile
+from research.intake import create_research_packet_from_idea
 
 
 ACTIONABLE_CONFIDENCE_THRESHOLD = 70
 MIN_ACTIONABLE_EVIDENCE_SCORE = 70
+MARGIN_OF_SAFETY_FOLLOWUP_THRESHOLD = 60
+
+_OVERPAYMENT_MARKERS = (
+    "extreme p/e",
+    "extreme pe",
+    "overvalued",
+    "overpayment",
+    "euphoria",
+    "priced for perfection",
+    "optimistic forward estimates",
+    "valuation mistake",
+)
+_PERMANENT_LOSS_MARKERS = (
+    "high leverage",
+    "dilution",
+    "weak cash conversion",
+    "accounting",
+    "fraud",
+    "disruption",
+    "refinancing risk",
+    "thesis fragility",
+)
 
 
 @dataclass(frozen=True)
@@ -28,6 +52,7 @@ class BuyPromotionReview:
     evidence_score: float
     portfolio_fit_score: float
     valuation_fit_score: float
+    margin_of_safety_score: float
     blockers: list[str] = field(default_factory=list)
     followups: list[str] = field(default_factory=list)
     reasons: list[str] = field(default_factory=list)
@@ -73,6 +98,7 @@ class BuyPromotionReviewer:
                 evidence_score=_evidence_score(evidence_brief),
                 portfolio_fit_score=_portfolio_fit_score(symbol, suggested_size_pct, portfolio_state),
                 valuation_fit_score=_valuation_fit_score(packet),
+                margin_of_safety_score=_margin_of_safety_score(packet),
                 blockers=blockers,
                 followups=followups,
                 reasons=reasons,
@@ -98,6 +124,7 @@ class BuyPromotionReviewer:
                 evidence_score=_evidence_score(evidence_brief),
                 portfolio_fit_score=_portfolio_fit_score(symbol, suggested_size_pct, portfolio_state),
                 valuation_fit_score=_valuation_fit_score(packet),
+                margin_of_safety_score=_margin_of_safety_score(packet),
                 blockers=blockers,
                 followups=followups,
                 reasons=reasons,
@@ -106,6 +133,8 @@ class BuyPromotionReviewer:
         evidence_score = _evidence_score(evidence_brief)
         portfolio_fit_score = _portfolio_fit_score(symbol, suggested_size_pct, portfolio_state)
         valuation_fit_score = _valuation_fit_score(packet)
+        margin_of_safety_review = _margin_of_safety_review(packet)
+        margin_of_safety_score = margin_of_safety_review.score
         warning_text = _warning_text(packet)
 
         if confidence < ACTIONABLE_CONFIDENCE_THRESHOLD:
@@ -123,6 +152,13 @@ class BuyPromotionReviewer:
         if evidence_score < MIN_ACTIONABLE_EVIDENCE_SCORE:
             followups.append("evidence_score_below_actionable_threshold")
             reasons.append(f"Evidence score {evidence_score:g} is below actionable threshold {MIN_ACTIONABLE_EVIDENCE_SCORE}.")
+
+        if _requires_margin_of_safety_followup(packet, margin_of_safety_review):
+            followups.append("margin_of_safety_review")
+            reasons.append(
+                "Margin of safety review requires confirmation: "
+                + "; ".join(margin_of_safety_review.objections[:2])
+            )
 
         for marker in (
             "missing_source_urls",
@@ -157,6 +193,7 @@ class BuyPromotionReviewer:
             evidence_score=evidence_score,
             portfolio_fit_score=portfolio_fit_score,
             valuation_fit_score=valuation_fit_score,
+            margin_of_safety_score=margin_of_safety_score,
             blockers=blockers,
             followups=_dedupe(followups),
             reasons=_dedupe(reasons),
@@ -174,6 +211,7 @@ class BuyPromotionReviewer:
         evidence_score: float,
         portfolio_fit_score: float,
         valuation_fit_score: float,
+        margin_of_safety_score: float,
         blockers: list[str],
         followups: list[str],
         reasons: list[str],
@@ -188,6 +226,7 @@ class BuyPromotionReviewer:
             evidence_score=round(evidence_score, 2),
             portfolio_fit_score=round(portfolio_fit_score, 2),
             valuation_fit_score=round(valuation_fit_score, 2),
+            margin_of_safety_score=round(margin_of_safety_score, 2),
             blockers=_dedupe(blockers),
             followups=_dedupe(followups),
             reasons=_dedupe(reasons),
@@ -222,12 +261,12 @@ def build_buy_promotion_markdown(reviews: list[BuyPromotionReview]) -> str:
     lines = [
         "# Buy Promotion Review",
         "",
-        "| Symbol | Promotion | First Pass | Confidence | Size % | Evidence | Portfolio Fit | Valuation Fit | Blockers | Followups | Reasons |",
-        "|---|---|---|---:|---:|---:|---:|---:|---|---|---|",
+        "| Symbol | Promotion | First Pass | Confidence | Size % | Evidence | Portfolio Fit | Valuation Fit | Margin Safety | Blockers | Followups | Reasons |",
+        "|---|---|---|---:|---:|---:|---:|---:|---:|---|---|---|",
     ]
     for review in reviews:
         lines.append(
-            "| {symbol} | {promotion} | {first_pass} | {confidence} | {size:g} | {evidence:g} | {portfolio:g} | {valuation:g} | {blockers} | {followups} | {reasons} |".format(
+            "| {symbol} | {promotion} | {first_pass} | {confidence} | {size:g} | {evidence:g} | {portfolio:g} | {valuation:g} | {margin:g} | {blockers} | {followups} | {reasons} |".format(
                 symbol=review.symbol,
                 promotion=review.promotion_decision,
                 first_pass=review.first_pass_action,
@@ -236,6 +275,7 @@ def build_buy_promotion_markdown(reviews: list[BuyPromotionReview]) -> str:
                 evidence=review.evidence_score,
                 portfolio=review.portfolio_fit_score,
                 valuation=review.valuation_fit_score,
+                margin=review.margin_of_safety_score,
                 blockers=_safe_cell(", ".join(review.blockers)),
                 followups=_safe_cell(", ".join(review.followups)),
                 reasons=_safe_cell("; ".join(review.reasons)),
@@ -285,6 +325,36 @@ def _valuation_fit_score(packet: Mapping[str, Any]) -> float:
     if "valuation" in evidence:
         return 60.0
     return 50.0
+
+
+def _margin_of_safety_review(packet: Mapping[str, Any]):
+    return MarginOfSafetyReviewer().review(create_research_packet_from_idea(dict(packet)))
+
+
+def _margin_of_safety_score(packet: Mapping[str, Any]) -> float:
+    return _margin_of_safety_review(packet).score
+
+
+def _requires_margin_of_safety_followup(packet: Mapping[str, Any], review: Any) -> bool:
+    if review.score >= MARGIN_OF_SAFETY_FOLLOWUP_THRESHOLD:
+        return False
+    valuation_value = packet.get("valuation_score")
+    if valuation_value is not None and _float(valuation_value) < 45:
+        return True
+    text = _packet_text(packet)
+    return any(marker in text for marker in (*_OVERPAYMENT_MARKERS, *_PERMANENT_LOSS_MARKERS))
+
+
+def _packet_text(packet: Mapping[str, Any]) -> str:
+    pieces: list[str] = []
+    for value in packet.values():
+        if isinstance(value, Mapping):
+            pieces.extend(str(item) for item in value.values())
+        elif isinstance(value, (list, tuple, set)):
+            pieces.extend(str(item) for item in value)
+        else:
+            pieces.append(str(value))
+    return " ".join(pieces).lower()
 
 
 def _warning_text(packet: Mapping[str, Any]) -> str:

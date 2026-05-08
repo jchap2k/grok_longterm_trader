@@ -14,6 +14,7 @@ from longterm.review_cadence import ReviewCadencePolicy
 from longterm.reviewers import (
     BalanceSheetReviewer,
     BusinessStoryReviewer,
+    MarginOfSafetyReviewer,
     QualityDurabilityReviewer,
     QualityAtReasonablePriceReviewer,
     ReviewResult,
@@ -57,6 +58,7 @@ class LongTermResearchRunner:
             BalanceSheetReviewer().review(packet),
             QualityDurabilityReviewer().review(packet),
             QualityAtReasonablePriceReviewer().review(packet),
+            MarginOfSafetyReviewer().review(packet),
         ]
 
     @staticmethod

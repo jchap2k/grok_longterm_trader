@@ -183,6 +183,7 @@ def test_longterm_research_runner_builds_context_and_calls_grok_helper(monkeypat
     assert "research_principles" in captured["context_sections"]
     assert "business first" in captured["context_sections"]["research_principles"]
     assert "BusinessStoryReviewer" in captured["context_sections"]["deterministic_reviews"]
+    assert "MarginOfSafetyReviewer" in captured["context_sections"]["deterministic_reviews"]
     assert "Bull case:" in captured["context_sections"]["thesis_challenge"]
     assert "Bear case:" in captured["context_sections"]["thesis_challenge"]
     assert "review_cadence" in captured["context_sections"]

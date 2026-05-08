@@ -8,6 +8,7 @@ from longterm.review_cadence import ReviewCadencePolicy
 from longterm.reviewers import (
     BalanceSheetReviewer,
     BusinessStoryReviewer,
+    MarginOfSafetyReviewer,
     QualityDurabilityReviewer,
     QualityAtReasonablePriceReviewer,
 )
@@ -70,6 +71,48 @@ def test_quality_at_reasonable_price_requires_quality_and_valuation():
     assert attractive_result.passed is True
     assert expensive_result.score < attractive_result.score
     assert expensive_result.passed is False
+
+
+def test_margin_of_safety_reviewer_is_advisory_and_flags_overpayment_risk():
+    reviewer = MarginOfSafetyReviewer()
+    supported = create_research_packet_from_idea(
+        {
+            "symbol": "MSFT",
+            "quality_score": 90,
+            "valuation_score": 72,
+            "business_summary": "Enterprise software platform with recurring revenue and pricing power.",
+            "thesis_summary": "Normalized free cash flow and durable switching costs support staged buying.",
+            "balance_sheet_assessment": "Net cash and strong free cash flow.",
+            "source_notes": [
+                "Reasonable P/E relative to normalized earnings and free cash flow.",
+                "Staged sizing protects against a valuation mistake.",
+            ],
+        }
+    )
+    euphoric = create_research_packet_from_idea(
+        {
+            "symbol": "HYPE",
+            "quality_score": 92,
+            "valuation_score": 18,
+            "business_summary": "Fast grower with disruptive technology.",
+            "thesis_summary": "Shares could keep going up if sentiment stays hot.",
+            "balance_sheet_assessment": "High leverage and weak cash conversion.",
+            "source_notes": [
+                "Extreme P/E with optimistic forward estimates and dilution risk.",
+                "Recent rally reflects euphoria more than normalized earnings support.",
+            ],
+        }
+    )
+
+    supported_result = reviewer.review(supported)
+    euphoric_result = reviewer.review(euphoric)
+
+    assert supported_result.passed is True
+    assert any("margin of safety" in item.lower() for item in supported_result.support)
+    assert euphoric_result.passed is False
+    assert euphoric_result.score < supported_result.score
+    assert any("overpayment" in item.lower() for item in euphoric_result.objections)
+    assert any("permanent capital loss" in item.lower() for item in euphoric_result.objections)
 
 
 def test_quality_durability_reviewer_rewards_patterns_and_flags_quality_traps():
