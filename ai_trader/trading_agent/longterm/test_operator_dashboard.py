@@ -655,7 +655,17 @@ def test_operator_dashboard_ticker_page_shows_python_scorecard_and_earnings_alia
                     "symbol": "ADBE",
                     "allowed": True,
                     "trade_value": 750,
-                    "promotion_review": {"confidence": 72, "valuation_fit_score": 88},
+                    "promotion_review": {
+                        "confidence": 72,
+                        "valuation_fit_score": 88,
+                        "margin_of_safety_score": 71,
+                        "permanent_loss_score": 86,
+                        "permanent_loss_flags": ["overpayment"],
+                        "defensive_enterprising_mode": "enterprising_candidate",
+                        "staged_entry_label": "starter_position",
+                        "staged_entry_size_pct": 2.0,
+                        "normalized_earnings_quality": "normalized_support",
+                    },
                 }
             ]
         },
@@ -705,6 +715,10 @@ def test_operator_dashboard_ticker_page_shows_python_scorecard_and_earnings_alia
     assert "Latest Available" in html
     assert "AI-driven earnings growth" in html
     assert "Revenue: $23.77B" in html
+    assert "Margin of Safety" in html
+    assert "Permanent Loss" in html
+    assert "starter_position" in html
+    assert "overpayment" in html
 
 
 def test_operator_dashboard_cli_can_fetch_price_history_for_site(tmp_path, capsys):

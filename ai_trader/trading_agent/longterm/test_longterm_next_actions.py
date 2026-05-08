@@ -300,6 +300,62 @@ def test_next_actions_planner_builds_prioritized_actions(tmp_path):
     assert any(action.category == "review_holding" and action.symbol == "AAPL" for action in actions)
 
 
+def test_next_actions_planner_surfaces_mr_market_drawdown_review(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    _record_decision(journal, "ADBE", recommendation="HOLD", confidence=82, size=4)
+    profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
+    state = PortfolioState(
+        cash=5000,
+        holdings=[
+            {
+                "symbol": "ADBE",
+                "quantity": 2,
+                "market_value": 700,
+                "original_purchase_total_cost": 1000,
+            }
+        ],
+        protected_symbols=["FXAIX"],
+    )
+
+    actions = NextActionsPlanner().plan(
+        journal,
+        profile=profile,
+        portfolio_state=state,
+    )
+
+    assert actions[0].symbol == "ADBE"
+    assert actions[0].category == "mr_market_drawdown_review"
+    assert "broken thesis" in actions[0].reason.lower()
+
+
+def test_next_actions_planner_surfaces_mr_market_rally_review(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    _record_decision(journal, "MSFT", recommendation="HOLD", confidence=82, size=4)
+    profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
+    state = PortfolioState(
+        cash=5000,
+        holdings=[
+            {
+                "symbol": "MSFT",
+                "quantity": 2,
+                "market_value": 1500,
+                "original_purchase_total_cost": 1000,
+            }
+        ],
+        protected_symbols=["FXAIX"],
+    )
+
+    actions = NextActionsPlanner().plan(
+        journal,
+        profile=profile,
+        portfolio_state=state,
+    )
+
+    assert actions[0].symbol == "MSFT"
+    assert actions[0].category == "mr_market_rally_review"
+    assert "valuation" in actions[0].reason.lower()
+
+
 def test_next_actions_planner_pauses_new_buy_candidates_when_benchmark_gate_blocks(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     _record_decision(journal, "NVDA", confidence=92, size=8, thesis="AI leader.")

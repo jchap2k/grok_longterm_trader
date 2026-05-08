@@ -120,6 +120,10 @@ def test_buy_promotion_surfaces_margin_of_safety_followup_without_hard_block():
 
     assert review.promotion_decision == "WATCHLIST_PENDING_CONFIRMATION"
     assert "margin_of_safety_review" in review.followups
+    assert "permanent_loss_review" in review.followups
+    assert "overpayment" in review.permanent_loss_flags
+    assert "leverage" in review.permanent_loss_flags
+    assert review.defensive_enterprising_mode == "speculative_watchlist"
     assert review.margin_of_safety_score < 60
     assert any("margin of safety" in reason.lower() for reason in review.reasons)
 
@@ -144,6 +148,7 @@ def test_buy_promotion_records_missing_margin_detail_without_starving_clean_buy(
     assert review.promotion_decision == "ACTIONABLE_BUY"
     assert "margin_of_safety_review" not in review.followups
     assert review.margin_of_safety_score < 60
+    assert review.defensive_enterprising_mode == "enterprising_candidate"
 
 
 def test_buy_promotion_keeps_warning_marked_buy_on_watchlist():
@@ -211,6 +216,8 @@ def test_buy_promotion_markdown_renders_operator_table():
     assert "# Buy Promotion Review" in markdown
     assert "| NVDA | ACTIONABLE_BUY | BUY | 75 |" in markdown
     assert "Margin Safety" in markdown
+    assert "Perm Loss" in markdown
+    assert "Entry Plan" in markdown
     assert "First-pass BUY cleared" in markdown
 
 
@@ -226,6 +233,8 @@ def test_buy_promotion_review_serializes_to_json_dict():
 
     assert json.loads(json.dumps(payload))["promotion_decision"] == "ACTIONABLE_BUY"
     assert "margin_of_safety_score" in payload
+    assert "permanent_loss_flags" in payload
+    assert "staged_entry_size_pct" in payload
 
 
 def test_build_buy_promotion_reviews_from_journal(tmp_path):

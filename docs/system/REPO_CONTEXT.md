@@ -408,6 +408,20 @@ Book-principle context:
   first-pass BUY/ADD with weak margin-of-safety support to
   `WATCHLIST_PENDING_CONFIRMATION` via `margin_of_safety_review`, rather than
   turning it into an actionable BUY intent.
+- `longterm/graham_risk.py` now carries the reusable Graham layer: permanent
+  capital-loss flags, defensive/enterprising/speculative labels, staged-entry
+  sizing hints, normalized-earnings quality labels, and Mr. Market drawdown or
+  rally review triggers for existing holdings.
+- `longterm/buy_promotion.py` also records permanent-loss score/flags,
+  normalized-earnings quality, staged-entry label/size, and the
+  defensive/enterprising mode. High permanent-loss risk routes to confirmation
+  follow-up without becoming a broker blocker.
+- `longterm/next_actions.py` now surfaces `mr_market_drawdown_review` and
+  `mr_market_rally_review` categories for held positions with large quote moves;
+  these are review prompts only and never automatic sell/trim/add instructions.
+- `longterm/operator_dashboard.py` ticker pages now surface Graham discipline
+  fields from promotion reviews alongside scorecards, financials, earnings, and
+  article evidence.
 - `scripts/longterm_scheduler_profile.py` renders a local scheduler JSON
   profile from `ongoing_no_submit_scheduler.example.json` using explicit
   `--set key=value` plus boolean `--enable` / `--disable` overrides. It keeps

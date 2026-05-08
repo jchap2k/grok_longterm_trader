@@ -2245,8 +2245,11 @@ def _ticker_page_html(
           {_metric_tile("Moneyball", first_pass_scan.get("moneyball_score"))}
           {_metric_tile("Quant", first_pass_scan.get("quant_score"))}
           {_metric_tile("Valuation Fit", promotion.get("valuation_fit_score"))}
+          {_metric_tile("Margin of Safety", promotion.get("margin_of_safety_score"))}
+          {_metric_tile("Permanent Loss", promotion.get("permanent_loss_score"))}
           {_metric_tile("Historical Max Drawdown", _drawdown_cell(_historical_max_drawdown_pct(price_history)))}
         </section>
+        {_graham_panel(promotion)}
         <section class="panel two-column">
           {_score_panel(scorecard, first_pass_scan=first_pass_scan)}
           {_earnings_panel(earnings)}
@@ -2263,6 +2266,33 @@ def _ticker_page_html(
         <section class="safety-strip"><strong>Safety:</strong> read-only research page. No broker order can be placed from this file.</section>
         {_reference_footer(ticker_page=True)}
         """,
+    )
+
+
+def _graham_panel(promotion: Mapping[str, Any]) -> str:
+    if not promotion:
+        return ""
+    flags = promotion.get("permanent_loss_flags") or []
+    if not isinstance(flags, list):
+        flags = [str(flags)]
+    flag_text = ", ".join(str(flag) for flag in flags if str(flag).strip()) or "none"
+    rows = [
+        ("Mode", promotion.get("defensive_enterprising_mode") or "n/a"),
+        ("Entry Plan", promotion.get("staged_entry_label") or "n/a"),
+        ("Staged Size", _percentish(promotion.get("staged_entry_size_pct"))),
+        ("Normalized Earnings", promotion.get("normalized_earnings_quality") or "n/a"),
+        ("Permanent Loss Flags", flag_text),
+    ]
+    return (
+        "<section class=\"panel\">"
+        "<div class=\"section-heading\"><p class=\"eyebrow\">Graham Discipline</p><h2>Margin of Safety and Permanent Loss</h2></div>"
+        "<div class=\"metric-grid\">"
+        + "".join(
+            f"<div class=\"metric-tile\"><span>{escape(label)}</span><strong>{escape(str(value))}</strong></div>"
+            for label, value in rows
+        )
+        + "</div>"
+        "</section>"
     )
 
 

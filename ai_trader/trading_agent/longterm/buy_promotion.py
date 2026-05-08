@@ -7,6 +7,12 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Mapping
 
 from longterm.decision_journal import LongTermDecisionJournal
+from longterm.graham_risk import (
+    classify_defensive_enterprising_mode,
+    evaluate_permanent_loss_risk,
+    evaluate_staged_entry,
+    normalized_earnings_quality_label,
+)
 from longterm.portfolio_state import PortfolioState
 from longterm.reviewers import MarginOfSafetyReviewer
 from portfolio.portfolio_profile import PortfolioProfile
@@ -53,6 +59,12 @@ class BuyPromotionReview:
     portfolio_fit_score: float
     valuation_fit_score: float
     margin_of_safety_score: float
+    permanent_loss_score: float
+    permanent_loss_flags: list[str]
+    defensive_enterprising_mode: str
+    staged_entry_size_pct: float
+    staged_entry_label: str
+    normalized_earnings_quality: str
     blockers: list[str] = field(default_factory=list)
     followups: list[str] = field(default_factory=list)
     reasons: list[str] = field(default_factory=list)
@@ -99,6 +111,12 @@ class BuyPromotionReviewer:
                 portfolio_fit_score=_portfolio_fit_score(symbol, suggested_size_pct, portfolio_state),
                 valuation_fit_score=_valuation_fit_score(packet),
                 margin_of_safety_score=_margin_of_safety_score(packet),
+                permanent_loss_score=_permanent_loss_score(packet),
+                permanent_loss_flags=_permanent_loss_flags(packet),
+                defensive_enterprising_mode="defensive_default",
+                staged_entry_size_pct=0.0,
+                staged_entry_label="not_applicable",
+                normalized_earnings_quality=normalized_earnings_quality_label(packet),
                 blockers=blockers,
                 followups=followups,
                 reasons=reasons,
@@ -125,6 +143,12 @@ class BuyPromotionReviewer:
                 portfolio_fit_score=_portfolio_fit_score(symbol, suggested_size_pct, portfolio_state),
                 valuation_fit_score=_valuation_fit_score(packet),
                 margin_of_safety_score=_margin_of_safety_score(packet),
+                permanent_loss_score=_permanent_loss_score(packet),
+                permanent_loss_flags=_permanent_loss_flags(packet),
+                defensive_enterprising_mode="defensive_default",
+                staged_entry_size_pct=0.0,
+                staged_entry_label="not_applicable",
+                normalized_earnings_quality=normalized_earnings_quality_label(packet),
                 blockers=blockers,
                 followups=followups,
                 reasons=reasons,
@@ -135,6 +159,18 @@ class BuyPromotionReviewer:
         valuation_fit_score = _valuation_fit_score(packet)
         margin_of_safety_review = _margin_of_safety_review(packet)
         margin_of_safety_score = margin_of_safety_review.score
+        permanent_loss_report = evaluate_permanent_loss_risk(packet)
+        staged_entry = evaluate_staged_entry(
+            suggested_size_pct=suggested_size_pct,
+            margin_of_safety_score=margin_of_safety_score,
+            risk_report=permanent_loss_report,
+        )
+        defensive_enterprising_mode = classify_defensive_enterprising_mode(
+            {**dict(packet), "recommendation": first_pass_action},
+            margin_of_safety_score=margin_of_safety_score,
+            risk_report=permanent_loss_report,
+        )
+        earnings_quality = normalized_earnings_quality_label(packet)
         warning_text = _warning_text(packet)
 
         if confidence < ACTIONABLE_CONFIDENCE_THRESHOLD:
@@ -160,6 +196,17 @@ class BuyPromotionReviewer:
                 + "; ".join(margin_of_safety_review.objections[:2])
             )
 
+        if permanent_loss_report.severity == "high":
+            followups.append("permanent_loss_review")
+            reasons.append(
+                "Permanent capital-loss risks require confirmation: "
+                + ", ".join(permanent_loss_report.flags[:4])
+            )
+
+        if earnings_quality == "needs_normalization":
+            followups.append("normalized_earnings_review")
+            reasons.append("Valuation relies on earnings that need normalization before action.")
+
         for marker in (
             "missing_source_urls",
             "low earnings confidence",
@@ -176,12 +223,19 @@ class BuyPromotionReviewer:
         elif followups:
             promotion_decision = (
                 "WATCHLIST_PENDING_EVIDENCE"
-                if any("evidence" in item or "source" in item or "earnings" in item for item in followups)
+                if any(
+                    "evidence" in item
+                    or "source" in item
+                    or item in {"missing_earnings_article", "low_earnings_confidence", "low_earnings"}
+                    for item in followups
+                )
                 else "WATCHLIST_PENDING_CONFIRMATION"
             )
         else:
             promotion_decision = "ACTIONABLE_BUY"
             reasons.append("First-pass BUY cleared promotion review for dry-run account planning.")
+            if staged_entry.recommended_size_pct < suggested_size_pct:
+                reasons.append(staged_entry.reason)
 
         return self._review(
             row,
@@ -194,6 +248,12 @@ class BuyPromotionReviewer:
             portfolio_fit_score=portfolio_fit_score,
             valuation_fit_score=valuation_fit_score,
             margin_of_safety_score=margin_of_safety_score,
+            permanent_loss_score=permanent_loss_report.score,
+            permanent_loss_flags=permanent_loss_report.flags,
+            defensive_enterprising_mode=defensive_enterprising_mode,
+            staged_entry_size_pct=staged_entry.recommended_size_pct,
+            staged_entry_label=staged_entry.label,
+            normalized_earnings_quality=earnings_quality,
             blockers=blockers,
             followups=_dedupe(followups),
             reasons=_dedupe(reasons),
@@ -212,6 +272,12 @@ class BuyPromotionReviewer:
         portfolio_fit_score: float,
         valuation_fit_score: float,
         margin_of_safety_score: float,
+        permanent_loss_score: float,
+        permanent_loss_flags: list[str],
+        defensive_enterprising_mode: str,
+        staged_entry_size_pct: float,
+        staged_entry_label: str,
+        normalized_earnings_quality: str,
         blockers: list[str],
         followups: list[str],
         reasons: list[str],
@@ -227,6 +293,12 @@ class BuyPromotionReviewer:
             portfolio_fit_score=round(portfolio_fit_score, 2),
             valuation_fit_score=round(valuation_fit_score, 2),
             margin_of_safety_score=round(margin_of_safety_score, 2),
+            permanent_loss_score=round(permanent_loss_score, 2),
+            permanent_loss_flags=_dedupe(permanent_loss_flags),
+            defensive_enterprising_mode=defensive_enterprising_mode,
+            staged_entry_size_pct=round(staged_entry_size_pct, 2),
+            staged_entry_label=staged_entry_label,
+            normalized_earnings_quality=normalized_earnings_quality,
             blockers=_dedupe(blockers),
             followups=_dedupe(followups),
             reasons=_dedupe(reasons),
@@ -261,21 +333,25 @@ def build_buy_promotion_markdown(reviews: list[BuyPromotionReview]) -> str:
     lines = [
         "# Buy Promotion Review",
         "",
-        "| Symbol | Promotion | First Pass | Confidence | Size % | Evidence | Portfolio Fit | Valuation Fit | Margin Safety | Blockers | Followups | Reasons |",
-        "|---|---|---|---:|---:|---:|---:|---:|---:|---|---|---|",
+        "| Symbol | Promotion | First Pass | Confidence | Size % | Entry Plan | Evidence | Valuation Fit | Margin Safety | Perm Loss | Mode | Blockers | Followups | Reasons |",
+        "|---|---|---|---:|---:|---|---:|---:|---:|---|---|---|---|---|",
     ]
     for review in reviews:
         lines.append(
-            "| {symbol} | {promotion} | {first_pass} | {confidence} | {size:g} | {evidence:g} | {portfolio:g} | {valuation:g} | {margin:g} | {blockers} | {followups} | {reasons} |".format(
+            "| {symbol} | {promotion} | {first_pass} | {confidence} | {size:g} | {entry_label} ({entry_size:g}%) | {evidence:g} | {valuation:g} | {margin:g} | {perm_loss:g}: {flags} | {mode} | {blockers} | {followups} | {reasons} |".format(
                 symbol=review.symbol,
                 promotion=review.promotion_decision,
                 first_pass=review.first_pass_action,
                 confidence=review.confidence,
                 size=review.suggested_size_pct,
+                entry_label=review.staged_entry_label,
+                entry_size=review.staged_entry_size_pct,
                 evidence=review.evidence_score,
-                portfolio=review.portfolio_fit_score,
                 valuation=review.valuation_fit_score,
                 margin=review.margin_of_safety_score,
+                perm_loss=review.permanent_loss_score,
+                flags=_safe_cell(", ".join(review.permanent_loss_flags) or "none"),
+                mode=review.defensive_enterprising_mode,
                 blockers=_safe_cell(", ".join(review.blockers)),
                 followups=_safe_cell(", ".join(review.followups)),
                 reasons=_safe_cell("; ".join(review.reasons)),
@@ -333,6 +409,14 @@ def _margin_of_safety_review(packet: Mapping[str, Any]):
 
 def _margin_of_safety_score(packet: Mapping[str, Any]) -> float:
     return _margin_of_safety_review(packet).score
+
+
+def _permanent_loss_score(packet: Mapping[str, Any]) -> float:
+    return evaluate_permanent_loss_risk(packet).score
+
+
+def _permanent_loss_flags(packet: Mapping[str, Any]) -> list[str]:
+    return evaluate_permanent_loss_risk(packet).flags
 
 
 def _requires_margin_of_safety_followup(packet: Mapping[str, Any], review: Any) -> bool:

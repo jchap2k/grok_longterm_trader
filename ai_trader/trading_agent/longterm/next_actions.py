@@ -13,6 +13,7 @@ from longterm.action_planner import ActionPlanner
 from longterm.benchmark_guard import BenchmarkGuard, BenchmarkGuardResult
 from longterm.buy_promotion import BuyPromotionReview, BuyPromotionReviewer
 from longterm.decision_journal import LongTermDecisionJournal
+from longterm.graham_risk import mr_market_review_trigger
 from longterm.portfolio_state import PortfolioState
 from longterm.report_builder import RecommendationEnricher, RecommendationTableBuilder
 from longterm.review_status import ReviewStatusBuilder
@@ -159,9 +160,13 @@ class NextActionsPlanner:
                 reason = row.get("reason") or "Held symbol remains on recommendation table."
                 thesis_state = str(row.get("thesis_state") or "").lower()
                 category = "review_holding"
+                quote_review = _mr_market_review_for_symbol(portfolio_state, symbol)
                 if thesis_state in {"broken", "weakening"}:
                     category = "urgent_review_holding"
                     reason += f" Thesis state is {thesis_state}."
+                elif quote_review and quote_review.review_due:
+                    category = quote_review.category
+                    reason = quote_review.reason
                 elif row.get("review_due"):
                     reason += " Review due."
                 actions.append(
@@ -405,6 +410,17 @@ def _promotion_reason(review: BuyPromotionReview) -> str:
     return f"Buy promotion review: {review.promotion_decision}."
 
 
+def _mr_market_review_for_symbol(portfolio_state: PortfolioState, symbol: str):
+    normalized = symbol.upper()
+    for holding in portfolio_state.holdings:
+        if holding.symbol != normalized:
+            continue
+        if holding.original_purchase_total_cost <= 0 and holding.avg_entry_price <= 0:
+            return None
+        return mr_market_review_trigger(holding)
+    return None
+
+
 def _markdown_cell(value: str) -> str:
     return value.replace("|", "\\|").replace("\n", " ")
 
@@ -420,6 +436,8 @@ def _prioritize_actions(actions: list[NextAction]) -> list[NextAction]:
         "paper_execution_eligible": 2,
         "paper_execution_filled": 2,
         "paper_execution_rejected": 1,
+        "mr_market_drawdown_review": 1,
+        "mr_market_rally_review": 2,
         "paper_execution_submitted": 2,
         "paused_buy_candidate": 1,
         "buy_promotion_blocked": 1,

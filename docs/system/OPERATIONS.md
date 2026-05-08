@@ -562,13 +562,19 @@ After the committee produces first-pass `BUY` / `ADD` rows, run them through the
 buy-promotion review gate before treating them as account-planning candidates.
 The gate checks protected symbols, whether the symbol is already held,
 confidence, positive suggested size, valuation context, margin-of-safety
-support, and whether the packet has a versioned evidence brief with
+support, permanent-capital-loss flags, staged-entry sizing, normalized-earnings
+quality, and whether the packet has a versioned evidence brief with
 article-level support. Promotion output is operator-facing only:
 `ACTIONABLE_BUY` means "ready for the next dry-run planning stage," not "submit
 an order." Weak or thin-evidence names remain in watchlist or existing-position
 review states until more evidence is collected. Weak margin-of-safety support is
 handled as `WATCHLIST_PENDING_CONFIRMATION`, not as a hard broker blocker, so the
 system gets Graham-style price discipline without starving the research funnel.
+High permanent-loss risk such as overpayment, leverage, refinancing pressure,
+weak cash conversion, dilution, accounting quality concerns, or business
+disruption also becomes a confirmation follow-up. The promotion review records a
+defensive/enterprising/speculative label and a staged-entry hint; those fields
+are advisory and do not override Stage 6B eligibility checks.
 
 Render the current promotion report from a journal and portfolio snapshot:
 
@@ -579,13 +585,20 @@ python scripts/longterm_buy_promotion.py --journal-db path\to\journal.db --portf
 
 Account-action plans and next-actions also consult the promotion review. A
 first-pass `BUY` that is missing article evidence, has low confidence, carries
-an enrichment warning, or lacks margin-of-safety support becomes a
-review/enrichment task with `order_intent=NONE` instead of a dry-run buy. It is
-also excluded from rebalance targets until it clears promotion. This keeps the
-sequence explicit:
+an enrichment warning, has explicit low margin-of-safety support, or carries
+high permanent-loss risk becomes a review/enrichment task with
+`order_intent=NONE` instead of a dry-run buy. It is also excluded from rebalance
+targets until it clears promotion. This keeps the sequence explicit:
 research committee says "interesting buy" -> promotion gate says "actionable
 enough" -> account planning sizes the candidate -> Stage 6B eligibility
 revalidates again before any supervised paper submission.
+
+For existing holdings, next-actions applies the Graham/Mr. Market lens to large
+quote moves. A material drawdown becomes a `mr_market_drawdown_review` asking
+whether the quote is a bargain or a broken thesis. A material rally becomes a
+`mr_market_rally_review` asking whether valuation, margin of safety, and
+trailing-profit protection need review. These prompts never sell, trim, or add
+automatically.
 
 When a research cycle or scheduler run has both a journal and portfolio state,
 the result JSON also includes `buy_promotion_markdown` and
@@ -1649,8 +1662,11 @@ pagination hooks (`data-paginated-list` / `data-paginated-item`) so the same
 site shape can scale from dozens of names to a much larger universe before a
 local server or backend-backed dashboard is needed.
 Ticker pages place a generated price chart first, then show thesis, promotion
-state, scorecard, financial sections, earnings context, article evidence, and
-safety notes. The chart is a static-file interactive widget: it includes range
+state, Graham discipline fields, scorecard, financial sections, earnings
+context, article evidence, and safety notes. Graham fields include margin of
+safety, permanent-loss score/flags, defensive-vs-enterprising mode, staged-entry
+label/size, and normalized-earnings quality when promotion-review data is
+available. The chart is a static-file interactive widget: it includes range
 controls, hover/crosshair close values, and no external JavaScript dependency.
 
 The generated site also includes an `Agent Desk` bubble as a placeholder for a
