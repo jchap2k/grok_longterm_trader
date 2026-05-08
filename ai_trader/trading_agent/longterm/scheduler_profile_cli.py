@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ from longterm.pipeline_scheduler_cli import (
 
 LONGTERM_DIR = Path(__file__).resolve().parent
 DEFAULT_TEMPLATE = LONGTERM_DIR / "configs" / "ongoing_no_submit_scheduler.example.json"
+SUBMIT_CAPABLE_KEYS = {"submit_paper_orders", "confirm_paper_submit"}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -25,6 +27,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--template", default=str(DEFAULT_TEMPLATE))
     parser.add_argument("--output-profile", required=True)
+    parser.add_argument(
+        "--run-mode",
+        choices=["validate", "no-submit"],
+        default="validate",
+        help=(
+            "validate keeps validate_config_only=true. no-submit writes a recurring profile "
+            "that can run the safe no-submit scheduler preset after review."
+        ),
+    )
     parser.add_argument(
         "--set",
         action="append",
@@ -59,7 +70,8 @@ def run_cli(args: argparse.Namespace) -> int:
     payload = _load_profile_template(args.template)
     profile_args = dict(payload.get("args") or {})
     _apply_overrides(profile_args, set_items=args.set, enable_items=args.enable, disable_items=args.disable)
-    profile_args["validate_config_only"] = True
+    _reject_submit_capable_keys(profile_args)
+    profile_args["validate_config_only"] = args.run_mode == "validate"
     payload["args"] = profile_args
 
     output_profile = Path(args.output_profile).expanduser().resolve()
@@ -71,16 +83,19 @@ def run_cli(args: argparse.Namespace) -> int:
     if args.validate_after_write:
         scheduler_args = parse_scheduler_args(["--config-file", str(output_profile)])
         validation_payload = validate_resolved_scheduler_config(scheduler_args)
-        validation_summary = _write_validation_summary_if_requested(profile_args, validation_payload)
+        if args.run_mode == "validate":
+            validation_summary = _write_validation_summary_if_requested(profile_args, validation_payload)
 
     result = {
         "schema_version": 1,
         "mode": "scheduler_profile_render",
         "status": "ready",
+        "run_mode": args.run_mode,
         "profile": str(output_profile),
         "validation_summary": validation_summary,
         "order_submission_enabled": False,
-        "next_safe_action": "review_profile_then_run_longterm_pipeline_scheduler_config_file",
+        "scheduler_command": _scheduler_command(output_profile),
+        "next_safe_action": _next_safe_action(args.run_mode),
     }
     if validation_payload is not None:
         result["validation_status"] = validation_payload.get("status", "")
@@ -120,12 +135,15 @@ def _apply_overrides(
     allowed = _config_arg_specs()
     for item in set_items:
         key, value = _split_set_item(item)
+        _reject_submit_capable_key(key)
         _require_allowed_arg(key, allowed)
         profile_args[key] = _coerce_value(value)
     for key in enable_items:
+        _reject_submit_capable_key(key)
         _require_allowed_arg(key, allowed)
         profile_args[key] = True
     for key in disable_items:
+        _reject_submit_capable_key(key)
         _require_allowed_arg(key, allowed)
         profile_args[key] = False
 
@@ -143,6 +161,16 @@ def _split_set_item(item: str) -> tuple[str, str]:
 def _require_allowed_arg(key: str, allowed: dict[str, tuple[str, str]]) -> None:
     if key not in allowed:
         raise ValueError(f"Unknown scheduler config arg: {key}")
+
+
+def _reject_submit_capable_keys(profile_args: dict[str, Any]) -> None:
+    for key in profile_args:
+        _reject_submit_capable_key(str(key))
+
+
+def _reject_submit_capable_key(key: str) -> None:
+    if key in SUBMIT_CAPABLE_KEYS:
+        raise ValueError(f"Submit-capable scheduler profile keys are not supported by this renderer: {key}")
 
 
 def _coerce_value(value: str) -> Any:
@@ -172,6 +200,17 @@ def _write_validation_summary_if_requested(
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     summary_path.write_text(json.dumps(validation_payload, indent=2, sort_keys=True), encoding="utf-8")
     return str(summary_path)
+
+
+def _scheduler_command(output_profile: Path) -> str:
+    script = Path("scripts") / "longterm_pipeline_scheduler.py"
+    return " ".join(["python", subprocess.list2cmdline([str(script)]), "--config-file", str(output_profile)])
+
+
+def _next_safe_action(run_mode: str) -> str:
+    if run_mode == "no-submit":
+        return "run_no_submit_scheduler_profile_when_operator_window_is_approved"
+    return "review_profile_then_render_no_submit_run_profile"
 
 
 def main(argv: list[str] | None = None) -> int:

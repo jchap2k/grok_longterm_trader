@@ -965,6 +965,17 @@ then validate it immediately without creating scheduler run folders:
 python scripts/longterm_scheduler_profile.py --output-profile path\to\ongoing_no_submit_scheduler.local.json --set output_dir=path\to\pipeline_scheduler_runs --set journal_db=path\to\journal.db --set ledger_db=path\to\paper_ledger.db --set action_plan=path\to\account_action_plan.json --set profile_config=path\to\roth_ira_profile.json --set summary_output=path\to\scheduler_profile_validation.json --set scheduler_config_validation=path\to\scheduler_profile_validation.json --enable allow_existing_paper_positions --enable expected_cash_from_portfolio_state --validate-after-write --json
 ```
 
+After that validation payload is reviewed, render a no-submit run profile
+instead of hand-editing `validate_config_only`:
+
+```powershell
+python scripts/longterm_scheduler_profile.py --template path\to\ongoing_no_submit_scheduler.local.json --output-profile path\to\ongoing_no_submit_scheduler.run.json --run-mode no-submit --set summary_output=path\to\pipeline_scheduler_summary.json --validate-after-write --json
+```
+
+The renderer refuses submit-capable keys and does not support
+`submit_paper_orders` or `confirm_paper_submit`; supervised paper execution
+remains a separate explicit path.
+
 The config file accepts an `args` object using the same argparse destination
 names as the CLI, for example `journal_db`, `action_plan`, and
 `allow_existing_paper_positions`. Unknown config keys fail closed so typos do

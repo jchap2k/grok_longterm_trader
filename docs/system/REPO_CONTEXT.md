@@ -316,8 +316,11 @@ Scheduler-readiness features now exist:
 - `scripts/longterm_scheduler_profile.py` renders a local scheduler JSON
   profile from `ongoing_no_submit_scheduler.example.json` using explicit
   `--set key=value` plus boolean `--enable` / `--disable` overrides. It keeps
-  `validate_config_only=true` and can validate/write the profile-validation
-  summary in the same no-submit pass.
+  `validate_config_only=true` by default and can validate/write the
+  profile-validation summary in the same no-submit pass. After review,
+  `--run-mode no-submit` renders a recurring no-submit profile without
+  hand-editing JSON; the renderer rejects submit-capable keys such as
+  `submit_paper_orders` and `confirm_paper_submit`.
 - Dashboard manifests can point at a saved scheduler config-validation JSON via
   `scheduler_config_validation`; the localhost server exposes it at
   `/api/scheduler-config-validation.json`, includes it in `/api/summary.json`,

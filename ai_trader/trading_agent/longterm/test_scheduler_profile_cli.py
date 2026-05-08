@@ -125,3 +125,94 @@ def test_scheduler_profile_cli_rejects_unknown_override(tmp_path):
         assert "Unknown scheduler config arg" in str(exc)
     else:
         raise AssertionError("Expected unknown override to fail closed")
+
+
+def test_scheduler_profile_cli_can_render_ready_no_submit_run_profile(tmp_path, capsys):
+    template = tmp_path / "template.json"
+    output_profile = tmp_path / "ongoing_no_submit_scheduler.run.json"
+    output_dir = tmp_path / "scheduler_runs"
+    journal_db = tmp_path / "journal.db"
+    ledger_db = tmp_path / "paper_ledger.db"
+    action_plan = tmp_path / "account_action_plan.json"
+    validation_summary = tmp_path / "scheduler_profile_validation.json"
+    rules_path = tmp_path / "active_rules.txt"
+
+    rules_path.write_text("<rules />", encoding="utf-8")
+    template.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "args": {
+                    "preset": "ongoing-no-submit",
+                    "output_dir": str(output_dir),
+                    "journal_db": str(journal_db),
+                    "ledger_db": str(ledger_db),
+                    "action_plan": str(action_plan),
+                    "rules_path": str(rules_path),
+                    "summary_output": str(validation_summary),
+                    "validate_config_only": True,
+                    "json": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--template",
+                str(template),
+                "--output-profile",
+                str(output_profile),
+                "--run-mode",
+                "no-submit",
+                "--set",
+                "summary_output=path/to/scheduler_run_summary.json",
+                "--validate-after-write",
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    profile_payload = json.loads(output_profile.read_text(encoding="utf-8"))
+    profile_args = profile_payload["args"]
+
+    assert code == 0
+    assert printed["status"] == "ready"
+    assert printed["run_mode"] == "no-submit"
+    assert printed["order_submission_enabled"] is False
+    assert printed["next_safe_action"] == "run_no_submit_scheduler_profile_when_operator_window_is_approved"
+    assert printed["scheduler_command"].endswith(f"--config-file {output_profile}")
+    assert profile_args["validate_config_only"] is False
+    assert profile_args["summary_output"] == "path/to/scheduler_run_summary.json"
+    assert "submit_paper_orders" not in profile_args
+    assert "confirm_paper_submit" not in profile_args
+    assert not validation_summary.exists()
+    assert not (Path.cwd() / "path" / "to" / "scheduler_run_summary.json").exists()
+    assert not output_dir.exists()
+
+
+def test_scheduler_profile_cli_rejects_submit_capable_keys(tmp_path):
+    template = tmp_path / "template.json"
+    output_profile = tmp_path / "local.json"
+    template.write_text(json.dumps({"args": {"preset": "ongoing-no-submit"}}), encoding="utf-8")
+
+    try:
+        run_cli(
+            build_parser().parse_args(
+                [
+                    "--template",
+                    str(template),
+                    "--output-profile",
+                    str(output_profile),
+                    "--set",
+                    "submit_paper_orders=true",
+                ]
+            )
+        )
+    except ValueError as exc:
+        assert "Submit-capable scheduler profile keys are not supported" in str(exc)
+    else:
+        raise AssertionError("Expected submit-capable override to fail closed")
