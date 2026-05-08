@@ -62,6 +62,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scheduler-config-validation", default="")
     parser.add_argument("--scheduler-task-plan", default="")
     parser.add_argument("--scheduler-handoff", default="")
+    parser.add_argument("--paper-submit-mode-plan", default="")
     parser.add_argument("--skip-price-map", action="store_true")
     parser.add_argument("--allow-existing-paper-positions", action="store_true")
     parser.add_argument("--final-planning-refresh", action="store_true")
@@ -565,6 +566,9 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
     _append_optional_path(account_refresh_parts, "--scheduler-config-validation", args.scheduler_config_validation)
     _append_optional_path(account_refresh_parts, "--scheduler-task-plan", args.scheduler_task_plan)
     _append_optional_path(account_refresh_parts, "--scheduler-handoff", args.scheduler_handoff)
+    if args.position_review_queue:
+        account_refresh_parts.extend(["--position-review-queue", "{position_review_queue}"])
+    _append_optional_path(account_refresh_parts, "--paper-submit-mode-plan", args.paper_submit_mode_plan)
 
     post_run_verification_parts = [
         "python",

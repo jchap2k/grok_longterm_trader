@@ -31,6 +31,8 @@ def build_dashboard_manifest(
     scheduler_config_validation: str | Path = "",
     scheduler_task_plan: str | Path = "",
     scheduler_handoff: str | Path = "",
+    position_review_queue: str | Path = "",
+    paper_submit_mode_plan: str | Path = "",
     scheduler_policy: str | Path = "",
     committee_preset_policy: str | Path = "",
     decision_journal_path: str | Path = "",
@@ -57,6 +59,8 @@ def build_dashboard_manifest(
         "scheduler_config_validation": str(scheduler_config_validation or ""),
         "scheduler_task_plan": str(scheduler_task_plan or ""),
         "scheduler_handoff": str(scheduler_handoff or ""),
+        "position_review_queue": str(position_review_queue or ""),
+        "paper_submit_mode_plan": str(paper_submit_mode_plan or ""),
         "scheduler_policy": str(scheduler_policy or ""),
         "committee_preset_policy": str(committee_preset_policy or ""),
         "decision_journal_path": str(decision_journal_path or ""),
@@ -127,6 +131,8 @@ def build_dashboard_pages_from_manifest(manifest: Mapping[str, Any]) -> dict[str
     scheduler_config_validation = build_scheduler_config_validation_from_manifest(manifest)
     scheduler_task_plan = build_scheduler_task_plan_from_manifest(manifest)
     scheduler_handoff = build_scheduler_handoff_from_manifest(manifest)
+    position_review_queue = build_position_review_queue_from_manifest(manifest)
+    paper_submit_mode_plan = build_paper_submit_mode_plan_from_manifest(manifest)
     api_usage = build_api_usage_from_manifest(manifest)
     action_plan = _sanitize_action_plan_for_dashboard(action_plan, portfolio_state)
     dashboard = build_operator_dashboard(
@@ -145,6 +151,8 @@ def build_dashboard_pages_from_manifest(manifest: Mapping[str, Any]) -> dict[str
         scheduler_config_validation=scheduler_config_validation,
         scheduler_task_plan=scheduler_task_plan,
         scheduler_handoff=scheduler_handoff,
+        position_review_queue=position_review_queue,
+        paper_submit_mode_plan=paper_submit_mode_plan,
     )
 
 
@@ -159,6 +167,8 @@ def build_dashboard_summary_from_manifest(manifest: Mapping[str, Any]) -> dict[s
     scheduler_config_validation = build_scheduler_config_validation_from_manifest(manifest)
     scheduler_task_plan = build_scheduler_task_plan_from_manifest(manifest)
     scheduler_handoff = build_scheduler_handoff_from_manifest(manifest)
+    position_review_queue = build_position_review_queue_from_manifest(manifest)
+    paper_submit_mode_plan = build_paper_submit_mode_plan_from_manifest(manifest)
     action_plan = _sanitize_action_plan_for_dashboard(action_plan, portfolio_state)
     dashboard = build_operator_dashboard(
         action_plan=action_plan,
@@ -173,6 +183,8 @@ def build_dashboard_summary_from_manifest(manifest: Mapping[str, Any]) -> dict[s
         "scheduler_config_validation": scheduler_config_validation,
         "scheduler_task_plan": scheduler_task_plan,
         "scheduler_handoff": scheduler_handoff,
+        "position_review_queue": position_review_queue,
+        "paper_submit_mode_plan": paper_submit_mode_plan,
         "order_submission_enabled": False,
     }
 
@@ -394,6 +406,56 @@ def build_scheduler_handoff_from_manifest(manifest: Mapping[str, Any]) -> dict[s
     return normalized
 
 
+def build_position_review_queue_from_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
+    """Load the no-submit position review queue artifact from the manifest."""
+    base_dir = Path(str(manifest.get("_manifest_path") or ".")).parent
+    queue_path = _resolve_manifest_path(base_dir, manifest.get("position_review_queue"))
+    if not queue_path:
+        return _empty_position_review_queue("position_review_queue_artifact_missing")
+    payload = _load_json_optional(queue_path)
+    if not payload:
+        return _empty_position_review_queue("position_review_queue_artifact_unreadable", source_path=queue_path)
+    normalized = dict(payload)
+    normalized.setdefault("schema_version", 1)
+    normalized.setdefault("mode", "position_review_queue")
+    normalized.setdefault("status", "unknown")
+    normalized.setdefault("review_count", 0)
+    normalized.setdefault("counts_by_review_type", {})
+    normalized.setdefault("review_queue", [])
+    normalized.setdefault("excluded_protected_symbols", [])
+    normalized.setdefault("next_safe_action", "generate_position_review_queue")
+    normalized["source_path"] = str(queue_path)
+    normalized["order_submission_enabled"] = False
+    normalized["broker_calls_enabled"] = False
+    normalized["llm_calls_enabled"] = False
+    return normalized
+
+
+def build_paper_submit_mode_plan_from_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
+    """Load the disabled paper submit-mode readiness artifact from the manifest."""
+    base_dir = Path(str(manifest.get("_manifest_path") or ".")).parent
+    plan_path = _resolve_manifest_path(base_dir, manifest.get("paper_submit_mode_plan"))
+    if not plan_path:
+        return _empty_paper_submit_mode_plan("paper_submit_mode_plan_artifact_missing")
+    payload = _load_json_optional(plan_path)
+    if not payload:
+        return _empty_paper_submit_mode_plan("paper_submit_mode_plan_artifact_unreadable", source_path=plan_path)
+    normalized = dict(payload)
+    normalized.setdefault("schema_version", 1)
+    normalized.setdefault("mode", "paper_submit_mode_plan")
+    normalized.setdefault("status", "unknown")
+    normalized.setdefault("checks", {})
+    normalized.setdefault("blockers", [])
+    normalized.setdefault("warnings", [])
+    normalized.setdefault("next_safe_action", "generate_paper_submit_mode_plan")
+    normalized["source_path"] = str(plan_path)
+    normalized["order_submission_enabled"] = False
+    normalized["submit_profile_enabled"] = False
+    normalized["broker_calls_enabled"] = False
+    normalized["runnable_submit_command_emitted"] = False
+    return normalized
+
+
 def resolve_dashboard_request(
     manifest_path: str | Path,
     request_path: str,
@@ -425,6 +487,14 @@ def resolve_dashboard_request(
         return 200, "application/json; charset=utf-8", _json_bytes(build_scheduler_task_plan_from_manifest(manifest))
     if parsed_path == "/api/scheduler-handoff.json":
         return 200, "application/json; charset=utf-8", _json_bytes(build_scheduler_handoff_from_manifest(manifest))
+    if parsed_path == "/api/position-review-queue.json":
+        return 200, "application/json; charset=utf-8", _json_bytes(
+            build_position_review_queue_from_manifest(manifest)
+        )
+    if parsed_path == "/api/paper-submit-mode-plan.json":
+        return 200, "application/json; charset=utf-8", _json_bytes(
+            build_paper_submit_mode_plan_from_manifest(manifest)
+        )
     pages = build_dashboard_pages_from_manifest(manifest)
     key = "index.html" if parsed_path in {"/", "/index.html"} else parsed_path.lstrip("/")
     if key not in pages:
@@ -604,6 +674,41 @@ def _empty_scheduler_handoff(reason: str, *, source_path: Path | None = None) ->
     }
 
 
+def _empty_position_review_queue(reason: str, *, source_path: Path | None = None) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "mode": "position_review_queue",
+        "status": "unavailable",
+        "source_path": str(source_path or ""),
+        "review_count": 0,
+        "counts_by_review_type": {},
+        "review_queue": [],
+        "excluded_protected_symbols": [],
+        "warnings": [reason],
+        "next_safe_action": "generate_position_review_queue",
+        "order_submission_enabled": False,
+        "broker_calls_enabled": False,
+        "llm_calls_enabled": False,
+    }
+
+
+def _empty_paper_submit_mode_plan(reason: str, *, source_path: Path | None = None) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "mode": "paper_submit_mode_plan",
+        "status": "unavailable",
+        "source_path": str(source_path or ""),
+        "checks": {},
+        "blockers": [],
+        "warnings": [reason],
+        "next_safe_action": "generate_paper_submit_mode_plan",
+        "order_submission_enabled": False,
+        "submit_profile_enabled": False,
+        "broker_calls_enabled": False,
+        "runnable_submit_command_emitted": False,
+    }
+
+
 def _normalize_api_usage_payload(payload: Mapping[str, Any], *, source_path: Path) -> dict[str, Any]:
     if payload.get("mode") == "api_usage_summary" and isinstance(payload.get("providers"), list):
         normalized = dict(payload)
@@ -777,7 +882,9 @@ __all__ = [
     "build_dashboard_manifest",
     "build_dashboard_pages_from_manifest",
     "build_dashboard_summary_from_manifest",
+    "build_paper_submit_mode_plan_from_manifest",
     "build_pipeline_health_from_manifest",
+    "build_position_review_queue_from_manifest",
     "build_portfolio_summary_from_manifest",
     "build_scheduler_config_validation_from_manifest",
     "build_scheduler_handoff_from_manifest",

@@ -28,6 +28,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scheduler-config-validation", default="")
     parser.add_argument("--scheduler-task-plan", default="")
     parser.add_argument("--scheduler-handoff", default="")
+    parser.add_argument("--position-review-queue", default="")
+    parser.add_argument("--paper-submit-mode-plan", default="")
     parser.add_argument("--scheduler-policy", default="")
     parser.add_argument("--committee-preset-policy", default="")
     parser.add_argument("--status-refresh-file", default="")
@@ -56,6 +58,8 @@ def run_cli(
         scheduler_config_validation_path=args.scheduler_config_validation,
         scheduler_task_plan_path=args.scheduler_task_plan,
         scheduler_handoff_path=args.scheduler_handoff,
+        position_review_queue_path=args.position_review_queue,
+        paper_submit_mode_plan_path=args.paper_submit_mode_plan,
         scheduler_policy_path=args.scheduler_policy,
         committee_preset_policy_path=args.committee_preset_policy,
         status_refresh_file=args.status_refresh_file,

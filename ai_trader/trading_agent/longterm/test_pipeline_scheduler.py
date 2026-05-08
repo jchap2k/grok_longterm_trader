@@ -1861,6 +1861,8 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_portfolio_news_
     rules_path.write_text("<rules />", encoding="utf-8")
     snapshot = tmp_path / "news_snapshot.json"
     snapshot.write_text("{}", encoding="utf-8")
+    submit_plan = tmp_path / "paper_submit_mode_plan.json"
+    submit_plan.write_text("{}", encoding="utf-8")
     watchlist = tmp_path / "watchlist.json"
     watchlist.write_text("[]", encoding="utf-8")
 
@@ -1922,6 +1924,8 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_position_review
     rules_path.write_text("<rules />", encoding="utf-8")
     snapshot = tmp_path / "news_snapshot.json"
     snapshot.write_text("{}", encoding="utf-8")
+    submit_plan = tmp_path / "paper_submit_mode_plan.json"
+    submit_plan.write_text("{}", encoding="utf-8")
 
     code = run_cli(
         build_parser().parse_args(
@@ -1942,6 +1946,8 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_position_review
                 "--portfolio-news-snapshot-file",
                 str(snapshot),
                 "--position-review-queue",
+                "--paper-submit-mode-plan",
+                str(submit_plan),
                 "--print-plan-only",
                 "--json",
             ]
@@ -1956,6 +1962,10 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_position_review
     assert "portfolio_news_monitor.json" in run["position_review_queue_command"]
     assert "position_review_queue.json" in run["position_review_queue_command"]
     assert "--submit-paper-orders" not in run["position_review_queue_command"]
+    assert "--position-review-queue" in run["account_refresh_command"]
+    assert "position_review_queue.json" in run["account_refresh_command"]
+    assert "--paper-submit-mode-plan" in run["account_refresh_command"]
+    assert str(submit_plan.resolve()) in run["account_refresh_command"]
     assert "--require-policy-timestamp last_position_review_at" in run["post_run_verification_command"]
 
 

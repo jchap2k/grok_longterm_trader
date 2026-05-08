@@ -8,7 +8,9 @@ from longterm.operator_dashboard_server import (
     build_api_usage_from_manifest,
     build_dashboard_manifest,
     build_dashboard_pages_from_manifest,
+    build_paper_submit_mode_plan_from_manifest,
     build_pipeline_health_from_manifest,
+    build_position_review_queue_from_manifest,
     build_portfolio_summary_from_manifest,
     build_scheduler_handoff_from_manifest,
     build_scheduler_task_plan_from_manifest,
@@ -44,6 +46,8 @@ def test_dashboard_manifest_records_traceability_and_rules_hash(tmp_path):
     assert manifest["scheduler_config_validation"] == ""
     assert manifest["scheduler_task_plan"] == ""
     assert manifest["scheduler_handoff"] == ""
+    assert manifest["position_review_queue"] == ""
+    assert manifest["paper_submit_mode_plan"] == ""
     assert manifest["api_usage"] == ""
     assert manifest["active_rules_hash"]
     assert manifest["generated_at"].endswith("Z")
@@ -453,6 +457,128 @@ def test_dashboard_server_exposes_scheduler_handoff_from_manifest(tmp_path):
     assert "Review Task Plan Then Register Manually If Approved" in html
 
 
+def test_dashboard_server_exposes_position_review_queue_from_manifest(tmp_path):
+    action_plan = tmp_path / "action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    queue = tmp_path / "position_review_queue.json"
+    manifest_path = tmp_path / "dashboard_manifest.json"
+    action_plan.write_text(json.dumps({"intents": []}), encoding="utf-8")
+    portfolio.write_text(json.dumps({"holdings": []}), encoding="utf-8")
+    queue.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "mode": "position_review_queue",
+                "status": "completed",
+                "review_count": 2,
+                "counts_by_review_type": {"sell_review": 1, "thesis_news_review": 1},
+                "excluded_protected_symbols": ["FXAIX"],
+                "review_queue": [
+                    {"symbol": "ADBE", "review_type": "sell_review", "severity": "high"},
+                    {"symbol": "MSFT", "review_type": "thesis_news_review", "severity": "medium"},
+                ],
+                "order_submission_enabled": False,
+                "llm_calls_enabled": False,
+                "broker_calls_enabled": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest_path.write_text(
+        json.dumps(
+            build_dashboard_manifest(
+                action_plan=action_plan,
+                portfolio_state=portfolio,
+                position_review_queue=queue,
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    summary = build_position_review_queue_from_manifest(load_dashboard_manifest(manifest_path))
+    status, content_type, body = resolve_dashboard_request(manifest_path, "/api/position-review-queue.json")
+    summary_status, _, summary_body = resolve_dashboard_request(manifest_path, "/api/summary.json")
+    index_status, _, index_body = resolve_dashboard_request(manifest_path, "/")
+    api = json.loads(body.decode("utf-8"))
+    dashboard_summary = json.loads(summary_body.decode("utf-8"))
+    html = index_body.decode("utf-8")
+
+    assert summary["status"] == "completed"
+    assert summary["review_count"] == 2
+    assert status == 200
+    assert content_type == "application/json; charset=utf-8"
+    assert api["mode"] == "position_review_queue"
+    assert api["order_submission_enabled"] is False
+    assert api["broker_calls_enabled"] is False
+    assert summary_status == 200
+    assert dashboard_summary["position_review_queue"]["review_count"] == 2
+    assert index_status == 200
+    assert "Position Review Queue" in html
+    assert "ADBE" in html
+    assert "Sell Review" in html
+
+
+def test_dashboard_server_exposes_paper_submit_mode_plan_from_manifest(tmp_path):
+    action_plan = tmp_path / "action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    submit_plan = tmp_path / "paper_submit_mode_plan.json"
+    manifest_path = tmp_path / "dashboard_manifest.json"
+    action_plan.write_text(json.dumps({"intents": []}), encoding="utf-8")
+    portfolio.write_text(json.dumps({"holdings": []}), encoding="utf-8")
+    submit_plan.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "mode": "paper_submit_mode_plan",
+                "status": "ready_for_manual_review",
+                "checks": {
+                    "scheduler_handoff": "ready",
+                    "no_submit_scheduler_summary": "ready",
+                    "position_review_queue": "ready",
+                    "order_submission_boundary": "ready",
+                },
+                "blockers": [],
+                "order_submission_enabled": False,
+                "submit_profile_enabled": False,
+                "broker_calls_enabled": False,
+                "runnable_submit_command_emitted": False,
+                "next_safe_action": "manual_review_required_before_submit_profile",
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest_path.write_text(
+        json.dumps(
+            build_dashboard_manifest(
+                action_plan=action_plan,
+                portfolio_state=portfolio,
+                paper_submit_mode_plan=submit_plan,
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    summary = build_paper_submit_mode_plan_from_manifest(load_dashboard_manifest(manifest_path))
+    status, content_type, body = resolve_dashboard_request(manifest_path, "/api/paper-submit-mode-plan.json")
+    summary_status, _, summary_body = resolve_dashboard_request(manifest_path, "/api/summary.json")
+    index_status, _, index_body = resolve_dashboard_request(manifest_path, "/")
+    api = json.loads(body.decode("utf-8"))
+    dashboard_summary = json.loads(summary_body.decode("utf-8"))
+    html = index_body.decode("utf-8")
+
+    assert summary["status"] == "ready_for_manual_review"
+    assert status == 200
+    assert content_type == "application/json; charset=utf-8"
+    assert api["mode"] == "paper_submit_mode_plan"
+    assert api["submit_profile_enabled"] is False
+    assert api["runnable_submit_command_emitted"] is False
+    assert summary_status == 200
+    assert dashboard_summary["paper_submit_mode_plan"]["status"] == "ready_for_manual_review"
+    assert index_status == 200
+    assert "Paper Submit Mode Plan" in html
+    assert "Manual Review Required Before Submit Profile" in html
+
+
 def test_live_dashboard_filters_protected_symbol_from_actionable_candidates(tmp_path):
     action_plan = tmp_path / "action_plan.json"
     portfolio = tmp_path / "portfolio.json"
@@ -653,6 +779,8 @@ def test_dashboard_server_cli_can_write_manifest_without_serving(tmp_path, capsy
     scheduler_config_validation = tmp_path / "scheduler_profile_validation.json"
     scheduler_task_plan = tmp_path / "scheduler_task_plan.json"
     scheduler_handoff = tmp_path / "scheduler_handoff.json"
+    position_review_queue = tmp_path / "position_review_queue.json"
+    paper_submit_mode_plan = tmp_path / "paper_submit_mode_plan.json"
     manifest = tmp_path / "dashboard_manifest.json"
     rules.write_text("rules", encoding="utf-8")
     action_plan.write_text("{}", encoding="utf-8")
@@ -661,6 +789,8 @@ def test_dashboard_server_cli_can_write_manifest_without_serving(tmp_path, capsy
     scheduler_config_validation.write_text(json.dumps({"status": "ready"}), encoding="utf-8")
     scheduler_task_plan.write_text(json.dumps({"status": "ready", "task_name": "LongTermTraderNoSubmit"}), encoding="utf-8")
     scheduler_handoff.write_text(json.dumps({"status": "ready", "mode": "scheduler_handoff_check"}), encoding="utf-8")
+    position_review_queue.write_text(json.dumps({"status": "completed", "mode": "position_review_queue"}), encoding="utf-8")
+    paper_submit_mode_plan.write_text(json.dumps({"status": "ready_for_manual_review", "mode": "paper_submit_mode_plan"}), encoding="utf-8")
 
     code = run_cli(
         build_parser().parse_args(
@@ -683,6 +813,10 @@ def test_dashboard_server_cli_can_write_manifest_without_serving(tmp_path, capsy
                 str(scheduler_task_plan),
                 "--scheduler-handoff",
                 str(scheduler_handoff),
+                "--position-review-queue",
+                str(position_review_queue),
+                "--paper-submit-mode-plan",
+                str(paper_submit_mode_plan),
                 "--campaign-id",
                 "campaign-2",
                 "--json",
@@ -701,4 +835,6 @@ def test_dashboard_server_cli_can_write_manifest_without_serving(tmp_path, capsy
     assert saved["scheduler_config_validation"] == str(scheduler_config_validation)
     assert saved["scheduler_task_plan"] == str(scheduler_task_plan)
     assert saved["scheduler_handoff"] == str(scheduler_handoff)
+    assert saved["position_review_queue"] == str(position_review_queue)
+    assert saved["paper_submit_mode_plan"] == str(paper_submit_mode_plan)
     assert saved["active_rules_hash"]

@@ -84,6 +84,8 @@ def test_refresh_paper_account_artifacts_writes_current_portfolio_dashboard_and_
     scheduler_config_validation = tmp_path / "scheduler_profile_validation.json"
     scheduler_task_plan = tmp_path / "scheduler_task_plan.json"
     scheduler_handoff = tmp_path / "scheduler_handoff.json"
+    position_review_queue = tmp_path / "position_review_queue.json"
+    paper_submit_mode_plan = tmp_path / "paper_submit_mode_plan.json"
     scheduler_policy = tmp_path / "scheduler_policy.json"
     committee_preset_policy = tmp_path / "committee_preset_policy.json"
     output_dir = tmp_path / "refresh"
@@ -174,6 +176,31 @@ def test_refresh_paper_account_artifacts_writes_current_portfolio_dashboard_and_
         },
     )
     _write_json(
+        position_review_queue,
+        {
+            "mode": "position_review_queue",
+            "status": "completed",
+            "review_count": 1,
+            "review_queue": [{"symbol": "ADBE", "review_type": "sell_review", "severity": "high"}],
+            "order_submission_enabled": False,
+            "broker_calls_enabled": False,
+            "llm_calls_enabled": False,
+        },
+    )
+    _write_json(
+        paper_submit_mode_plan,
+        {
+            "mode": "paper_submit_mode_plan",
+            "status": "ready_for_manual_review",
+            "checks": {"position_review_queue": "ready", "order_submission_boundary": "ready"},
+            "order_submission_enabled": False,
+            "submit_profile_enabled": False,
+            "broker_calls_enabled": False,
+            "runnable_submit_command_emitted": False,
+            "next_safe_action": "manual_review_required_before_submit_profile",
+        },
+    )
+    _write_json(
         scheduler_policy,
         {
             "recommended_mode": "account_refresh_only",
@@ -219,6 +246,8 @@ def test_refresh_paper_account_artifacts_writes_current_portfolio_dashboard_and_
         scheduler_config_validation_path=scheduler_config_validation,
         scheduler_task_plan_path=scheduler_task_plan,
         scheduler_handoff_path=scheduler_handoff,
+        position_review_queue_path=position_review_queue,
+        paper_submit_mode_plan_path=paper_submit_mode_plan,
         scheduler_policy_path=scheduler_policy,
         committee_preset_policy_path=committee_preset_policy,
         dashboard_manifest_output=manifest,
@@ -252,6 +281,9 @@ def test_refresh_paper_account_artifacts_writes_current_portfolio_dashboard_and_
     assert "LongTermTraderNoSubmit" in index_html
     assert "Scheduler Handoff" in index_html
     assert "Review Task Plan Then Register Manually If Approved" in index_html
+    assert "Position Review Queue" in index_html
+    assert "Paper Submit Mode Plan" in index_html
+    assert "Manual Review Required Before Submit Profile" in index_html
     assert "Account Refresh Only" in index_html
     assert "Moneyball" in adbe_html
     assert "74.1" in adbe_html
@@ -267,6 +299,8 @@ def test_refresh_paper_account_artifacts_writes_current_portfolio_dashboard_and_
     assert manifest_payload["scheduler_config_validation"] == str(scheduler_config_validation)
     assert manifest_payload["scheduler_task_plan"] == str(scheduler_task_plan)
     assert manifest_payload["scheduler_handoff"] == str(scheduler_handoff)
+    assert manifest_payload["position_review_queue"] == str(position_review_queue)
+    assert manifest_payload["paper_submit_mode_plan"] == str(paper_submit_mode_plan)
     assert manifest_payload["scheduler_policy"] == str(scheduler_policy)
     assert manifest_payload["committee_preset_policy"] == str(committee_preset_policy)
     assert summary["components"]["pipeline_summary"]["exists"] is True
@@ -274,6 +308,8 @@ def test_refresh_paper_account_artifacts_writes_current_portfolio_dashboard_and_
     assert summary["components"]["scheduler_config_validation"]["exists"] is True
     assert summary["components"]["scheduler_task_plan"]["exists"] is True
     assert summary["components"]["scheduler_handoff"]["exists"] is True
+    assert summary["components"]["position_review_queue"]["exists"] is True
+    assert summary["components"]["paper_submit_mode_plan"]["exists"] is True
     assert summary["components"]["scheduler_policy"]["exists"] is True
     assert summary["components"]["committee_preset_policy"]["exists"] is True
     status_bundle = json.loads(Path(summary["operator_status_path"]).read_text(encoding="utf-8"))

@@ -374,14 +374,21 @@ Scheduler-readiness features now exist:
   plan as a review artifact.
 - Dashboard manifests can point at `scheduler_handoff`; the localhost server
   exposes `/api/scheduler-handoff.json`, includes it in `/api/summary.json`,
-  and renders a Scheduler Handoff card in Safety / Preflight. Read-only
-  paper-account refresh and the `ongoing-no-submit` scheduler preset can pass
-  scheduler config-validation, task-plan, and handoff paths through to refreshed
-  dashboard manifests/sites.
+  and renders a Scheduler Handoff card in Safety / Preflight.
+- Dashboard manifests can point at `position_review_queue`; the localhost
+  server exposes `/api/position-review-queue.json`, includes it in
+  `/api/summary.json`, and renders a Position Review Queue card with advisory
+  sell/rebalance/news review rows. The card is read-only and does not imply
+  sell/rebalance authorization.
+- Dashboard manifests can point at `paper_submit_mode_plan`; the localhost
+  server exposes `/api/paper-submit-mode-plan.json`, includes it in
+  `/api/summary.json`, and renders a disabled submit-profile readiness card.
+  It remains a checklist only and never emits runnable submit commands.
 - Read-only paper-account refresh and the `ongoing-no-submit` scheduler preset
-  can pass scheduler review artifacts through to refreshed dashboard
-  manifests/sites, so reviewed local profiles and handoff evidence remain
-  visible after recurring account/dashboard refreshes.
+  can pass scheduler review artifacts, position-review queues, and optional
+  paper-submit readiness plans through to refreshed dashboard manifests/sites,
+  so reviewed local profiles, handoff evidence, and review gates remain visible
+  after recurring account/dashboard refreshes.
 - One longer full no-submit execute was intentionally stopped after wrapper
   timeout while the empty-batch final-planning refresh was still running; use
   longer supervised windows, existing saved action plans, or smaller resumable

@@ -124,6 +124,8 @@ def build_operator_dashboard_site(
     scheduler_config_validation: Mapping[str, Any] | None = None,
     scheduler_task_plan: Mapping[str, Any] | None = None,
     scheduler_handoff: Mapping[str, Any] | None = None,
+    position_review_queue: Mapping[str, Any] | None = None,
+    paper_submit_mode_plan: Mapping[str, Any] | None = None,
 ) -> dict[str, str]:
     """Build a static dashboard package with index and ticker pages."""
     action_plan = action_plan or {}
@@ -144,10 +146,12 @@ def build_operator_dashboard_site(
             evidence_by_symbol=evidence_by_symbol,
             price_history_by_symbol=price_history_by_symbol,
             api_usage=api_usage or {},
-            scheduler_config_validation=scheduler_config_validation or {},
-            scheduler_task_plan=scheduler_task_plan or {},
-            scheduler_handoff=scheduler_handoff or {},
-        )
+        scheduler_config_validation=scheduler_config_validation or {},
+        scheduler_task_plan=scheduler_task_plan or {},
+        scheduler_handoff=scheduler_handoff or {},
+        position_review_queue=position_review_queue or {},
+        paper_submit_mode_plan=paper_submit_mode_plan or {},
+    )
     }
     for symbol in symbols:
         intent = _intent_for_symbol(action_plan, symbol)
@@ -410,6 +414,8 @@ def _site_index_html(
     scheduler_config_validation: Mapping[str, Any] | None = None,
     scheduler_task_plan: Mapping[str, Any] | None = None,
     scheduler_handoff: Mapping[str, Any] | None = None,
+    position_review_queue: Mapping[str, Any] | None = None,
+    paper_submit_mode_plan: Mapping[str, Any] | None = None,
 ) -> str:
     regime = dashboard.get("market_regime") or {}
     advisory = dashboard.get("agent_advisory") or {}
@@ -578,6 +584,8 @@ def _site_index_html(
               {_scheduler_config_validation_panel(scheduler_config_validation or {})}
               {_scheduler_task_plan_panel(scheduler_task_plan or {})}
               {_scheduler_handoff_panel(scheduler_handoff or {})}
+              {_position_review_queue_panel(position_review_queue or {})}
+              {_paper_submit_mode_plan_panel(paper_submit_mode_plan or {})}
               {_pipeline_health_panel()}
             </section>
             <section class="panel" id="research-board">
@@ -1520,6 +1528,71 @@ def _scheduler_handoff_panel(handoff: Mapping[str, Any]) -> str:
         "</div>"
         f"<p data-scheduler-handoff-message>{escape(next_action)}</p>"
         "<small>Handoff is advisory and read-only; recurring task registration remains a separate operator action.</small>"
+        "</div>"
+    )
+
+
+def _position_review_queue_panel(queue: Mapping[str, Any]) -> str:
+    status = _display_label(queue.get("status") or "unavailable")
+    review_count = int(_number(queue.get("review_count")))
+    counts = queue.get("counts_by_review_type") if isinstance(queue.get("counts_by_review_type"), Mapping) else {}
+    rows = []
+    for item in (queue.get("review_queue") or [])[:5]:
+        if not isinstance(item, Mapping):
+            continue
+        rows.append(
+            "<li>"
+            f"<strong>{escape(str(item.get('symbol') or 'n/a'))}</strong>"
+            f"<span>{escape(_display_label(item.get('review_type') or 'review'))}</span>"
+            f"<em>{escape(_display_label(item.get('severity') or 'unknown'))}</em>"
+            "</li>"
+        )
+    counts_label = ", ".join(
+        f"{_display_label(key)}: {value}"
+        for key, value in sorted(counts.items())
+    ) or "none"
+    excluded = ", ".join(str(item) for item in (queue.get("excluded_protected_symbols") or [])) or "none"
+    return (
+        "<div class=\"scheduler-validation-card\" data-position-review-queue>"
+        "<div class=\"section-heading compact-heading\">"
+        "<p class=\"eyebrow\">Position Review Queue</p>"
+        "<h3>Sell / Rebalance / News Review</h3>"
+        "</div>"
+        "<div class=\"pipeline-health-grid\">"
+        f"<div><span>Status</span><strong>{escape(status)}</strong></div>"
+        f"<div><span>Rows</span><strong>{review_count}</strong></div>"
+        f"<div><span>Types</span><strong>{escape(counts_label)}</strong></div>"
+        f"<div><span>Protected Excluded</span><strong>{escape(excluded)}</strong></div>"
+        "</div>"
+        f"<ul class=\"review-queue-list\">{''.join(rows) or '<li>No current review rows.</li>'}</ul>"
+        "<small>No-submit queue only; rows are not authorization to sell, rebalance, or submit orders.</small>"
+        "</div>"
+    )
+
+
+def _paper_submit_mode_plan_panel(plan: Mapping[str, Any]) -> str:
+    status = _display_label(plan.get("status") or "unavailable")
+    next_action = _display_label(plan.get("next_safe_action") or "generate_paper_submit_mode_plan")
+    checks = plan.get("checks") if isinstance(plan.get("checks"), Mapping) else {}
+    blockers = [str(item) for item in (plan.get("blockers") or []) if str(item).strip()]
+    blocker_label = ", ".join(_display_label(item) for item in blockers) or "none"
+    check_rows = "".join(
+        f"<div><span>{escape(_display_label(key))}</span><strong>{escape(_display_label(value))}</strong></div>"
+        for key, value in sorted(checks.items())
+    )
+    return (
+        "<div class=\"scheduler-validation-card\" data-paper-submit-mode-plan>"
+        "<div class=\"section-heading compact-heading\">"
+        "<p class=\"eyebrow\">Paper Submit Mode Plan</p>"
+        "<h3>Disabled Submit-Profile Readiness</h3>"
+        "</div>"
+        "<div class=\"pipeline-health-grid\">"
+        f"<div><span>Status</span><strong>{escape(status)}</strong></div>"
+        f"<div><span>Blockers</span><strong>{escape(blocker_label)}</strong></div>"
+        f"{check_rows}"
+        "</div>"
+        f"<p>{escape(next_action)}</p>"
+        "<small>Checklist only; no submit profile is enabled and no runnable submit command is emitted.</small>"
         "</div>"
     )
 
