@@ -1053,6 +1053,24 @@ registering a recurring Windows task. For Task Scheduler handoff, pass the
 run-profile validation artifact (`scheduler_run_profile_validation.json` in the
 example above), not the earlier validation-only local-profile artifact.
 
+After the handoff artifact is ready, generate a guarded registration review.
+This is still dry-run by default and does not register anything:
+
+```powershell
+python scripts/longterm_scheduler_task_register.py --scheduler-handoff path\to\scheduler_handoff.json --output path\to\scheduler_task_registration_review.json --json
+```
+
+Only if the operator has reviewed the registration command and wants to create
+the Windows task, rerun with the explicit confirmation token:
+
+```powershell
+python scripts/longterm_scheduler_task_register.py --scheduler-handoff path\to\scheduler_handoff.json --register --confirm-register NO_SUBMIT_SCHEDULER_REGISTER --output path\to\scheduler_task_registration_review.json --json
+```
+
+The registration command validates that the handoff is ready, recurring
+no-submit readiness is explicit, and order submission is disabled. It registers
+only the no-submit scheduler task; it does not authorize paper or live orders.
+
 The config file accepts an `args` object using the same argparse destination
 names as the CLI, for example `journal_db`, `action_plan`, and
 `allow_existing_paper_positions`. Unknown config keys fail closed so typos do

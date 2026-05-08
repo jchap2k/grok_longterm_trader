@@ -415,6 +415,11 @@ Scheduler-readiness features now exist:
   now writes validation to the profile's `scheduler_config_validation` path,
   not to `summary_output` (which belongs to the future scheduler run summary).
   Use that run-profile validation artifact for task-plan handoff.
+- `longterm_scheduler_task_register.py` is the guarded bridge from a ready
+  handoff to Windows Task Scheduler. It is dry-run by default and writes a
+  registration review artifact. Actual registration requires both `--register`
+  and `--confirm-register NO_SUBMIT_SCHEDULER_REGISTER`; even then it only
+  registers the no-submit scheduler task and does not enable broker submission.
 
 Book-principle context:
 - `knowledge_agent/sources/longterm_trader/books/The Intelligent Investor Third
