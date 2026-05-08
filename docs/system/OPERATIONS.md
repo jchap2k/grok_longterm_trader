@@ -614,6 +614,15 @@ current portfolio holdings, so daily scheduler artifacts can surface
 `sell_or_add_after_thesis_check` and `trim_or_trailing_profit_review` prompts
 even when the latest journal row is not itself a SELL or REDUCE decision.
 
+The position-review queue also closes the staged-entry loop. If a current
+holding is near the Graham starter-size allocation from the latest BUY/ADD
+thesis but remains materially below the original target size, it emits
+`staged_entry_graduation_review` with
+`add_toward_target_after_margin_review`. This is an operator/LLM review prompt,
+not an order intent: the review should confirm margin of safety, article
+evidence, thesis health, portfolio fit, and active-sleeve cash before any later
+account-action plan is refreshed.
+
 When a research cycle or scheduler run has both a journal and portfolio state,
 the result JSON also includes `buy_promotion_markdown` and
 `buy_promotion_generated`. This makes promotion decisions visible in the same

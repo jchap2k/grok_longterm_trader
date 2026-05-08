@@ -420,6 +420,16 @@ Converts a structured decision into a non-executing proposed `BUY`, `SELL`, or `
 `longterm/account_action_plan.py`
 Builds the structured dry-run account action contract that future paper/live execution should consume. It aggregates recommendation-table rows, buy-promotion review status, portfolio state, benchmark gating, capital-shortfall suppression, review status, account tax-mode policy, optional idle-cash parking policy, and rebalance proposals into JSON-compatible intents (`BUY`, `SELL`, `REDUCE`, `PARK_IDLE_CASH`, `PARK_DEFENSIVE_CASH`, `REBALANCE`, `REVIEW`, `CAPITAL_NEEDED`, or `BLOCKED`). Explicit non-protected `SELL` / `REDUCE` decisions are surfaced as sell intents before the default held-position `REVIEW` path, while protected symbols remain blocked. Non-actionable promotion reviews become review/enrichment intents with no order, pending-evidence names are excluded as rebalance targets, and actionable BUYs can be resized down to the Graham staged-entry starter size when margin-of-safety support is moderate. Missing margin detail alone does not automatically shrink otherwise clean legacy buys. Broad parking/rebalance churn is suppressed for taxable or unspecified profiles. It does not place orders.
 
+`longterm/position_review_queue.py`
+Builds a deterministic no-submit review queue for current active holdings. It
+combines explicit account-action sell/reduce/rebalance intents,
+portfolio-news thesis triggers, Graham/Mr. Market drawdown/rally prompts, and
+staged-entry graduation prompts. A `staged_entry_graduation_review` is emitted
+when a held BUY/ADD candidate is near its Graham starter size, below the
+original target size, and not currently marked broken or weakening. The row asks
+for an add-toward-target review only; it is not an `ADD` order, does not refresh
+account plans, and does not bypass Stage 6B paper eligibility.
+
 `longterm/portfolio_state.py`
 Loads read-only portfolio snapshots and separates active versus protected holdings.
 

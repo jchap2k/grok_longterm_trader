@@ -1,12 +1,19 @@
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from longterm.decision_journal import LongTermDecisionJournal
 from longterm.position_review_queue import (
     PositionReviewQueueInputs,
     build_position_review_queue_report,
     run_cli,
 )
 from longterm.portfolio_state import PortfolioState
+from research.intake import create_research_packet_from_idea
 
 
 def test_position_review_queue_captures_sell_reduce_and_rebalance_intents():
@@ -142,6 +149,64 @@ def test_position_review_queue_adds_mr_market_reviews_from_portfolio_holdings():
     assert by_symbol["MSFT"]["severity"] == "medium"
     assert by_symbol["MSFT"]["suggested_review_focus"] == "trim_or_trailing_profit_review"
     assert "valuation" in by_symbol["MSFT"]["reason"].lower()
+
+
+def test_position_review_queue_flags_starter_position_graduation_review(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    packet = create_research_packet_from_idea(
+        {
+            "symbol": "ADBE",
+            "benchmark_symbol": "FXAIX",
+            "quality_score": 88,
+            "valuation_score": 50,
+            "evidence_brief": (
+                "research_evidence_brief_v1 | ADBE\n"
+                "Fundamentals: durable growth and acceptable leverage.\n"
+                "Article evidence: primary-company article (source Reuters, confidence 0.8, basis snippet_grounded)."
+            ),
+        }
+    )
+    journal.record_decision(
+        packet,
+        decision={
+            "recommendation": "BUY",
+            "confidence": 88,
+            "suggested_size_pct": 6,
+            "key_thesis": "Creative cloud durability.",
+        },
+        candidate_price=100,
+        benchmark_price=100,
+    )
+
+    report = build_position_review_queue_report(
+        PositionReviewQueueInputs(
+            portfolio_state=PortfolioState(
+                cash=33300,
+                holdings=[
+                    {
+                        "symbol": "ADBE",
+                        "market_value": 700,
+                        "quantity": 2,
+                        "original_purchase_total_cost": 680,
+                    }
+                ],
+            ),
+            journal_db=tmp_path / "journal.db",
+        ),
+        now_func=lambda: datetime(2026, 5, 8, 13, 0, tzinfo=timezone.utc),
+    )
+
+    row = report["review_queue"][0]
+    assert report["review_count"] == 1
+    assert row["symbol"] == "ADBE"
+    assert row["review_type"] == "staged_entry_graduation_review"
+    assert row["trigger_source"] == "portfolio_state"
+    assert row["suggested_review_focus"] == "add_toward_target_after_margin_review"
+    assert row["current_size_pct"] == 2.06
+    assert row["starter_size_pct"] == 2.0
+    assert row["original_target_size_pct"] == 6.0
+    assert row["remaining_to_target_value"] == 1340.0
+    assert "starter" in row["reason"].lower()
 
 
 def test_position_review_queue_cli_writes_json_report(tmp_path):

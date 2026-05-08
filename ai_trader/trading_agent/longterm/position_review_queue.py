@@ -10,9 +10,15 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from longterm.decision_journal import LongTermDecisionJournal
-from longterm.graham_risk import mr_market_review_trigger
+from longterm.graham_risk import (
+    evaluate_permanent_loss_risk,
+    evaluate_staged_entry,
+    mr_market_review_trigger,
+)
 from longterm.portfolio_state import Holding, PortfolioState
 from longterm.review_status import ReviewStatusBuilder
+from longterm.reviewers import MarginOfSafetyReviewer
+from research.intake import create_research_packet_from_idea
 
 
 NowFunc = Callable[[], datetime]
@@ -113,6 +119,28 @@ def build_position_review_queue_report(
         if holding.symbol in protected and not inputs.include_protected_symbols:
             excluded_protected.add(holding.symbol)
             continue
+        graduation = _staged_graduation_review(
+            holding,
+            latest=latest_by_symbol.get(holding.symbol, {}),
+            status=review_status.get(holding.symbol, {}),
+            active_base_value=_active_base_value(portfolio),
+        )
+        if graduation:
+            rows.append(
+                _base_row(
+                    symbol=holding.symbol,
+                    review_type="staged_entry_graduation_review",
+                    trigger_source="portfolio_state",
+                    severity="medium",
+                    generated_at=generated_at,
+                    holding=holding,
+                    latest=latest_by_symbol.get(holding.symbol, {}),
+                    status=review_status.get(holding.symbol, {}),
+                    decision_id=str(latest_by_symbol.get(holding.symbol, {}).get("decision_id") or ""),
+                    reason=graduation["reason"],
+                    extra=graduation["extra"],
+                )
+            )
         quote_review = mr_market_review_trigger(holding)
         if not quote_review.review_due:
             continue
@@ -264,12 +292,73 @@ def _mr_market_review_focus(category: str) -> str:
     return "review_quote_vs_value"
 
 
+def _staged_graduation_review(
+    holding: Holding,
+    *,
+    latest: Mapping[str, Any],
+    status: Mapping[str, Any],
+    active_base_value: float,
+) -> dict[str, Any] | None:
+    recommendation = str(latest.get("recommendation") or "").upper()
+    if recommendation not in {"BUY", "ADD"}:
+        return None
+    thesis_state = str(status.get("thesis_state") or "").lower()
+    if thesis_state in {"broken", "weakening"}:
+        return None
+    suggested_size_pct = _float(latest.get("suggested_size_pct"))
+    if suggested_size_pct <= 0 or active_base_value <= 0:
+        return None
+    packet = _packet_from_latest(latest)
+    if not packet:
+        return None
+    margin_score = MarginOfSafetyReviewer().review(create_research_packet_from_idea(packet)).score
+    staged = evaluate_staged_entry(
+        suggested_size_pct=suggested_size_pct,
+        margin_of_safety_score=margin_score,
+        risk_report=evaluate_permanent_loss_risk(packet),
+    )
+    if staged.label != "starter_position" or staged.recommended_size_pct <= 0:
+        return None
+    current_size_pct = holding.market_value / active_base_value * 100.0
+    if current_size_pct < staged.recommended_size_pct * 0.75:
+        return None
+    if current_size_pct >= suggested_size_pct * 0.8:
+        return None
+    original_target_value = round(active_base_value * suggested_size_pct / 100.0, 2)
+    starter_target_value = round(active_base_value * staged.recommended_size_pct / 100.0, 2)
+    remaining_to_target = round(max(0.0, original_target_value - holding.market_value), 2)
+    return {
+        "reason": (
+            f"{holding.symbol} is near its Graham starter size "
+            f"({current_size_pct:.2f}% vs {staged.recommended_size_pct:.2f}%) "
+            f"but remains below the original {suggested_size_pct:.2f}% target; "
+            "review whether margin of safety, evidence, and thesis quality now support adding toward target."
+        ),
+        "extra": {
+            "suggested_review_focus": "add_toward_target_after_margin_review",
+            "current_size_pct": round(current_size_pct, 2),
+            "starter_size_pct": round(staged.recommended_size_pct, 2),
+            "original_target_size_pct": round(suggested_size_pct, 2),
+            "starter_target_value": starter_target_value,
+            "original_target_value": original_target_value,
+            "remaining_to_target_value": remaining_to_target,
+            "margin_of_safety_score": round(float(margin_score), 2),
+        },
+    }
+
+
 def _coerce_portfolio(value: PortfolioState | Mapping[str, Any] | None) -> PortfolioState | None:
     if value is None:
         return None
     if isinstance(value, PortfolioState):
         return value
     return PortfolioState(**dict(value))
+
+
+def _active_base_value(portfolio: PortfolioState | None) -> float:
+    if portfolio is None:
+        return 0.0
+    return float(portfolio.cash or 0.0) + float(portfolio.active_market_value or 0.0)
 
 
 def _latest_journal_rows(journal_db: str | Path | None) -> dict[str, dict[str, Any]]:
@@ -287,6 +376,25 @@ def _latest_journal_rows(journal_db: str | Path | None) -> dict[str, dict[str, A
     return latest
 
 
+def _packet_from_latest(latest: Mapping[str, Any]) -> dict[str, Any]:
+    packet_json = latest.get("packet_json")
+    if isinstance(packet_json, str) and packet_json.strip():
+        try:
+            packet = json.loads(packet_json)
+        except json.JSONDecodeError:
+            packet = {}
+        if isinstance(packet, Mapping):
+            return dict(packet)
+    symbol = str(latest.get("symbol") or "").upper()
+    if not symbol:
+        return {}
+    return {
+        "symbol": symbol,
+        "company_name": latest.get("company_name") or symbol,
+        "recommendation": latest.get("recommendation") or "",
+    }
+
+
 def _review_status_by_symbol(journal_db: str | Path | None) -> dict[str, dict[str, Any]]:
     if not journal_db:
         return {}
@@ -294,6 +402,13 @@ def _review_status_by_symbol(journal_db: str | Path | None) -> dict[str, dict[st
     if not path.exists():
         return {}
     return ReviewStatusBuilder(LongTermDecisionJournal(path)).build(limit=10000)
+
+
+def _float(value: Any) -> float:
+    try:
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _load_optional_mapping(path: str | Path) -> dict[str, Any]:

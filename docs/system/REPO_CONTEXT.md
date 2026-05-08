@@ -244,8 +244,9 @@ Scheduler-readiness features now exist:
   rebalance, and portfolio-news/thesis review rows from saved portfolio state,
   action plans, portfolio-news monitor reports, and journal review status. It
   reuses existing thesis/review facts and linkage fields, adds Mr. Market
-  drawdown/rally review rows directly from current holdings, and does not
-  create trade authority.
+  drawdown/rally review rows directly from current holdings, emits
+  `staged_entry_graduation_review` rows for starter-sized BUY/ADD holdings that
+  may deserve add-toward-target review, and does not create trade authority.
 - `scripts/longterm_paper_submit_mode_plan.py` is a disabled-by-default
   readiness checklist for future submit-capable paper profiles. It requires a
   fresh ready scheduler handoff, a successful no-submit scheduler summary, and
