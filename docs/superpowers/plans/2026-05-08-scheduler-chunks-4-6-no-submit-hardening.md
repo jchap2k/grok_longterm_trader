@@ -64,4 +64,4 @@
 - [x] Update repo context with the new no-submit review queue and submit-mode plan boundary.
 - [x] Run focused tests for new modules and scheduler/verifier wiring.
 - [x] Run full `python -m pytest ai_trader\trading_agent\longterm -q`.
-- [ ] Commit and push.
+- [x] Commit and push.
