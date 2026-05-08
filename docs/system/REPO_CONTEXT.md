@@ -11,9 +11,8 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-08 by Codex after the no-submit scheduler handoff packet,
-dashboard handoff seam, bounded scheduled-research print-plan, and
-sell/rebalance simulation visibility pass.
+Last updated: 2026-05-08 by Codex after the no-submit position-review queue,
+safe scheduler verifier seam, and disabled paper submit-mode readiness plan.
 
 ## 1. Project Identity
 
@@ -225,6 +224,22 @@ Scheduler-readiness features now exist:
   stdout/stderr paths, and exit code. If the verifier exits non-zero after an
   otherwise completed no-submit run, the scheduler marks the run failed with
   `post_run_verification_command_failed`.
+- Scheduler run records can carry a deterministic
+  `position_review_queue_command` stage after portfolio-news monitoring and
+  before the pipeline. The stage writes `run_00N/position_review_queue.json`,
+  remains no-submit/no-LLM/no-broker, excludes protected symbols by default,
+  and records `last_position_review_at` on success.
+- `scripts/longterm_position_review_queue.py` builds advisory sell/reduce,
+  rebalance, and portfolio-news/thesis review rows from saved portfolio state,
+  action plans, portfolio-news monitor reports, and journal review status. It
+  reuses existing thesis/review facts and linkage fields, but does not create
+  trade authority.
+- `scripts/longterm_paper_submit_mode_plan.py` is a disabled-by-default
+  readiness checklist for future submit-capable paper profiles. It requires a
+  fresh ready scheduler handoff, a successful no-submit scheduler summary, and
+  a completed position-review queue; it emits no runnable submit command and
+  keeps `order_submission_enabled=false`, `submit_profile_enabled=false`, and
+  `broker_calls_enabled=false`.
 - Scheduler policy treats unbounded paid/provider resource controls as a
   high-urgency `resource_control_review` blocker, while bounded paid runs carry
   a warning for operator awareness. Operator status bundles and markdown surface
@@ -288,16 +303,18 @@ Scheduler-readiness features now exist:
 - Policy-state artifacts track `last_full_research_at`,
   `last_no_submit_preflight_at`, `last_account_refresh_at`, and
   `last_final_planning_at`; when portfolio-news features are enabled they also
-  track `last_news_monitor_at`, `last_followup_batch_split_at`, and
-  `last_followup_committee_at`. The scheduler updates account/preflight
-  timestamps after each completed cycle, writes `last_news_monitor_at` after a
-  successful monitor pass even if a later pipeline stage fails, and marks final
+  track `last_news_monitor_at`, `last_position_review_at`,
+  `last_followup_batch_split_at`, and `last_followup_committee_at`. The
+  scheduler updates account/preflight timestamps after each completed cycle,
+  writes `last_news_monitor_at` and `last_position_review_at` after successful
+  no-submit stages even if a later pipeline stage fails, and marks final
   planning complete only when the saved pipeline summary completed both
   `final_planning_refresh` and `extract_final_action_plan` with zero blockers.
 - `longterm_pipeline_scheduler_verify.py` is the saved-artifact verifier for
   no-submit cadence runs. It checks scheduler/pipeline status, no-submit command
   fragments, bounded resource controls, final-planning timeout, workflow-smoke
-  submitted count, and required policy-state timestamps.
+  submitted count, optional position-review stage exit code, and required
+  policy-state timestamps.
 - Simulator cadence policy: Python refreshes can run often (roughly every
   15-60 minutes during market hours), portfolio/watchlist news checks should be
   daily and deterministic/cache-first, deeper enrichment should be weekly or
@@ -380,6 +397,9 @@ Near-term scheduler target:
   not automatically spend LLM calls or change portfolio decisions.
 - Keep paid provider flags explicit until cost behavior is comfortable.
 - Keep broker submission disabled unless running the supervised paper BUY path.
+- Use `paper_submit_mode_plan` as a read-only gate checklist before any future
+  submit-capable scheduler profile is drafted. It is not itself authorization
+  and intentionally does not print or save broker-submit commands.
 - Keep Kronos out of scheduler-critical path until recurring no-submit operation
   is stable; then add it as a local advisory sensor for enrichment priority and
   current-position review triggers.

@@ -94,6 +94,18 @@ def _safe_portfolio_news_monitor_template() -> str:
     )
 
 
+def _safe_position_review_queue_template() -> str:
+    return (
+        "python scripts/longterm_position_review_queue.py "
+        "--portfolio-state {portfolio_state} "
+        "--action-plan action_plan.json "
+        "--portfolio-news-monitor {portfolio_news_monitor} "
+        "--journal-db journal.db "
+        "--output {position_review_queue} "
+        "--json"
+    )
+
+
 def _safe_committee_preset_policy_template() -> str:
     return (
         "python scripts/longterm_committee_preset_policy.py "
@@ -300,6 +312,33 @@ def test_validate_portfolio_news_monitor_template_requires_script_and_output(tmp
         )
 
 
+def test_validate_position_review_queue_template_requires_script_and_output(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+
+    validate_scheduler_command_template(
+        _safe_position_review_queue_template(),
+        command_kind="position_review_queue",
+        rules_path=rules_path,
+    )
+
+    with pytest.raises(ValueError, match="longterm_position_review_queue.py"):
+        validate_scheduler_command_template(
+            _safe_position_review_queue_template().replace(
+                "longterm_position_review_queue.py",
+                "longterm_other.py",
+            ),
+            command_kind="position_review_queue",
+            rules_path=rules_path,
+        )
+    with pytest.raises(ValueError, match="--output"):
+        validate_scheduler_command_template(
+            _safe_position_review_queue_template().replace("--output {position_review_queue} ", ""),
+            command_kind="position_review_queue",
+            rules_path=rules_path,
+        )
+
+
 def test_print_plan_only_writes_rendered_summary_without_running_commands(tmp_path):
     rules_path = tmp_path / "active_rules.txt"
     rules_path.write_text("<rules />", encoding="utf-8")
@@ -348,6 +387,84 @@ def test_print_plan_only_renders_portfolio_news_monitor_command(tmp_path):
     assert "portfolio_news_monitor.json" in run.portfolio_news_monitor_command
     assert "{portfolio_news_monitor}" not in run.portfolio_news_monitor_command
     assert run.portfolio_news_monitor_path.endswith("portfolio_news_monitor.json")
+
+
+def test_print_plan_only_renders_position_review_queue_command(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+
+    summary = run_pipeline_scheduler(
+        PipelineSchedulerInputs(
+            output_dir=tmp_path / "scheduler",
+            pipeline_command_template=_safe_pipeline_template(),
+            portfolio_news_monitor_command_template=_safe_portfolio_news_monitor_template(),
+            position_review_queue_command_template=_safe_position_review_queue_template(),
+            rules_path=rules_path,
+        ),
+        PipelineSchedulerConfig(max_runs=1, print_plan_only=True),
+        now_func=FakeClock().now,
+    )
+
+    run = summary.runs[0]
+    assert summary.status == "planned"
+    assert "longterm_position_review_queue.py" in run.position_review_queue_command
+    assert "position_review_queue.json" in run.position_review_queue_command
+    assert "{position_review_queue}" not in run.position_review_queue_command
+    assert run.position_review_queue_path.endswith("position_review_queue.json")
+
+
+def test_successful_scheduler_run_executes_position_review_queue_after_news_monitor(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    calls: list[str] = []
+
+    def fake_runner(command: str) -> tuple[int, str, str]:
+        calls.append(command)
+        if "longterm_portfolio_news_monitor.py" in command:
+            path = Path(command.split("--output ", 1)[1].split(" --", 1)[0].strip('"'))
+            path.write_text(json.dumps({"status": "completed", "order_submission_enabled": False}), encoding="utf-8")
+            return 0, "monitor", ""
+        if "longterm_position_review_queue.py" in command:
+            path = Path(command.split("--output ", 1)[1].split(" --", 1)[0].strip('"'))
+            path.write_text(json.dumps({"status": "completed", "order_submission_enabled": False}), encoding="utf-8")
+            return 0, "review", ""
+        summary_path = Path(command.split("--summary-output ", 1)[1].split(" --", 1)[0].strip('"'))
+        summary_path.write_text(json.dumps({"status": "completed", "order_submission_enabled": False}), encoding="utf-8")
+        return 0, "pipeline", ""
+
+    summary = run_pipeline_scheduler(
+        PipelineSchedulerInputs(
+            output_dir=tmp_path / "scheduler",
+            pipeline_command_template=_safe_pipeline_template(),
+            portfolio_news_monitor_command_template=_safe_portfolio_news_monitor_template(),
+            position_review_queue_command_template=_safe_position_review_queue_template(),
+            rules_path=rules_path,
+        ),
+        PipelineSchedulerConfig(max_runs=1),
+        command_runner=fake_runner,
+        now_func=FakeClock().now,
+    )
+
+    run = summary.runs[0]
+    assert summary.status == "completed"
+    assert [
+        (
+            "portfolio"
+            if "longterm_portfolio_news_monitor.py" in call
+            else "review"
+            if "longterm_position_review_queue.py" in call
+            else "pipeline"
+        )
+        for call in calls
+    ] == [
+        "portfolio",
+        "review",
+        "pipeline",
+    ]
+    assert run.position_review_queue_exit_code == 0
+    assert run.position_review_queue_path.endswith("position_review_queue.json")
+    state = json.loads((tmp_path / "scheduler" / "scheduler_policy_state.json").read_text(encoding="utf-8"))
+    assert state["last_position_review_at"] == run.finished_at
 
 
 def test_successful_scheduler_run_writes_command_logs_health_and_summary(tmp_path):
@@ -1798,6 +1915,48 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_portfolio_news_
     assert "--portfolio-news-followup-batch-size 2" in run["pipeline_command"]
     assert "--require-policy-timestamp last_news_monitor_at" in run["post_run_verification_command"]
     assert "--require-policy-timestamp last_followup_batch_split_at" in run["post_run_verification_command"]
+
+
+def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_position_review_queue(tmp_path, capsys):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    snapshot = tmp_path / "news_snapshot.json"
+    snapshot.write_text("{}", encoding="utf-8")
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--preset",
+                "ongoing-no-submit",
+                "--output-dir",
+                str(tmp_path / "scheduler"),
+                "--rules-path",
+                str(rules_path),
+                "--journal-db",
+                str(tmp_path / "journal.db"),
+                "--ledger-db",
+                str(tmp_path / "paper_ledger.db"),
+                "--action-plan",
+                str(tmp_path / "account_action_plan.json"),
+                "--portfolio-news-monitor",
+                "--portfolio-news-snapshot-file",
+                str(snapshot),
+                "--position-review-queue",
+                "--print-plan-only",
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    run = printed["runs"][0]
+    assert code == 0
+    assert "longterm_position_review_queue.py" in run["position_review_queue_command"]
+    assert "--portfolio-news-monitor" in run["position_review_queue_command"]
+    assert "portfolio_news_monitor.json" in run["position_review_queue_command"]
+    assert "position_review_queue.json" in run["position_review_queue_command"]
+    assert "--submit-paper-orders" not in run["position_review_queue_command"]
+    assert "--require-policy-timestamp last_position_review_at" in run["post_run_verification_command"]
 
 
 def test_pipeline_scheduler_cli_ongoing_no_submit_preset_runs_capped_followup_committee(tmp_path, capsys):

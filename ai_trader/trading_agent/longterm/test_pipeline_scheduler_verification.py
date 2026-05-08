@@ -49,6 +49,8 @@ def _ready_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
                         "--final-planning-refresh --final-planning-timeout-seconds 45"
                     ),
                     "pipeline_exit_code": 0,
+                    "position_review_queue_command": "python scripts/longterm_position_review_queue.py",
+                    "position_review_queue_exit_code": 0,
                     "pipeline_summary_path": str(pipeline_summary),
                     "scheduler_policy_command": "python scripts/longterm_pipeline_scheduler_policy.py",
                     "scheduler_policy_exit_code": 0,
@@ -71,6 +73,7 @@ def _ready_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
             "last_no_submit_preflight_at": "2026-05-06T12:00:00Z",
             "last_account_refresh_at": "2026-05-06T12:00:00Z",
             "last_final_planning_at": "2026-05-06T12:00:00Z",
+            "last_position_review_at": "2026-05-06T12:00:00Z",
             "last_followup_batch_split_at": "2026-05-06T12:00:00Z",
         },
     )
@@ -110,6 +113,8 @@ def test_scheduler_verification_reports_ready_for_no_submit_cadence(tmp_path, ca
     assert printed["blockers"] == []
     assert printed["resource_controls"]["bounded"] is True
     assert printed["latest_run"]["pipeline_exit_code"] == 0
+    assert printed["latest_run"]["position_review_queue_exit_code"] == 0
+    assert printed["policy_state_timestamps"]["last_position_review_at"] == "2026-05-06T12:00:00Z"
     assert printed["policy_state_timestamps"]["last_followup_batch_split_at"] == "2026-05-06T12:00:00Z"
     assert saved["next_safe_action"] == "scheduler_run_verified_for_no_submit_cadence"
 
@@ -135,6 +140,29 @@ def test_scheduler_verification_blocks_submit_capable_commands(tmp_path, capsys)
     printed = json.loads(capsys.readouterr().out)
     assert code == 1
     assert "submit_capable_command_fragment_present" in printed["blockers"]
+
+
+def test_scheduler_verification_checks_position_review_queue_exit_code(tmp_path, capsys):
+    scheduler_summary, _, policy_state = _ready_fixture(tmp_path)
+    payload = json.loads(scheduler_summary.read_text(encoding="utf-8"))
+    payload["runs"][0]["position_review_queue_exit_code"] = 9
+    scheduler_summary.write_text(json.dumps(payload), encoding="utf-8")
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--pipeline-scheduler-summary",
+                str(scheduler_summary),
+                "--policy-state",
+                str(policy_state),
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    assert code == 1
+    assert "position_review_queue_exit_code_nonzero" in printed["blockers"]
 
 
 def test_scheduler_verification_blocks_unbounded_final_planning(tmp_path, capsys):

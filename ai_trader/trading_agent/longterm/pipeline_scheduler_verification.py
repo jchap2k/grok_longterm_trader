@@ -139,6 +139,7 @@ def build_scheduler_cadence_verification_report(
             "run_number": latest_run.get("run_number", ""),
             "status": latest_run.get("status", ""),
             "pipeline_exit_code": latest_run.get("pipeline_exit_code"),
+            "position_review_queue_exit_code": latest_run.get("position_review_queue_exit_code"),
             "scheduler_policy_exit_code": latest_run.get("scheduler_policy_exit_code"),
             "account_refresh_exit_code": latest_run.get("account_refresh_exit_code"),
             "blocker": latest_run.get("blocker", ""),
@@ -154,6 +155,7 @@ def build_scheduler_cadence_verification_report(
                 "last_account_refresh_at",
                 "last_final_planning_at",
                 "last_news_monitor_at",
+                "last_position_review_at",
                 "last_followup_batch_split_at",
                 "last_followup_committee_at",
             )
@@ -197,6 +199,7 @@ def _check_latest_run(*, latest_run: dict[str, Any], blockers: list[str]) -> Non
         blockers.append("latest_run_blocker_present")
     for key in (
         "pre_pipeline_refresh_exit_code",
+        "position_review_queue_exit_code",
         "pipeline_exit_code",
         "scheduler_policy_exit_code",
         "account_refresh_exit_code",
@@ -216,6 +219,9 @@ def _check_no_submit_commands(*, latest_run: dict[str, Any], blockers: list[str]
             "pipeline_command",
             "committee_preset_policy_command",
             "scheduler_policy_command",
+            "portfolio_news_monitor_command",
+            "position_review_queue_command",
+            "post_run_verification_command",
             "account_refresh_command",
         )
     ).lower()

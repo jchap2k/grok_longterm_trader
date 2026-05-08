@@ -129,6 +129,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--portfolio-news-published-after", default="")
     parser.add_argument("--portfolio-news-relevance-threshold", type=float, default=0.55)
     parser.add_argument("--portfolio-news-max-articles-per-symbol", type=int, default=5)
+    parser.add_argument(
+        "--position-review-queue",
+        action="store_true",
+        help="Build a deterministic no-submit sell/rebalance/news review queue after portfolio-news monitoring.",
+    )
     parser.add_argument("--portfolio-news-followup-batches", action="store_true")
     parser.add_argument("--portfolio-news-followup-batch-size", type=int, default=3)
     parser.add_argument("--run-portfolio-news-followup-committee-batches", action="store_true")
@@ -218,6 +223,8 @@ def _validate_ongoing_no_submit_research_bounds(args: argparse.Namespace) -> Non
         )
     if args.portfolio_news_monitor and not args.portfolio_news_snapshot_file:
         raise ValueError("--portfolio-news-monitor with --preset ongoing-no-submit requires --portfolio-news-snapshot-file.")
+    if args.position_review_queue and not args.portfolio_news_monitor:
+        raise ValueError("--position-review-queue with --preset ongoing-no-submit requires --portfolio-news-monitor.")
     if args.portfolio_news_followup_batches and not args.portfolio_news_monitor:
         raise ValueError("--portfolio-news-followup-batches with --preset ongoing-no-submit requires --portfolio-news-monitor.")
     if args.portfolio_news_followup_batch_size < 1:
@@ -492,6 +499,24 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
             args.portfolio_news_published_after,
         )
 
+    position_review_queue_parts: list[str] = []
+    if args.position_review_queue:
+        position_review_queue_parts = [
+            "python",
+            _script_path("longterm_position_review_queue.py"),
+            "--portfolio-state",
+            "{portfolio_state}",
+            "--action-plan",
+            _quote_path_arg(action_plan),
+            "--portfolio-news-monitor",
+            "{portfolio_news_monitor}",
+            "--journal-db",
+            _quote_path_arg(journal_db),
+            "--output",
+            "{position_review_queue}",
+            "--json",
+        ]
+
     scheduler_policy_parts = [
         "python",
         _script_path("longterm_pipeline_scheduler_policy.py"),
@@ -579,6 +604,13 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
                 "last_news_monitor_at",
             ]
         )
+    if args.position_review_queue:
+        post_run_verification_parts.extend(
+            [
+                "--require-policy-timestamp",
+                "last_position_review_at",
+            ]
+        )
     if args.portfolio_news_followup_batches:
         post_run_verification_parts.extend(
             [
@@ -597,6 +629,7 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
     return {
         "pre_pipeline_refresh": pre_refresh,
         "portfolio_news_monitor": " ".join(portfolio_news_monitor_parts),
+        "position_review_queue": " ".join(position_review_queue_parts),
         "pipeline": " ".join(pipeline_parts),
         "scheduler_policy": " ".join(scheduler_policy_parts),
         "account_refresh": " ".join(account_refresh_parts),
@@ -643,6 +676,7 @@ def validate_resolved_scheduler_config(args: argparse.Namespace) -> dict[str, ob
     command_kinds = [
         ("pre_pipeline_refresh", "pre_pipeline_refresh"),
         ("portfolio_news_monitor", "portfolio_news_monitor"),
+        ("position_review_queue", "position_review_queue"),
         ("committee_preset_policy", "committee_preset_policy"),
         ("scheduler_policy", "scheduler_policy"),
         ("account_refresh", "account_refresh"),
@@ -689,6 +723,7 @@ def run_cli(args: argparse.Namespace) -> int:
             output_dir=args.output_dir,
             pre_pipeline_refresh_command_template=templates.get("pre_pipeline_refresh", ""),
             portfolio_news_monitor_command_template=templates.get("portfolio_news_monitor", ""),
+            position_review_queue_command_template=templates.get("position_review_queue", ""),
             pipeline_command_template=templates["pipeline"],
             committee_preset_policy_command_template=templates.get("committee_preset_policy", ""),
             scheduler_policy_command_template=templates.get("scheduler_policy", ""),

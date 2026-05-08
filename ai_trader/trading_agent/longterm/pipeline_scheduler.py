@@ -40,6 +40,7 @@ class PipelineSchedulerInputs:
     rules_path: str | Path
     pre_pipeline_refresh_command_template: str = ""
     portfolio_news_monitor_command_template: str = ""
+    position_review_queue_command_template: str = ""
     committee_preset_policy_command_template: str = ""
     scheduler_policy_command_template: str = ""
     account_refresh_command_template: str = ""
@@ -80,6 +81,11 @@ class PipelineSchedulerRunRecord:
     portfolio_news_monitor_exit_code: int | None = None
     portfolio_news_monitor_stdout_path: str = ""
     portfolio_news_monitor_stderr_path: str = ""
+    position_review_queue_path: str = ""
+    position_review_queue_command: str = ""
+    position_review_queue_exit_code: int | None = None
+    position_review_queue_stdout_path: str = ""
+    position_review_queue_stderr_path: str = ""
     pipeline_exit_code: int | None = None
     pipeline_stdout_path: str = ""
     pipeline_stderr_path: str = ""
@@ -157,6 +163,12 @@ def run_pipeline_scheduler(
         validate_scheduler_command_template(
             inputs.portfolio_news_monitor_command_template,
             command_kind="portfolio_news_monitor",
+            rules_path=rules_path,
+        )
+    if inputs.position_review_queue_command_template:
+        validate_scheduler_command_template(
+            inputs.position_review_queue_command_template,
+            command_kind="position_review_queue",
             rules_path=rules_path,
         )
     if inputs.account_refresh_command_template:
@@ -294,6 +306,11 @@ def validate_scheduler_command_template(
         if "longterm_portfolio_news_monitor.py" not in lowered:
             raise ValueError("Portfolio news monitor command must call scripts/longterm_portfolio_news_monitor.py.")
         _require_flag(command_template, "--output")
+    elif command_kind == "position_review_queue":
+        if "longterm_position_review_queue.py" not in lowered:
+            raise ValueError("Position review queue command must call scripts/longterm_position_review_queue.py.")
+        _require_flag(command_template, "--output")
+        _require_flag(command_template, "--portfolio-state")
     elif command_kind == "post_run_verification":
         if "longterm_pipeline_scheduler_verify.py" not in lowered:
             raise ValueError("Post-run verification command must call scripts/longterm_pipeline_scheduler_verify.py.")
@@ -329,6 +346,7 @@ def _run_one_scheduler_cycle(
     pipeline_health_path = run_dir / "pipeline_artifact_health.json"
     portfolio_state_path = run_dir / "paper_portfolio_state.json"
     portfolio_news_monitor_path = run_dir / "portfolio_news_monitor.json"
+    position_review_queue_path = run_dir / "position_review_queue.json"
     committee_preset_policy_path = run_dir / "committee_preset_policy.json"
     scheduler_policy_path = run_dir / "scheduler_policy.json"
     account_refresh_output_dir = run_dir / "paper_account_refresh"
@@ -342,6 +360,7 @@ def _run_one_scheduler_cycle(
         pipeline_health_path=pipeline_health_path,
         portfolio_state_path=portfolio_state_path,
         portfolio_news_monitor_path=portfolio_news_monitor_path,
+        position_review_queue_path=position_review_queue_path,
         committee_preset_policy_path=committee_preset_policy_path,
         scheduler_policy_path=scheduler_policy_path,
         account_refresh_output_dir=account_refresh_output_dir,
@@ -363,12 +382,24 @@ def _run_one_scheduler_cycle(
         if inputs.portfolio_news_monitor_command_template
         else ""
     )
+    position_review_queue_command = (
+        _render_command(inputs.position_review_queue_command_template, context)
+        if inputs.position_review_queue_command_template
+        else ""
+    )
     monitor_fields = {
         "portfolio_news_monitor_path": str(portfolio_news_monitor_path) if portfolio_news_monitor_command else "",
         "portfolio_news_monitor_command": portfolio_news_monitor_command,
         "portfolio_news_monitor_exit_code": None,
         "portfolio_news_monitor_stdout_path": "",
         "portfolio_news_monitor_stderr_path": "",
+    }
+    position_review_fields = {
+        "position_review_queue_path": str(position_review_queue_path) if position_review_queue_command else "",
+        "position_review_queue_command": position_review_queue_command,
+        "position_review_queue_exit_code": None,
+        "position_review_queue_stdout_path": "",
+        "position_review_queue_stderr_path": "",
     }
     pipeline_command = _prepare_pipeline_command(inputs.pipeline_command_template, context)
     policy_command = (
@@ -410,6 +441,7 @@ def _run_one_scheduler_cycle(
             pipeline_health_path=str(pipeline_health_path),
             pre_pipeline_refresh_command=pre_pipeline_refresh_command,
             **monitor_fields,
+            **position_review_fields,
             pipeline_command=pipeline_command,
             committee_preset_policy_path=str(committee_preset_policy_path) if committee_command else "",
             committee_preset_policy_command=committee_command,
@@ -448,6 +480,7 @@ def _run_one_scheduler_cycle(
                 pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
                 pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
                 **monitor_fields,
+                **position_review_fields,
                 pipeline_command=pipeline_command,
                 committee_preset_policy_path=str(committee_preset_policy_path) if committee_command else "",
                 committee_preset_policy_command=committee_command,
@@ -497,6 +530,46 @@ def _run_one_scheduler_cycle(
                 resource_controls=resource_controls,
             )
 
+    if position_review_queue_command:
+        review_stdout = run_dir / "position_review_queue_stdout.txt"
+        review_stderr = run_dir / "position_review_queue_stderr.txt"
+        review_exit_code, stdout, stderr = command_runner(position_review_queue_command)
+        _write_text(review_stdout, stdout)
+        _write_text(review_stderr, stderr)
+        position_review_fields = {
+            "position_review_queue_path": str(position_review_queue_path),
+            "position_review_queue_command": position_review_queue_command,
+            "position_review_queue_exit_code": review_exit_code,
+            "position_review_queue_stdout_path": str(review_stdout),
+            "position_review_queue_stderr_path": str(review_stderr),
+        }
+        if review_exit_code != 0:
+            return PipelineSchedulerRunRecord(
+                run_number=run_number,
+                scheduler_run_id=scheduler_run_id,
+                started_at=_format_timestamp(started),
+                finished_at=_format_timestamp(now_func()),
+                status="failed",
+                run_dir=str(run_dir),
+                pipeline_output_dir=str(pipeline_output_dir),
+                pipeline_summary_path=str(pipeline_summary_path),
+                pipeline_health_path=str(pipeline_health_path),
+                pre_pipeline_refresh_command=pre_pipeline_refresh_command,
+                pre_pipeline_refresh_exit_code=pre_refresh_exit_code,
+                pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
+                pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
+                **monitor_fields,
+                **position_review_fields,
+                pipeline_command=pipeline_command,
+                committee_preset_policy_path=str(committee_preset_policy_path) if committee_command else "",
+                committee_preset_policy_command=committee_command,
+                scheduler_policy_path=str(scheduler_policy_path) if policy_command else "",
+                scheduler_policy_command=policy_command,
+                account_refresh_command=refresh_command,
+                blocker="position_review_queue_command_failed",
+                resource_controls=resource_controls,
+            )
+
     pipeline_stdout_path = run_dir / "pipeline_command_stdout.txt"
     pipeline_stderr_path = run_dir / "pipeline_command_stderr.txt"
     exit_code, stdout, stderr = command_runner(pipeline_command)
@@ -520,6 +593,7 @@ def _run_one_scheduler_cycle(
             pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
             pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
             **monitor_fields,
+            **position_review_fields,
             pipeline_command=pipeline_command,
             pipeline_exit_code=exit_code,
             pipeline_stdout_path=str(pipeline_stdout_path),
@@ -560,6 +634,7 @@ def _run_one_scheduler_cycle(
                 pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
                 pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
                 **monitor_fields,
+                **position_review_fields,
                 pipeline_command=pipeline_command,
                 pipeline_exit_code=exit_code,
                 pipeline_stdout_path=str(pipeline_stdout_path),
@@ -603,6 +678,7 @@ def _run_one_scheduler_cycle(
                 pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
                 pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
                 **monitor_fields,
+                **position_review_fields,
                 pipeline_command=pipeline_command,
                 pipeline_exit_code=exit_code,
                 pipeline_stdout_path=str(pipeline_stdout_path),
@@ -649,6 +725,7 @@ def _run_one_scheduler_cycle(
                 pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
                 pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
                 **monitor_fields,
+                **position_review_fields,
                 pipeline_command=pipeline_command,
                 pipeline_exit_code=exit_code,
                 pipeline_stdout_path=str(pipeline_stdout_path),
@@ -686,6 +763,7 @@ def _run_one_scheduler_cycle(
         pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
         pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
         **monitor_fields,
+        **position_review_fields,
         pipeline_command=pipeline_command,
         pipeline_exit_code=exit_code,
         pipeline_stdout_path=str(pipeline_stdout_path),
@@ -865,6 +943,7 @@ def _render_context(
     pipeline_health_path: Path,
     portfolio_state_path: Path,
     portfolio_news_monitor_path: Path,
+    position_review_queue_path: Path,
     committee_preset_policy_path: Path,
     scheduler_policy_path: Path,
     account_refresh_output_dir: Path,
@@ -883,6 +962,7 @@ def _render_context(
         "pipeline_health": _quote(pipeline_health_path),
         "portfolio_state": _quote(portfolio_state_path),
         "portfolio_news_monitor": _quote(portfolio_news_monitor_path),
+        "position_review_queue": _quote(position_review_queue_path),
         "committee_preset_policy": _quote(committee_preset_policy_path),
         "scheduler_policy": _quote(scheduler_policy_path),
         "account_refresh_output_dir": _quote(account_refresh_output_dir),
@@ -961,6 +1041,8 @@ def _update_scheduler_policy_state_after_record(
     state["active_rules_sha256"] = hashlib.sha256(rules_path.read_bytes()).hexdigest()
     if record.portfolio_news_monitor_exit_code == 0:
         state["last_news_monitor_at"] = record.finished_at
+    if record.position_review_queue_exit_code == 0:
+        state["last_position_review_at"] = record.finished_at
     if record.status != "completed":
         _write_json(path, state)
         return
