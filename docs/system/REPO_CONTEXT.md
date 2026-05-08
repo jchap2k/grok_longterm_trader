@@ -301,6 +301,11 @@ Scheduler-readiness features now exist:
 - The safe scheduler preset can be launched from the repo root via
   `python ai_trader\trading_agent\scripts\longterm_pipeline_scheduler.py ...`;
   generated child commands use absolute script paths and a trading-agent cwd.
+- The scheduler CLI now supports `--config-file` JSON profiles with a strict
+  `args` object. Example:
+  `longterm/configs/ongoing_no_submit_scheduler.example.json`. This keeps
+  repeatable no-submit scheduler launches in one local profile while rejecting
+  unknown keys and preserving the existing safety checks.
 - One longer full no-submit execute was intentionally stopped after wrapper
   timeout while the empty-batch final-planning refresh was still running; use
   longer supervised windows, existing saved action plans, or smaller resumable

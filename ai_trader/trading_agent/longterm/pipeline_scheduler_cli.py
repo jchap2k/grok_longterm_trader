@@ -30,6 +30,14 @@ def build_parser() -> argparse.ArgumentParser:
         description="Run a recurring no-submit research-to-paper pipeline scheduler."
     )
     parser.add_argument(
+        "--config-file",
+        default="",
+        help=(
+            "Optional JSON profile with an 'args' object using argparse dest names. "
+            "Explicit CLI args override scalar profile values."
+        ),
+    )
+    parser.add_argument(
         "--preset",
         choices=["", "ongoing-no-submit"],
         default="",
@@ -215,6 +223,66 @@ def _validate_ongoing_no_submit_research_bounds(args: argparse.Namespace) -> Non
                 "--run-portfolio-news-followup-committee-batches with --preset ongoing-no-submit requires "
                 "--portfolio-news-followup-max-batches to bound LLM committee work."
             )
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse CLI args, optionally expanding a JSON scheduler profile first."""
+    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser.add_argument("--config-file", default="")
+    known, remaining = pre_parser.parse_known_args(argv)
+    if not known.config_file:
+        return build_parser().parse_args(argv)
+    profile_args = _load_config_file_args(known.config_file)
+    expanded = [*profile_args, *remaining]
+    return build_parser().parse_args(expanded)
+
+
+def _load_config_file_args(config_file: str | Path) -> list[str]:
+    path = Path(config_file).expanduser().resolve()
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("--config-file must contain a JSON object.")
+    raw_args = payload.get("args", payload)
+    if not isinstance(raw_args, dict):
+        raise ValueError("--config-file 'args' must be a JSON object.")
+    ignored = {"schema_version", "description", "notes"}
+    allowed = _config_arg_specs()
+    expanded: list[str] = []
+    for key, value in raw_args.items():
+        if key in ignored:
+            continue
+        if key == "config_file":
+            continue
+        spec = allowed.get(key)
+        if spec is None:
+            raise ValueError(f"Unknown scheduler config arg: {key}")
+        option, action = spec
+        if action in {"store_true", "store_false"}:
+            enabled = bool(value)
+            if action == "store_false":
+                enabled = not enabled
+            if enabled:
+                expanded.append(option)
+            continue
+        if value is None:
+            continue
+        expanded.extend([option, str(value)])
+    return expanded
+
+
+def _config_arg_specs() -> dict[str, tuple[str, str]]:
+    specs: dict[str, tuple[str, str]] = {}
+    for action in build_parser()._actions:
+        if not action.option_strings or action.dest == "help":
+            continue
+        option = max(action.option_strings, key=len)
+        if isinstance(action, argparse._StoreTrueAction):
+            specs[action.dest] = (option, "store_true")
+        elif isinstance(action, argparse._StoreFalseAction):
+            specs[action.dest] = (option, "store_false")
+        else:
+            specs[action.dest] = (option, "store")
+    return specs
 
 
 def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, str]:
@@ -584,7 +652,7 @@ def run_cli(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    return run_cli(build_parser().parse_args(argv))
+    return run_cli(parse_args(argv))
 
 
-__all__ = ["build_parser", "main", "run_cli"]
+__all__ = ["build_parser", "main", "parse_args", "run_cli"]

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "description": "Example safe recurring scheduler profile. Fill paths locally; this does not enable broker order submission.",
+  "args": {
+    "preset": "ongoing-no-submit",
+    "output_dir": "path/to/pipeline_scheduler_runs",
+    "journal_db": "path/to/committee_research_journal.db",
+    "ledger_db": "path/to/paper_ledger.db",
+    "action_plan": "path/to/account_action_plan.json",
+    "profile_config": "ai_trader/trading_agent/longterm/configs/roth_ira_profile.json",
+    "allow_existing_paper_positions": true,
+    "expected_cash_from_portfolio_state": true,
+    "max_runs": 1,
+    "interval_seconds": 3600,
+    "json": true
+  }
+}

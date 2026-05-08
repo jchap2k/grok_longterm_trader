@@ -13,7 +13,7 @@ from longterm.pipeline_scheduler import (
     run_pipeline_scheduler,
     validate_scheduler_command_template,
 )
-from longterm.pipeline_scheduler_cli import build_parser, run_cli
+from longterm.pipeline_scheduler_cli import build_parser, parse_args, run_cli
 
 
 class FakeClock:
@@ -1515,6 +1515,87 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_normalizes_relative_use
         assert str(path.resolve()) in all_commands
     assert "--profile-config profile.json" not in all_commands
     assert "--market-regime-file market_regime.json" not in all_commands
+
+
+def test_pipeline_scheduler_cli_loads_safe_json_profile_args(tmp_path):
+    config_path = tmp_path / "scheduler_profile.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "description": "repo local no-submit profile",
+                "args": {
+                    "preset": "ongoing-no-submit",
+                    "output_dir": str(tmp_path / "scheduler"),
+                    "rules_path": str(tmp_path / "active_rules.txt"),
+                    "journal_db": str(tmp_path / "journal.db"),
+                    "ledger_db": str(tmp_path / "paper_ledger.db"),
+                    "action_plan": str(tmp_path / "account_action_plan.json"),
+                    "profile_config": str(tmp_path / "profile.json"),
+                    "allow_existing_paper_positions": True,
+                    "expected_cash_from_portfolio_state": True,
+                    "max_runs": 2,
+                    "interval_seconds": 7,
+                    "print_plan_only": True,
+                    "json": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    args = parse_args(["--config-file", str(config_path)])
+
+    assert args.preset == "ongoing-no-submit"
+    assert args.output_dir == str(tmp_path / "scheduler")
+    assert args.rules_path == str(tmp_path / "active_rules.txt")
+    assert args.journal_db == str(tmp_path / "journal.db")
+    assert args.ledger_db == str(tmp_path / "paper_ledger.db")
+    assert args.action_plan == str(tmp_path / "account_action_plan.json")
+    assert args.profile_config == str(tmp_path / "profile.json")
+    assert args.allow_existing_paper_positions is True
+    assert args.expected_cash_from_portfolio_state is True
+    assert args.max_runs == 2
+    assert args.interval_seconds == 7
+    assert args.print_plan_only is True
+    assert args.json is True
+
+
+def test_pipeline_scheduler_cli_rejects_unknown_json_profile_args(tmp_path):
+    config_path = tmp_path / "scheduler_profile.json"
+    config_path.write_text(
+        json.dumps({"args": {"preset": "ongoing-no-submit", "submit_paper_orders": True}}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Unknown scheduler config arg"):
+        parse_args(["--config-file", str(config_path)])
+
+
+def test_pipeline_scheduler_cli_json_profile_scalar_cli_args_override_config(tmp_path):
+    config_path = tmp_path / "scheduler_profile.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "args": {
+                    "preset": "ongoing-no-submit",
+                    "output_dir": "from_config",
+                    "journal_db": "journal.db",
+                    "ledger_db": "ledger.db",
+                    "action_plan": "action_plan.json",
+                    "max_runs": 2,
+                    "print_plan_only": True,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    args = parse_args(["--config-file", str(config_path), "--output-dir", "from_cli", "--max-runs", "1"])
+
+    assert args.output_dir == "from_cli"
+    assert args.max_runs == 1
+    assert args.print_plan_only is True
 
 
 def test_pipeline_scheduler_cli_ongoing_no_submit_preset_requires_core_paths(tmp_path):

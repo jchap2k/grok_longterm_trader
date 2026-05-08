@@ -950,6 +950,20 @@ python scripts/longterm_pipeline_scheduler.py --preset ongoing-no-submit --max-r
 python scripts/longterm_pipeline_scheduler.py --preset ongoing-no-submit --run-once --output-dir path\to\pipeline_scheduler_runs --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --profile-config path\to\roth_ira_profile.json --portfolio-news-monitor --portfolio-news-snapshot-file path\to\raw_news_by_symbol.json --portfolio-news-watchlist-ideas path\to\research_queue_selected.json --portfolio-news-published-after 2026-05-01 --final-planning-refresh --final-planning-timeout-seconds 900 --planning-capital-from-portfolio-state --expected-cash-from-portfolio-state --allow-existing-paper-positions --json
 ```
 
+For repeatable local operation, copy
+`longterm\configs\ongoing_no_submit_scheduler.example.json`, fill the local
+artifact paths, and launch the same safe preset with:
+
+```powershell
+python scripts/longterm_pipeline_scheduler.py --config-file path\to\ongoing_no_submit_scheduler.local.json
+```
+
+The config file accepts an `args` object using the same argparse destination
+names as the CLI, for example `journal_db`, `action_plan`, and
+`allow_existing_paper_positions`. Unknown config keys fail closed so typos do
+not silently drop scheduler controls. Explicit command-line scalar values can
+override config values for one run.
+
 The same preset can also run a bounded upstream research cadence before the
 paper-preflight chain. Keep paid/reasoning work capped; `--perplexity-research`
 requires an explicit `--research-max-pass-count`, and generated committee
