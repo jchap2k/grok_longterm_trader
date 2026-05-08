@@ -254,6 +254,16 @@ Scheduler-readiness features now exist:
     proved the safe scheduler preset now renders the automatic post-run
     verifier with resource, account-refresh, preflight, and final-planning
     timestamp checks.
+  - `%TEMP%\longterm_scheduler_watch_20260507_173916`: two-cycle no-submit
+    scheduler watch launched from `ai_trader/trading_agent` against copied
+    journal/ledger artifacts and a saved action plan. Both runs completed with
+    `error_count=0`, `order_submission_enabled=false`, pre-pipeline Alpaca
+    paper snapshot `0`, pipeline `0`, scheduler policy `0`, post-run verifier
+    `0`, account/dashboard refresh `0`, bounded resource controls, generated
+    dashboard manifests/sites, and current portfolio snapshots showing 10 paper
+    holdings plus `$67,641.28` cash. The first attempted launch from the repo
+    root failed safely because generated preset commands expect the scheduler
+    cwd to be `ai_trader/trading_agent`.
 - Policy-state artifacts track `last_full_research_at`,
   `last_no_submit_preflight_at`, `last_account_refresh_at`, and
   `last_final_planning_at`; when portfolio-news features are enabled they also
@@ -279,6 +289,8 @@ Scheduler-readiness features now exist:
 - Committee batch runs are resumable and bounded by `--max-batches`.
 - Full research cadence has been proven through smaller chunks and completed
   all generated committee batches in a bounded run.
+- A saved-action-plan recurring no-submit watch has now completed two cycles
+  with the automatic post-run verifier and dashboard refresh enabled.
 - One longer full no-submit execute was intentionally stopped after wrapper
   timeout while the empty-batch final-planning refresh was still running; use
   longer supervised windows, existing saved action plans, or smaller resumable

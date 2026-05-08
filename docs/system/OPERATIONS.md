@@ -937,6 +937,11 @@ python scripts/longterm_pipeline_scheduler.py --max-runs 3 --interval-seconds 36
 For the standard ongoing paper-review loop, prefer the built-in safe preset so
 the operator does not have to hand-maintain four long command templates:
 
+Run these preset commands from `ai_trader/trading_agent`. The preset renders
+subcommands as `python scripts\...`, so launching from the repo root will fail
+closed before the pipeline starts because the generated script paths are not
+there.
+
 ```powershell
 python scripts/longterm_pipeline_scheduler.py --preset ongoing-no-submit --run-once --output-dir path\to\pipeline_scheduler_runs --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --profile-config path\to\roth_ira_profile.json --market-regime-file path\to\market_regime.json --final-planning-refresh --final-planning-timeout-seconds 900 --planning-capital-from-portfolio-state --expected-cash-from-portfolio-state --allow-existing-paper-positions --json
 python scripts/longterm_pipeline_scheduler.py --preset ongoing-no-submit --max-runs 3 --interval-seconds 3600 --output-dir path\to\pipeline_scheduler_runs --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --action-plan path\to\account_action_plan.json --profile-config path\to\roth_ira_profile.json --market-regime-file path\to\market_regime.json --final-planning-refresh --final-planning-timeout-seconds 900 --planning-capital-from-portfolio-state --expected-cash-from-portfolio-state --allow-existing-paper-positions --json
@@ -1021,6 +1026,11 @@ window for fresh account-action planning. The upstream research and
 paper-preflight path is resumable and fast when it uses saved campaign
 artifacts; the empty-batch final-planning refresh can be materially slower on
 large journals and should be treated as its own bounded scheduler chunk.
+Current proof point: a copied-artifact two-cycle watch under
+`%TEMP%\longterm_scheduler_watch_20260507_173916` completed with no submitted
+orders, pre-pipeline paper snapshots, no-submit pipeline runs, scheduler-policy
+reports, post-run verifier reports, and dashboard/account refreshes all
+returning exit code `0`.
 
 The recurring pipeline scheduler is a thin command orchestrator, not a new
 trading authority. It validates the command templates before running them,
