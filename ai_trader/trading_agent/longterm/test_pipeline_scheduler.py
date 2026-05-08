@@ -1976,6 +1976,68 @@ def test_pipeline_scheduler_cli_validate_config_only_does_not_create_run_dirs(tm
     assert not output_dir.exists()
 
 
+def test_pipeline_scheduler_cli_validate_config_only_reports_unattended_no_submit_readiness(tmp_path, capsys):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    output_dir = tmp_path / "scheduler"
+    news_snapshot = tmp_path / "portfolio_news_snapshot.json"
+    handoff = tmp_path / "scheduler_handoff.json"
+    config_path = tmp_path / "scheduler_profile.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "args": {
+                    "preset": "ongoing-no-submit",
+                    "output_dir": str(output_dir),
+                    "rules_path": str(rules_path),
+                    "journal_db": str(tmp_path / "journal.db"),
+                    "ledger_db": str(tmp_path / "paper_ledger.db"),
+                    "action_plan": str(tmp_path / "account_action_plan.json"),
+                    "portfolio_news_monitor": True,
+                    "portfolio_news_snapshot_file": str(news_snapshot),
+                    "position_review_queue": True,
+                    "scheduler_handoff": str(handoff),
+                    "scheduler_review_bundle": True,
+                    "portfolio_news_followup_batches": True,
+                    "run_portfolio_news_followup_committee_batches": True,
+                    "portfolio_news_followup_max_batches": 1,
+                    "json": True,
+                    "validate_config_only": True,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    code = run_cli(parse_args(["--config-file", str(config_path)]))
+
+    printed = json.loads(capsys.readouterr().out)
+    mode = printed["operating_mode_summary"]
+    assert code == 0
+    assert printed["recurring_no_submit_ready"] is True
+    assert mode["name"] == "recurring_no_submit"
+    assert mode["ready_for_unattended_no_submit"] is True
+    assert mode["broker_submit_boundary"] == "blocked_by_no_submit_scheduler"
+    assert mode["scheduler_controls"]["max_runs"] == 1
+    assert mode["scheduler_controls"]["interval_seconds"] == 3600.0
+    assert mode["stage_flags"] == {
+        "pre_pipeline_refresh": True,
+        "portfolio_news_monitor": True,
+        "position_review_queue": True,
+        "research_pipeline": True,
+        "scheduler_policy": True,
+        "account_refresh": True,
+        "post_run_verification": True,
+        "scheduler_review_bundle": True,
+        "portfolio_news_followup_batches": True,
+        "portfolio_news_followup_committee_batches": True,
+        "generated_committee_batches": False,
+        "final_planning_refresh": False,
+    }
+    assert mode["operator_next_step"] == "schedule_or_run_no_submit_profile_after_operator_window_approval"
+    assert not output_dir.exists()
+
+
 def test_pipeline_scheduler_cli_validate_config_only_rejects_unbounded_paid_provider(tmp_path):
     rules_path = tmp_path / "active_rules.txt"
     rules_path.write_text("<rules />", encoding="utf-8")

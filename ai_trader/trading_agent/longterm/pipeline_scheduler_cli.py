@@ -729,18 +729,87 @@ def validate_resolved_scheduler_config(args: argparse.Namespace) -> dict[str, ob
         if command:
             validate_scheduler_command_template(command, command_kind=command_kind, rules_path=rules_path)
     commands = {key: value for key, value in templates.items() if value}
+    resource_controls = derive_scheduler_resource_controls(templates["pipeline"])
+    operating_mode_summary = _build_operating_mode_summary(
+        args=args,
+        commands=commands,
+        resource_controls=resource_controls,
+    )
     return {
         "schema_version": 1,
         "mode": "pipeline_scheduler_config_validation",
         "status": "ready",
         "order_submission_enabled": False,
+        "recurring_no_submit_ready": operating_mode_summary["ready_for_unattended_no_submit"],
+        "operating_mode_summary": operating_mode_summary,
         "config_file": str(Path(args.config_file).expanduser().resolve()) if args.config_file else "",
         "preset": args.preset,
         "output_dir": str(Path(args.output_dir).expanduser().resolve()),
         "rules_path": str(rules_path.expanduser().resolve()),
         "commands": commands,
-        "resource_controls": derive_scheduler_resource_controls(templates["pipeline"]),
+        "resource_controls": resource_controls,
         "next_safe_action": "run_scheduler_profile_when_operator_window_is_approved",
+    }
+
+
+def _build_operating_mode_summary(
+    *,
+    args: argparse.Namespace,
+    commands: dict[str, str],
+    resource_controls: dict[str, object],
+) -> dict[str, object]:
+    """Summarize whether a resolved profile is ready for recurring no-submit operation."""
+    required_no_submit_stages = (
+        "pre_pipeline_refresh",
+        "pipeline",
+        "scheduler_policy",
+        "account_refresh",
+        "post_run_verification",
+    )
+    stage_flags = {
+        "pre_pipeline_refresh": bool(commands.get("pre_pipeline_refresh")),
+        "portfolio_news_monitor": bool(commands.get("portfolio_news_monitor")),
+        "position_review_queue": bool(commands.get("position_review_queue")),
+        "research_pipeline": bool(commands.get("pipeline")),
+        "scheduler_policy": bool(commands.get("scheduler_policy")),
+        "account_refresh": bool(commands.get("account_refresh")),
+        "post_run_verification": bool(commands.get("post_run_verification")),
+        "scheduler_review_bundle": bool(commands.get("scheduler_review_bundle")),
+        "portfolio_news_followup_batches": bool(args.portfolio_news_followup_batches),
+        "portfolio_news_followup_committee_batches": bool(args.run_portfolio_news_followup_committee_batches),
+        "generated_committee_batches": bool(args.run_generated_committee_batches),
+        "final_planning_refresh": bool(args.final_planning_refresh),
+    }
+    missing_required_stages = [
+        stage_name for stage_name in required_no_submit_stages if not commands.get(stage_name)
+    ]
+    readiness_blockers: list[str] = []
+    if args.preset != "ongoing-no-submit":
+        readiness_blockers.append("preset_is_not_ongoing_no_submit")
+    if missing_required_stages:
+        readiness_blockers.append("missing_" + "_and_".join(missing_required_stages))
+    if not resource_controls.get("bounded", False):
+        readiness_blockers.append(str(resource_controls.get("bounded_reason") or "resource_controls_unbounded"))
+    ready = not readiness_blockers
+    return {
+        "schema_version": 1,
+        "name": "recurring_no_submit" if args.preset == "ongoing-no-submit" else "custom_no_submit",
+        "ready_for_unattended_no_submit": ready,
+        "readiness_blockers": readiness_blockers,
+        "broker_submit_boundary": "blocked_by_no_submit_scheduler",
+        "scheduler_controls": {
+            "max_runs": int(args.max_runs),
+            "interval_seconds": float(args.interval_seconds),
+            "run_once": bool(args.run_once),
+            "continue_on_error": bool(args.continue_on_error),
+            "print_plan_only": bool(args.print_plan_only),
+        },
+        "stage_flags": stage_flags,
+        "operator_next_step": (
+            "schedule_or_run_no_submit_profile_after_operator_window_approval"
+            if ready
+            else "resolve_readiness_blockers_before_scheduling"
+        ),
     }
 
 

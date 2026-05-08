@@ -1057,8 +1057,21 @@ and prints bounded resource controls without creating scheduler run folders or
 calling a broker. If `summary_output` is supplied, validation writes the same
 JSON payload there so a dashboard/runbook/operator checklist can inspect the
 profile without launching a cycle; that payload includes the resolved
-`config_file` path for provenance. Remove `validate_config_only` from the local
-profile, or set it to `false`, after the profile is reviewed:
+`config_file` path for provenance.
+
+Validation also emits an `operating_mode_summary`. For the safe preset, a
+reviewed profile should show `recurring_no_submit_ready=true`,
+`operating_mode_summary.name=recurring_no_submit`, and
+`ready_for_unattended_no_submit=true`. The summary lists active stages such as
+pre-pipeline paper snapshot, portfolio-news monitor, position-review queue,
+research pipeline, scheduler policy, account/dashboard refresh, post-run
+verification, review bundle, and capped follow-up committee work. It also keeps
+`broker_submit_boundary=blocked_by_no_submit_scheduler`, making the scheduler
+profile clearly safe for unattended no-submit operation while still stopping
+short of supervised paper submission.
+
+Remove `validate_config_only` from the local profile, or set it to `false`,
+after the profile is reviewed:
 
 ```powershell
 python scripts/longterm_pipeline_scheduler.py --config-file path\to\ongoing_no_submit_scheduler.local.json

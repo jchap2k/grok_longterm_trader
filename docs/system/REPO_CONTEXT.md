@@ -11,8 +11,8 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-08 by Codex after the full no-submit scheduler
-review-bundle smoke completed with all stages green and submit disabled.
+Last updated: 2026-05-08 by Codex after adding explicit recurring no-submit
+scheduler readiness reporting to config validation.
 
 ## 1. Project Identity
 
@@ -396,6 +396,15 @@ Scheduler-readiness features now exist:
   inspection, including the resolved `config_file` path for provenance. Keep
   validation enabled in new local profiles until the operator has reviewed the
   generated command surface.
+- Config validation now includes `recurring_no_submit_ready` plus an
+  `operating_mode_summary`. For the safe preset, a scheduler profile is ready
+  for unattended no-submit operation only when required stages are present,
+  resource controls are bounded, and the submit boundary remains
+  `blocked_by_no_submit_scheduler`. The summary exposes active stage flags for
+  paper snapshot, portfolio-news monitor, position-review queue, research
+  pipeline, scheduler policy, account/dashboard refresh, post-run verifier,
+  scheduler-review bundle, generated committee batches, final planning, and
+  portfolio-news follow-up committee work.
 
 Book-principle context:
 - `knowledge_agent/sources/longterm_trader/books/The Intelligent Investor Third
