@@ -475,6 +475,24 @@ def test_motley_fool_capture_cli_outputs_investigation_ideas(capsys):
     assert payload[0]["idea_source"] == "motley_fool_dashboard"
 
 
+def test_motley_fool_capture_cli_defaults_to_fresh_new_recommendations(capsys):
+    captured_sources = []
+
+    def fake_capture(source_key, *, profile_dir=None, url=None):
+        captured_sources.append(source_key)
+        return [{"symbol": "MOGA", "idea_source": f"motley_fool_{source_key}"}]
+
+    parser = build_motley_parser()
+    args = parser.parse_args([])
+
+    exit_code = run_motley_cli(args, capture_func=fake_capture)
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert captured_sources == ["new_recommendations"]
+    assert payload[0]["idea_source"] == "motley_fool_new_recommendations"
+
+
 def test_motley_fool_settings_missing_config_is_disabled(tmp_path):
     settings = load_motley_fool_capture_settings(tmp_path / "missing.json")
 
@@ -482,6 +500,25 @@ def test_motley_fool_settings_missing_config_is_disabled(tmp_path):
     assert settings.cookie_ready is False
     assert settings.can_capture is False
     assert settings.should_open_login is False
+
+
+def test_motley_fool_settings_default_sources_prioritize_fresh_recommendations(tmp_path):
+    config_path = tmp_path / "motley_fool_capture.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "motley_fool": {
+                    "enabled": True,
+                    "cookie_ready": True,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_motley_fool_capture_settings(config_path)
+
+    assert settings.sources == ["new_recommendations"]
 
 
 def test_motley_fool_settings_enabled_cookie_ready_can_capture(tmp_path):

@@ -12,7 +12,7 @@ CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"
 DEFAULT_MOTLEY_FOOL_CONFIG_PATH = CONFIG_DIR / "motley_fool_capture.json"
 DEFAULT_PROFILE_DIR = Path.home() / ".grok3api_chrome_profile"
 DEFAULT_LOGIN_URL = "https://www.fool.com/premium?watchSymbols=NASDAQ%3ACRWD"
-DEFAULT_SOURCES = ["new_recommendations", "analyst_rankings", "quant_rankings"]
+DEFAULT_SOURCES = ["new_recommendations"]
 
 
 @dataclass(frozen=True)

@@ -1835,16 +1835,19 @@ python scripts/longterm_capital_alert.py --active-sleeve-value 34000 --available
 
 Motley Fool premium tables are treated as a high-quality idea source, not a buy authority. Captured rows become investigation ideas that still require independent long-term research, valuation review, thesis critique, and portfolio-fit checks.
 
-Capture the full recommendation/ranking sources:
+Capture fresh recommendations, which is the recurring default because Stock
+Advisor-style new picks are most useful close to the recommendation date:
 
 ```powershell
 python scripts/longterm_motley_fool_capture.py
+python scripts/longterm_motley_fool_capture.py --source new_recommendations
 ```
 
-Capture one source:
+Capture broader context intentionally when expanding the universe or comparing
+rankings:
 
 ```powershell
-python scripts/longterm_motley_fool_capture.py --source new_recommendations
+python scripts/longterm_motley_fool_capture.py --source all_full
 python scripts/longterm_motley_fool_capture.py --source stock_advisor_service
 python scripts/longterm_motley_fool_capture.py --source analyst_rankings
 python scripts/longterm_motley_fool_capture.py --source quant_rankings
@@ -1852,12 +1855,12 @@ python scripts/longterm_motley_fool_capture.py --source dashboard
 ```
 
 The capture uses the logged-in Chrome profile at `~/.grok3api_chrome_profile`.
-Use one capture process at a time for that profile. The default full capture runs
-the pages sequentially so the profile is not opened by multiple Playwright
-sessions at once. The optional `stock_advisor_service` source targets the full
-Stock Advisor service page for universe expansion and repeat-count context; it
-is not part of the default full capture because fresh `new_recommendations`
-remain the higher-priority recurring source.
+Use one capture process at a time for that profile. `--source all_full` runs the
+fresh recommendation, analyst ranking, and AI ranking pages sequentially so the
+profile is not opened by multiple Playwright sessions at once. The optional
+`stock_advisor_service` source targets the full Stock Advisor service page for
+universe expansion and repeat-count context; it is not part of the recurring
+default because fresh `new_recommendations` remain the higher-priority source.
 
 Captured Motley Fool ideas include `motley_fool_company_url` / `source_url`
 when the premium table exposes a per-company link. Some Fool tables use numeric

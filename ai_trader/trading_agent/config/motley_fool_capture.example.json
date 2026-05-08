@@ -6,9 +6,7 @@
     "open_login_when_cookie_missing": true,
     "login_url": "https://www.fool.com/premium?watchSymbols=NASDAQ%3ACRWD",
     "sources": [
-      "new_recommendations",
-      "analyst_rankings",
-      "quant_rankings"
+      "new_recommendations"
     ]
   }
 }

@@ -123,6 +123,9 @@ Broad workflow:
 
 Motley Fool state:
 - Optional/config-gated premium intake exists.
+- The recurring capture default is `new_recommendations` from
+  `https://www.fool.com/premium/new-recs`; broader `all_full`, rankings, and
+  Stock Advisor service-list captures are intentional universe/context runs.
 - `new_recommendations` rows carry fresh-rec priority metadata.
 - Repeat counts from `Times Rec'd` are stored as source recommendation counts.
 - Per-ticker Fool summary/financial pages can enrich covered names.

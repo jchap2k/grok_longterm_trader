@@ -14,8 +14,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--source",
         choices=sorted(default_motley_fool_sources().keys()) + ["all_full"],
-        default="all_full",
-        help="Source to capture. all_full captures new recommendations, analyst rankings, and AI rankings.",
+        default="new_recommendations",
+        help=(
+            "Source to capture. Defaults to fresh new recommendations. "
+            "Use all_full for new recommendations, analyst rankings, and AI rankings."
+        ),
     )
     parser.add_argument("--profile-dir", default=None)
     parser.add_argument("--url", default=None)

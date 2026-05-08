@@ -383,10 +383,10 @@ as `source_recommendation_count` and adds the supplied long-run service
 performance snapshot as display-only attribution context only.
 
 `longterm/motley_fool_capture.py`
-Uses the logged-in Playwright/Chrome profile to capture Motley Fool premium table payloads from full new-recommendation, analyst-ranking, AI-ranking, or dashboard pages. Table extraction preserves cell-level links alongside cell text so downstream intake can retain per-ticker source URLs.
+Uses the logged-in Playwright/Chrome profile to capture Motley Fool premium table payloads from fresh new-recommendation, Stock Advisor service-list, analyst-ranking, AI-ranking, or dashboard pages. Table extraction preserves cell-level links alongside cell text so downstream intake can retain per-ticker source URLs.
 
 `longterm/motley_fool_capture_cli.py`
-Provides a command surface for exporting captured Motley Fool ideas as JSON. The default source set captures the full new recommendations, analyst rankings, and AI rankings pages; dashboard capture is available as a smoke test.
+Provides a command surface for exporting captured Motley Fool ideas as JSON. The default source captures `new_recommendations` from `https://www.fool.com/premium/new-recs` so recurring runs prioritize fresh Stock Advisor-style picks near their recommendation date. Use `--source all_full`, `--source stock_advisor_service`, or ranking-specific sources intentionally for wider universe expansion and repeat-count context.
 
 `longterm/motley_fool_company_enrichment.py`
 Fetches and parses per-company Fool IQ pages into structured research-packet context. The default runtime backend is designed for Scrapling Stealthy with the logged-in Chrome profile, while the parser remains provider-neutral and testable from saved snapshots. It captures optional sections such as market snapshot, recommendation context, company overview, premium coverage, Moneyball scores, financial metric tables, recent earnings, and bull/bear cases; it stores structured summaries, metrics, and source URLs rather than full paid article dumps.
@@ -397,9 +397,10 @@ Provides a command surface for enriching one idea or an idea batch from captured
 `config/motley_fool_capture.json`
 Local scheduler-facing toggle for optional Motley Fool intake. It records
 whether Fool is enabled on this machine, whether the logged-in Chrome profile is
-ready, which profile to use, and which premium sources should be captured. The
-real local file is ignored; `config/motley_fool_capture.example.json` is the
-repo-safe template.
+ready, which profile to use, and which premium sources should be captured. When
+enabled and no source list is supplied, the recurring default is
+`new_recommendations` only. The real local file is ignored;
+`config/motley_fool_capture.example.json` is the repo-safe template.
 
 `longterm/motley_fool_settings.py`
 Loads the optional Motley Fool config for future scheduler wiring. Missing config
