@@ -310,8 +310,9 @@ Scheduler-readiness features now exist:
   prints commands/resource controls without creating run folders, calling
   brokers, or executing scheduler stages. When `summary_output` is supplied,
   validation writes the same JSON payload to that file for dashboard/runbook
-  inspection. Keep validation enabled in new local profiles until the operator
-  has reviewed the generated command surface.
+  inspection, including the resolved `config_file` path for provenance. Keep
+  validation enabled in new local profiles until the operator has reviewed the
+  generated command surface.
 - One longer full no-submit execute was intentionally stopped after wrapper
   timeout while the empty-batch final-planning refresh was still running; use
   longer supervised windows, existing saved action plans, or smaller resumable

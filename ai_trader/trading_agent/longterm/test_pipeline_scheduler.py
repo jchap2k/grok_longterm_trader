@@ -1546,6 +1546,7 @@ def test_pipeline_scheduler_cli_loads_safe_json_profile_args(tmp_path):
 
     args = parse_args(["--config-file", str(config_path)])
 
+    assert args.config_file == str(config_path)
     assert args.preset == "ongoing-no-submit"
     assert args.output_dir == str(tmp_path / "scheduler")
     assert args.rules_path == str(tmp_path / "active_rules.txt")
@@ -1630,6 +1631,7 @@ def test_pipeline_scheduler_cli_validate_config_only_does_not_create_run_dirs(tm
     assert printed["status"] == "ready"
     assert printed["mode"] == "pipeline_scheduler_config_validation"
     assert printed["order_submission_enabled"] is False
+    assert printed["config_file"] == str(config_path.resolve())
     assert printed["output_dir"] == str(output_dir.resolve())
     assert printed["resource_controls"]["bounded"] is True
     assert "longterm_research_to_paper_pipeline.py" in printed["commands"]["pipeline"]

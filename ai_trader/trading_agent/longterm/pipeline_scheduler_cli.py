@@ -240,7 +240,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     if not known.config_file:
         return build_parser().parse_args(argv)
     profile_args = _load_config_file_args(known.config_file)
-    expanded = [*profile_args, *remaining]
+    expanded = ["--config-file", known.config_file, *profile_args, *remaining]
     return build_parser().parse_args(expanded)
 
 
@@ -652,6 +652,7 @@ def validate_resolved_scheduler_config(args: argparse.Namespace) -> dict[str, ob
         "mode": "pipeline_scheduler_config_validation",
         "status": "ready",
         "order_submission_enabled": False,
+        "config_file": str(Path(args.config_file).expanduser().resolve()) if args.config_file else "",
         "preset": args.preset,
         "output_dir": str(Path(args.output_dir).expanduser().resolve()),
         "rules_path": str(rules_path.expanduser().resolve()),

@@ -968,7 +968,8 @@ resolves generated commands, checks the same no-submit command-template rules,
 and prints bounded resource controls without creating scheduler run folders or
 calling a broker. If `summary_output` is supplied, validation writes the same
 JSON payload there so a dashboard/runbook/operator checklist can inspect the
-profile without launching a cycle. Remove `validate_config_only` from the local
+profile without launching a cycle; that payload includes the resolved
+`config_file` path for provenance. Remove `validate_config_only` from the local
 profile, or set it to `false`, after the profile is reviewed:
 
 ```powershell
