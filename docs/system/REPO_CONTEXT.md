@@ -321,11 +321,20 @@ Scheduler-readiness features now exist:
   `--run-mode no-submit` renders a recurring no-submit profile without
   hand-editing JSON; the renderer rejects submit-capable keys such as
   `submit_paper_orders` and `confirm_paper_submit`.
+- `scripts/longterm_scheduler_task_plan.py` turns a reviewed no-submit run
+  profile into a read-only Windows Task Scheduler plan artifact containing the
+  scheduler command plus `schtasks` and PowerShell registration commands. It
+  does not register tasks, rejects validation-only profiles, and rejects
+  submit-capable profile keys.
 - Dashboard manifests can point at a saved scheduler config-validation JSON via
   `scheduler_config_validation`; the localhost server exposes it at
   `/api/scheduler-config-validation.json`, includes it in `/api/summary.json`,
   and renders a read-only Scheduler Profile card on the Safety / Preflight
   section.
+- Dashboard manifests can also point at `scheduler_task_plan`; the localhost
+  server exposes `/api/scheduler-task-plan.json`, includes it in
+  `/api/summary.json`, and renders the Windows Task Scheduler registration
+  plan as a review artifact.
 - Read-only paper-account refresh and the `ongoing-no-submit` scheduler preset
   can pass `--scheduler-config-validation` through to refreshed dashboard
   manifests/sites, so reviewed local profiles remain visible after recurring

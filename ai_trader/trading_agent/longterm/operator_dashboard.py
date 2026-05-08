@@ -122,6 +122,7 @@ def build_operator_dashboard_site(
     price_history_by_symbol: Mapping[str, Any] | None = None,
     api_usage: Mapping[str, Any] | None = None,
     scheduler_config_validation: Mapping[str, Any] | None = None,
+    scheduler_task_plan: Mapping[str, Any] | None = None,
 ) -> dict[str, str]:
     """Build a static dashboard package with index and ticker pages."""
     action_plan = action_plan or {}
@@ -143,6 +144,7 @@ def build_operator_dashboard_site(
             price_history_by_symbol=price_history_by_symbol,
             api_usage=api_usage or {},
             scheduler_config_validation=scheduler_config_validation or {},
+            scheduler_task_plan=scheduler_task_plan or {},
         )
     }
     for symbol in symbols:
@@ -404,6 +406,7 @@ def _site_index_html(
     price_history_by_symbol: Mapping[str, Any] | None = None,
     api_usage: Mapping[str, Any] | None = None,
     scheduler_config_validation: Mapping[str, Any] | None = None,
+    scheduler_task_plan: Mapping[str, Any] | None = None,
 ) -> str:
     regime = dashboard.get("market_regime") or {}
     advisory = dashboard.get("agent_advisory") or {}
@@ -569,6 +572,7 @@ def _site_index_html(
               </div>
               {_tax_mode_suppressions_panel(dashboard.get("suppressed_reasons") or [])}
               {_scheduler_config_validation_panel(scheduler_config_validation or {})}
+              {_scheduler_task_plan_panel(scheduler_task_plan or {})}
               {_pipeline_health_panel()}
             </section>
             <section class="panel" id="research-board">
@@ -1428,6 +1432,39 @@ def _scheduler_config_validation_panel(validation: Mapping[str, Any]) -> str:
         "</div>"
         f"<p data-scheduler-validation-message>{escape(next_action)}</p>"
         "<small>Validation is read-only and does not create scheduler run folders or submit orders.</small>"
+        "</div>"
+    )
+
+
+def _scheduler_task_plan_panel(task_plan: Mapping[str, Any]) -> str:
+    status = _display_label(task_plan.get("status") or "unavailable")
+    task_name = str(task_plan.get("task_name") or "No task plan artifact").strip()
+    profile_file = str(task_plan.get("profile_file") or "").strip()
+    profile_label = Path(profile_file).name if profile_file else "n/a"
+    schedule = task_plan.get("schedule") if isinstance(task_plan.get("schedule"), Mapping) else {}
+    schedule_label = " ".join(
+        part
+        for part in [
+            _display_label(schedule.get("type") or ""),
+            str(schedule.get("start_time") or "").strip(),
+        ]
+        if part
+    ) or "n/a"
+    next_action = _display_label(task_plan.get("next_safe_action") or "generate_windows_task_scheduler_plan")
+    return (
+        "<div class=\"scheduler-validation-card\" data-scheduler-task-plan>"
+        "<div class=\"section-heading compact-heading\">"
+        "<p class=\"eyebrow\">Windows Task Scheduler</p>"
+        "<h3>Registration Plan</h3>"
+        "</div>"
+        "<div class=\"pipeline-health-grid\">"
+        f"<div><span>Status</span><strong data-scheduler-task-status>{escape(status)}</strong></div>"
+        f"<div><span>Task</span><strong data-scheduler-task-name>{escape(task_name)}</strong></div>"
+        f"<div><span>Profile</span><strong data-scheduler-task-profile>{escape(profile_label)}</strong></div>"
+        f"<div><span>Schedule</span><strong data-scheduler-task-schedule>{escape(schedule_label)}</strong></div>"
+        "</div>"
+        f"<p data-scheduler-task-message>{escape(next_action)}</p>"
+        "<small>This is a review artifact only; the dashboard does not register Windows tasks.</small>"
         "</div>"
     )
 

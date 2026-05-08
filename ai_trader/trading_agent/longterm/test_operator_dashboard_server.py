@@ -10,6 +10,7 @@ from longterm.operator_dashboard_server import (
     build_dashboard_pages_from_manifest,
     build_pipeline_health_from_manifest,
     build_portfolio_summary_from_manifest,
+    build_scheduler_task_plan_from_manifest,
     build_scheduler_config_validation_from_manifest,
     find_latest_dashboard_manifest,
     load_dashboard_manifest,
@@ -40,6 +41,7 @@ def test_dashboard_manifest_records_traceability_and_rules_hash(tmp_path):
     assert manifest["scheduler_policy"].endswith("scheduler_policy.json")
     assert manifest["committee_preset_policy"].endswith("committee_preset_policy.json")
     assert manifest["scheduler_config_validation"] == ""
+    assert manifest["scheduler_task_plan"] == ""
     assert manifest["api_usage"] == ""
     assert manifest["active_rules_hash"]
     assert manifest["generated_at"].endswith("Z")
@@ -331,6 +333,62 @@ def test_dashboard_server_exposes_scheduler_config_validation_from_manifest(tmp_
     assert "ongoing_no_submit_scheduler.local.json" in html
 
 
+def test_dashboard_server_exposes_scheduler_task_plan_from_manifest(tmp_path):
+    action_plan = tmp_path / "action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    task_plan = tmp_path / "scheduler_task_plan.json"
+    manifest_path = tmp_path / "dashboard_manifest.json"
+    action_plan.write_text(json.dumps({"intents": []}), encoding="utf-8")
+    portfolio.write_text(json.dumps({"holdings": []}), encoding="utf-8")
+    task_plan.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "mode": "windows_task_scheduler_plan",
+                "status": "ready",
+                "task_name": "LongTermTraderNoSubmit",
+                "profile_file": str(tmp_path / "ongoing_no_submit_scheduler.run.json"),
+                "profile_run_mode": "no-submit",
+                "schedule": {"type": "DAILY", "start_time": "09:35"},
+                "order_submission_enabled": False,
+                "next_safe_action": "review_task_plan_then_register_manually_if_approved",
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest_path.write_text(
+        json.dumps(
+            build_dashboard_manifest(
+                action_plan=action_plan,
+                portfolio_state=portfolio,
+                scheduler_task_plan=task_plan,
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    summary = build_scheduler_task_plan_from_manifest(load_dashboard_manifest(manifest_path))
+    status, content_type, body = resolve_dashboard_request(manifest_path, "/api/scheduler-task-plan.json")
+    summary_status, _, summary_body = resolve_dashboard_request(manifest_path, "/api/summary.json")
+    index_status, _, index_body = resolve_dashboard_request(manifest_path, "/")
+    api = json.loads(body.decode("utf-8"))
+    dashboard_summary = json.loads(summary_body.decode("utf-8"))
+    html = index_body.decode("utf-8")
+
+    assert summary["status"] == "ready"
+    assert summary["task_name"] == "LongTermTraderNoSubmit"
+    assert status == 200
+    assert content_type == "application/json; charset=utf-8"
+    assert api["mode"] == "windows_task_scheduler_plan"
+    assert api["order_submission_enabled"] is False
+    assert summary_status == 200
+    assert dashboard_summary["scheduler_task_plan"]["task_name"] == "LongTermTraderNoSubmit"
+    assert index_status == 200
+    assert "Windows Task Scheduler" in html
+    assert "LongTermTraderNoSubmit" in html
+    assert "09:35" in html
+
+
 def test_live_dashboard_filters_protected_symbol_from_actionable_candidates(tmp_path):
     action_plan = tmp_path / "action_plan.json"
     portfolio = tmp_path / "portfolio.json"
@@ -529,12 +587,14 @@ def test_dashboard_server_cli_can_write_manifest_without_serving(tmp_path, capsy
     pipeline_summary = tmp_path / "pipeline_summary.json"
     committee_preset_policy = tmp_path / "committee_preset_policy.json"
     scheduler_config_validation = tmp_path / "scheduler_profile_validation.json"
+    scheduler_task_plan = tmp_path / "scheduler_task_plan.json"
     manifest = tmp_path / "dashboard_manifest.json"
     rules.write_text("rules", encoding="utf-8")
     action_plan.write_text("{}", encoding="utf-8")
     pipeline_summary.write_text(json.dumps({"artifact_paths": {}}), encoding="utf-8")
     committee_preset_policy.write_text(json.dumps({"recommended_preset": "decision_4"}), encoding="utf-8")
     scheduler_config_validation.write_text(json.dumps({"status": "ready"}), encoding="utf-8")
+    scheduler_task_plan.write_text(json.dumps({"status": "ready", "task_name": "LongTermTraderNoSubmit"}), encoding="utf-8")
 
     code = run_cli(
         build_parser().parse_args(
@@ -553,6 +613,8 @@ def test_dashboard_server_cli_can_write_manifest_without_serving(tmp_path, capsy
                 str(committee_preset_policy),
                 "--scheduler-config-validation",
                 str(scheduler_config_validation),
+                "--scheduler-task-plan",
+                str(scheduler_task_plan),
                 "--campaign-id",
                 "campaign-2",
                 "--json",
@@ -569,4 +631,5 @@ def test_dashboard_server_cli_can_write_manifest_without_serving(tmp_path, capsy
     assert saved["pipeline_summary"] == str(pipeline_summary)
     assert saved["committee_preset_policy"] == str(committee_preset_policy)
     assert saved["scheduler_config_validation"] == str(scheduler_config_validation)
+    assert saved["scheduler_task_plan"] == str(scheduler_task_plan)
     assert saved["active_rules_hash"]

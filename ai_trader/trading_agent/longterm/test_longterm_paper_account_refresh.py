@@ -82,6 +82,7 @@ def test_refresh_paper_account_artifacts_writes_current_portfolio_dashboard_and_
     pipeline_summary = tmp_path / "pipeline_summary.json"
     pipeline_scheduler_summary = tmp_path / "pipeline_scheduler_summary.json"
     scheduler_config_validation = tmp_path / "scheduler_profile_validation.json"
+    scheduler_task_plan = tmp_path / "scheduler_task_plan.json"
     scheduler_policy = tmp_path / "scheduler_policy.json"
     committee_preset_policy = tmp_path / "committee_preset_policy.json"
     output_dir = tmp_path / "refresh"
@@ -145,6 +146,18 @@ def test_refresh_paper_account_artifacts_writes_current_portfolio_dashboard_and_
         },
     )
     _write_json(
+        scheduler_task_plan,
+        {
+            "mode": "windows_task_scheduler_plan",
+            "status": "ready",
+            "task_name": "LongTermTraderNoSubmit",
+            "profile_file": str(tmp_path / "ongoing_no_submit_scheduler.run.json"),
+            "profile_run_mode": "no-submit",
+            "schedule": {"type": "DAILY", "start_time": "09:35"},
+            "order_submission_enabled": False,
+        },
+    )
+    _write_json(
         scheduler_policy,
         {
             "recommended_mode": "account_refresh_only",
@@ -188,6 +201,7 @@ def test_refresh_paper_account_artifacts_writes_current_portfolio_dashboard_and_
         pipeline_summary_path=pipeline_summary,
         pipeline_scheduler_summary_path=pipeline_scheduler_summary,
         scheduler_config_validation_path=scheduler_config_validation,
+        scheduler_task_plan_path=scheduler_task_plan,
         scheduler_policy_path=scheduler_policy,
         committee_preset_policy_path=committee_preset_policy,
         dashboard_manifest_output=manifest,
@@ -217,6 +231,8 @@ def test_refresh_paper_account_artifacts_writes_current_portfolio_dashboard_and_
     assert "Scheduler Policy" in index_html
     assert "Scheduler Profile" in index_html
     assert "ongoing_no_submit_scheduler.local.json" in index_html
+    assert "Windows Task Scheduler" in index_html
+    assert "LongTermTraderNoSubmit" in index_html
     assert "Account Refresh Only" in index_html
     assert "Moneyball" in adbe_html
     assert "74.1" in adbe_html
@@ -230,11 +246,13 @@ def test_refresh_paper_account_artifacts_writes_current_portfolio_dashboard_and_
     assert manifest_payload["pipeline_summary"] == str(pipeline_summary)
     assert manifest_payload["pipeline_scheduler_summary"] == str(pipeline_scheduler_summary)
     assert manifest_payload["scheduler_config_validation"] == str(scheduler_config_validation)
+    assert manifest_payload["scheduler_task_plan"] == str(scheduler_task_plan)
     assert manifest_payload["scheduler_policy"] == str(scheduler_policy)
     assert manifest_payload["committee_preset_policy"] == str(committee_preset_policy)
     assert summary["components"]["pipeline_summary"]["exists"] is True
     assert summary["components"]["pipeline_scheduler_summary"]["exists"] is True
     assert summary["components"]["scheduler_config_validation"]["exists"] is True
+    assert summary["components"]["scheduler_task_plan"]["exists"] is True
     assert summary["components"]["scheduler_policy"]["exists"] is True
     assert summary["components"]["committee_preset_policy"]["exists"] is True
     status_bundle = json.loads(Path(summary["operator_status_path"]).read_text(encoding="utf-8"))

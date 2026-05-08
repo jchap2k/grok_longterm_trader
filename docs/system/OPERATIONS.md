@@ -976,6 +976,20 @@ The renderer refuses submit-capable keys and does not support
 `submit_paper_orders` or `confirm_paper_submit`; supervised paper execution
 remains a separate explicit path.
 
+To prepare a Windows Task Scheduler registration without registering anything,
+generate a review-only task-plan artifact from the reviewed no-submit run
+profile:
+
+```powershell
+python scripts/longterm_scheduler_task_plan.py --profile-file path\to\ongoing_no_submit_scheduler.run.json --task-name LongTermTraderNoSubmit --start-time 09:35 --output path\to\scheduler_task_plan.json --json
+```
+
+The task-plan artifact includes the scheduler command plus `schtasks` and
+PowerShell registration commands for manual review. It rejects validation-only
+profiles and submit-capable profile keys. To show it on the dashboard, pass
+`--scheduler-task-plan path\to\scheduler_task_plan.json` to the dashboard
+manifest writer or read-only account refresh.
+
 The config file accepts an `args` object using the same argparse destination
 names as the CLI, for example `journal_db`, `action_plan`, and
 `allow_existing_paper_positions`. Unknown config keys fail closed so typos do
@@ -999,7 +1013,7 @@ validation JSON into the manifest writer or read-only account/dashboard refresh:
 
 ```powershell
 python scripts/longterm_operator_dashboard_server.py --manifest path\to\dashboard_manifest.json --write-manifest --write-manifest-only --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio_state.json --scheduler-config-validation path\to\scheduler_profile_validation.json --json
-python scripts/longterm_paper_account_refresh.py --profile-config path\to\roth_ira_profile.json --journal-db path\to\journal.db --action-plan path\to\account_action_plan.json --paper-ledger-db path\to\paper_ledger.db --output-dir path\to\account_refresh --scheduler-config-validation path\to\scheduler_profile_validation.json --json
+python scripts/longterm_paper_account_refresh.py --profile-config path\to\roth_ira_profile.json --journal-db path\to\journal.db --action-plan path\to\account_action_plan.json --paper-ledger-db path\to\paper_ledger.db --output-dir path\to\account_refresh --scheduler-config-validation path\to\scheduler_profile_validation.json --scheduler-task-plan path\to\scheduler_task_plan.json --json
 ```
 
 The same preset can also run a bounded upstream research cadence before the
