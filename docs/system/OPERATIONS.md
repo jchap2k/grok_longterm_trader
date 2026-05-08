@@ -966,8 +966,10 @@ override config values for one run.
 Keep `validate_config_only=true` while testing a new local profile. Validation
 resolves generated commands, checks the same no-submit command-template rules,
 and prints bounded resource controls without creating scheduler run folders or
-calling a broker. Remove it from the local profile, or set it to `false`, after
-the profile is reviewed:
+calling a broker. If `summary_output` is supplied, validation writes the same
+JSON payload there so a dashboard/runbook/operator checklist can inspect the
+profile without launching a cycle. Remove `validate_config_only` from the local
+profile, or set it to `false`, after the profile is reviewed:
 
 ```powershell
 python scripts/longterm_pipeline_scheduler.py --config-file path\to\ongoing_no_submit_scheduler.local.json

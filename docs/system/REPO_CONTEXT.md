@@ -308,8 +308,10 @@ Scheduler-readiness features now exist:
   unknown keys and preserving the existing safety checks.
 - `--validate-config-only` validates a resolved scheduler profile/templates and
   prints commands/resource controls without creating run folders, calling
-  brokers, or executing scheduler stages. Keep it enabled in new local profiles
-  until the operator has reviewed the generated command surface.
+  brokers, or executing scheduler stages. When `summary_output` is supplied,
+  validation writes the same JSON payload to that file for dashboard/runbook
+  inspection. Keep validation enabled in new local profiles until the operator
+  has reviewed the generated command surface.
 - One longer full no-submit execute was intentionally stopped after wrapper
   timeout while the empty-batch final-planning refresh was still running; use
   longer supervised windows, existing saved action plans, or smaller resumable

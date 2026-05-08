@@ -664,6 +664,10 @@ def validate_resolved_scheduler_config(args: argparse.Namespace) -> dict[str, ob
 def run_cli(args: argparse.Namespace) -> int:
     if args.validate_config_only:
         payload = validate_resolved_scheduler_config(args)
+        if args.summary_output:
+            summary_path = Path(args.summary_output).expanduser().resolve()
+            summary_path.parent.mkdir(parents=True, exist_ok=True)
+            summary_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
         if args.json:
             print(json.dumps(payload, indent=2, sort_keys=True))
         else:

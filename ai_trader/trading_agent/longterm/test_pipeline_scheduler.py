@@ -1663,6 +1663,41 @@ def test_pipeline_scheduler_cli_validate_config_only_rejects_unbounded_paid_prov
         run_cli(parse_args(["--config-file", str(config_path)]))
 
 
+def test_pipeline_scheduler_cli_validate_config_only_writes_summary_output(tmp_path, capsys):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    output_dir = tmp_path / "scheduler"
+    summary_output = tmp_path / "scheduler_profile_validation.json"
+    config_path = tmp_path / "scheduler_profile.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "args": {
+                    "preset": "ongoing-no-submit",
+                    "output_dir": str(output_dir),
+                    "rules_path": str(rules_path),
+                    "journal_db": str(tmp_path / "journal.db"),
+                    "ledger_db": str(tmp_path / "paper_ledger.db"),
+                    "action_plan": str(tmp_path / "account_action_plan.json"),
+                    "summary_output": str(summary_output),
+                    "json": True,
+                    "validate_config_only": True,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    code = run_cli(parse_args(["--config-file", str(config_path)]))
+
+    printed = json.loads(capsys.readouterr().out)
+    saved = json.loads(summary_output.read_text(encoding="utf-8"))
+    assert code == 0
+    assert saved == printed
+    assert saved["mode"] == "pipeline_scheduler_config_validation"
+    assert not output_dir.exists()
+
+
 def test_pipeline_scheduler_cli_ongoing_no_submit_preset_requires_core_paths(tmp_path):
     rules_path = tmp_path / "active_rules.txt"
     rules_path.write_text("<rules />", encoding="utf-8")
