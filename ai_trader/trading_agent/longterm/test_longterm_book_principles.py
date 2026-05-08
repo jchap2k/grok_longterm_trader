@@ -28,14 +28,26 @@ def test_book_principles_provider_returns_relevant_lines_from_notes(tmp_path):
         "Quality investing favors durable returns on capital, recurring revenue, and pricing power.",
         encoding="utf-8",
     )
+    (notes_dir / "the_intelligent_investor_third_edition_notes.md").write_text(
+        "\n".join(
+            [
+                "# Intelligent Investor",
+                "Margin of safety should be explicit before an active-sleeve BUY is allowed.",
+                "Treat market volatility as Mr. Market's quote, not as proof that business value changed.",
+                "Permanent capital loss matters more than temporary quotation decline.",
+            ]
+        ),
+        encoding="utf-8",
+    )
 
     provider = BookPrinciplesProvider(notes_dir=notes_dir)
-    text = provider.recall("classification valuation balance sheet pricing power", max_lines=5)
+    text = provider.recall("classification valuation balance sheet pricing power margin of safety", max_lines=8)
 
     assert "classify companies" in text
     assert "balance-sheet quality" in text
     assert "valuation discipline" in text
     assert "pricing power" in text
+    assert "Margin of safety" in text
 
 
 def test_book_principles_provider_has_safe_fallback_for_missing_notes(tmp_path):

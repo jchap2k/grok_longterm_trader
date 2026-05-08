@@ -12,7 +12,8 @@
     "docs/system/README.md",
     "docs/system/ARCHITECTURE.md",
     "docs/system/OPERATIONS.md",
-    "docs/system/SAFETY.md"
+    "docs/system/SAFETY.md",
+    "../knowledge_agent/docs/the_intelligent_investor_third_edition_notes.md"
   ],
   "core_code": [
     "ai_trader/trading_agent/research/research_packet.py",

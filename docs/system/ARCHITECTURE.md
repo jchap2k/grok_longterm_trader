@@ -316,7 +316,7 @@ parking and broad rebalance churn before Stage 6B, while leaving
 symbol-specific sell decisions to the research/review process.
 
 `longterm/reviewers.py`
-Deterministic business-story, balance-sheet, quality-durability, and quality-at-reasonable-price reviewers. These do not make final decisions; they ground the CGH context. The quality-durability reviewer reflects the `Quality Investing` notes by naming durable quality patterns and common quality traps.
+Deterministic business-story, balance-sheet, quality-durability, and quality-at-reasonable-price reviewers. These do not make final decisions; they ground the CGH context. The quality-durability reviewer reflects the `Quality Investing` notes by naming durable quality patterns and common quality traps. The book-principles context now also includes `The Intelligent Investor Third Edition` notes so QARP and committee prompts can surface margin-of-safety, Mr. Market, normalized-earnings, and permanent-capital-loss guardrails.
 
 `longterm/thesis_challenge.py`
 Builds the deterministic bull/bear thesis challenge from the research packet, reviewer support, reviewer objections, invalidation conditions, and risk flags. This borrows the useful adversarial-review idea from multi-agent trading architectures without adding another LLM call.

@@ -389,6 +389,17 @@ Scheduler-readiness features now exist:
   inspection, including the resolved `config_file` path for provenance. Keep
   validation enabled in new local profiles until the operator has reviewed the
   generated command surface.
+
+Book-principle context:
+- `knowledge_agent/sources/longterm_trader/books/The Intelligent Investor Third
+  Edition.pdf` has been scanned into the knowledge-agent extracted source store
+  with 49 sections.
+- Curated notes now live at
+  `knowledge_agent/docs/the_intelligent_investor_third_edition_notes.md` and are
+  included by `longterm/book_principles.py`. The long-term trader should use
+  this as a margin-of-safety, Mr. Market, normalized-earnings, and permanent
+  capital-loss guardrail layer on top of Lynch, Quality Investing, and
+  Greenblatt/QARP context.
 - `scripts/longterm_scheduler_profile.py` renders a local scheduler JSON
   profile from `ongoing_no_submit_scheduler.example.json` using explicit
   `--set key=value` plus boolean `--enable` / `--disable` overrides. It keeps
