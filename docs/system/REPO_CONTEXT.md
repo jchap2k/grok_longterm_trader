@@ -11,9 +11,8 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-08 by Codex after proving the full no-submit scheduler
-review-bundle print plan and making scheduler rules paths absolute for child
-processes.
+Last updated: 2026-05-08 by Codex after the full no-submit scheduler
+review-bundle smoke completed with all stages green and submit disabled.
 
 ## 1. Project Identity
 
@@ -363,6 +362,15 @@ Scheduler-readiness features now exist:
   scheduler-review bundle stages together, confirmed
   `order_submission_enabled=false`, rendered an absolute active-rules path, and
   included no submit flags.
+- `%TEMP%\longterm_scheduler_review_bundle_smoke_20260508_125905`: real
+  one-cycle no-submit scheduler smoke with the same full chain enabled. Alpaca
+  paper snapshot, portfolio-news monitor, position-review queue, pipeline,
+  scheduler policy, account/dashboard refresh, post-run verifier, and
+  scheduler-review bundle all exited `0`. The review bundle reported
+  `status=ready_for_manual_review`, no blockers,
+  `runnable_submit_command_emitted=false`, `order_submission_enabled=false`,
+  `submit_profile_enabled=false`, `broker_calls_enabled=false`, and
+  `llm_calls_enabled=false`.
 - The scheduler CLI now supports `--config-file` JSON profiles with a strict
   `args` object. Example:
   `longterm/configs/ongoing_no_submit_scheduler.example.json`. This keeps
