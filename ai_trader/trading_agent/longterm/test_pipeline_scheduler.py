@@ -1598,6 +1598,71 @@ def test_pipeline_scheduler_cli_json_profile_scalar_cli_args_override_config(tmp
     assert args.print_plan_only is True
 
 
+def test_pipeline_scheduler_cli_validate_config_only_does_not_create_run_dirs(tmp_path, capsys):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    output_dir = tmp_path / "scheduler"
+    config_path = tmp_path / "scheduler_profile.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "args": {
+                    "preset": "ongoing-no-submit",
+                    "output_dir": str(output_dir),
+                    "rules_path": str(rules_path),
+                    "journal_db": str(tmp_path / "journal.db"),
+                    "ledger_db": str(tmp_path / "paper_ledger.db"),
+                    "action_plan": str(tmp_path / "account_action_plan.json"),
+                    "allow_existing_paper_positions": True,
+                    "expected_cash_from_portfolio_state": True,
+                    "json": True,
+                    "validate_config_only": True,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    code = run_cli(parse_args(["--config-file", str(config_path)]))
+
+    printed = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert printed["status"] == "ready"
+    assert printed["mode"] == "pipeline_scheduler_config_validation"
+    assert printed["order_submission_enabled"] is False
+    assert printed["output_dir"] == str(output_dir.resolve())
+    assert printed["resource_controls"]["bounded"] is True
+    assert "longterm_research_to_paper_pipeline.py" in printed["commands"]["pipeline"]
+    assert "--submit-paper-orders" not in "\n".join(printed["commands"].values())
+    assert not output_dir.exists()
+
+
+def test_pipeline_scheduler_cli_validate_config_only_rejects_unbounded_paid_provider(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    config_path = tmp_path / "scheduler_profile.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "args": {
+                    "preset": "ongoing-no-submit",
+                    "output_dir": str(tmp_path / "scheduler"),
+                    "rules_path": str(rules_path),
+                    "journal_db": str(tmp_path / "journal.db"),
+                    "ledger_db": str(tmp_path / "paper_ledger.db"),
+                    "action_plan": str(tmp_path / "account_action_plan.json"),
+                    "perplexity_research": True,
+                    "validate_config_only": True,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="requires --research-max-pass-count"):
+        run_cli(parse_args(["--config-file", str(config_path)]))
+
+
 def test_pipeline_scheduler_cli_ongoing_no_submit_preset_requires_core_paths(tmp_path):
     rules_path = tmp_path / "active_rules.txt"
     rules_path.write_text("<rules />", encoding="utf-8")

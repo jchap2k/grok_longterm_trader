@@ -306,6 +306,10 @@ Scheduler-readiness features now exist:
   `longterm/configs/ongoing_no_submit_scheduler.example.json`. This keeps
   repeatable no-submit scheduler launches in one local profile while rejecting
   unknown keys and preserving the existing safety checks.
+- `--validate-config-only` validates a resolved scheduler profile/templates and
+  prints commands/resource controls without creating run folders, calling
+  brokers, or executing scheduler stages. Keep it enabled in new local profiles
+  until the operator has reviewed the generated command surface.
 - One longer full no-submit execute was intentionally stopped after wrapper
   timeout while the empty-batch final-planning refresh was still running; use
   longer supervised windows, existing saved action plans, or smaller resumable

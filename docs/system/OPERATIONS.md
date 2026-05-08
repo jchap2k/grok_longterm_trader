@@ -963,6 +963,15 @@ names as the CLI, for example `journal_db`, `action_plan`, and
 `allow_existing_paper_positions`. Unknown config keys fail closed so typos do
 not silently drop scheduler controls. Explicit command-line scalar values can
 override config values for one run.
+Keep `validate_config_only=true` while testing a new local profile. Validation
+resolves generated commands, checks the same no-submit command-template rules,
+and prints bounded resource controls without creating scheduler run folders or
+calling a broker. Remove it from the local profile, or set it to `false`, after
+the profile is reviewed:
+
+```powershell
+python scripts/longterm_pipeline_scheduler.py --config-file path\to\ongoing_no_submit_scheduler.local.json
+```
 
 The same preset can also run a bounded upstream research cadence before the
 paper-preflight chain. Keep paid/reasoning work capped; `--perplexity-research`

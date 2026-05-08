@@ -12,6 +12,7 @@
     "expected_cash_from_portfolio_state": true,
     "max_runs": 1,
     "interval_seconds": 3600,
+    "validate_config_only": true,
     "json": true
   }
 }

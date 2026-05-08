@@ -17,7 +17,9 @@ from longterm.perplexity_research_enrichment import (
 from longterm.pipeline_scheduler import (
     PipelineSchedulerConfig,
     PipelineSchedulerInputs,
+    derive_scheduler_resource_controls,
     run_pipeline_scheduler,
+    validate_scheduler_command_template,
 )
 
 
@@ -143,6 +145,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--run-once", action="store_true")
     parser.add_argument("--continue-on-error", action="store_true")
     parser.add_argument("--print-plan-only", action="store_true")
+    parser.add_argument(
+        "--validate-config-only",
+        action="store_true",
+        help="Validate the resolved scheduler profile/templates without creating run folders or executing commands.",
+    )
     parser.add_argument("--summary-output", default="")
     parser.add_argument("--json", action="store_true")
     return parser
@@ -618,7 +625,52 @@ def _resolve_command_templates(args: argparse.Namespace) -> dict[str, str]:
     }
 
 
+def validate_resolved_scheduler_config(args: argparse.Namespace) -> dict[str, object]:
+    """Validate resolved scheduler templates without creating run artifacts."""
+    templates = _resolve_command_templates(args)
+    rules_path = Path(args.rules_path)
+    validate_scheduler_command_template(
+        templates["pipeline"],
+        command_kind="pipeline",
+        rules_path=rules_path,
+    )
+    command_kinds = [
+        ("pre_pipeline_refresh", "pre_pipeline_refresh"),
+        ("portfolio_news_monitor", "portfolio_news_monitor"),
+        ("committee_preset_policy", "committee_preset_policy"),
+        ("scheduler_policy", "scheduler_policy"),
+        ("account_refresh", "account_refresh"),
+        ("post_run_verification", "post_run_verification"),
+    ]
+    for template_key, command_kind in command_kinds:
+        command = templates.get(template_key, "")
+        if command:
+            validate_scheduler_command_template(command, command_kind=command_kind, rules_path=rules_path)
+    commands = {key: value for key, value in templates.items() if value}
+    return {
+        "schema_version": 1,
+        "mode": "pipeline_scheduler_config_validation",
+        "status": "ready",
+        "order_submission_enabled": False,
+        "preset": args.preset,
+        "output_dir": str(Path(args.output_dir).expanduser().resolve()),
+        "rules_path": str(rules_path.expanduser().resolve()),
+        "commands": commands,
+        "resource_controls": derive_scheduler_resource_controls(templates["pipeline"]),
+        "next_safe_action": "run_scheduler_profile_when_operator_window_is_approved",
+    }
+
+
 def run_cli(args: argparse.Namespace) -> int:
+    if args.validate_config_only:
+        payload = validate_resolved_scheduler_config(args)
+        if args.json:
+            print(json.dumps(payload, indent=2, sort_keys=True))
+        else:
+            print("Pipeline scheduler config ready.")
+            print(f"Output: {payload['output_dir']}")
+            print("No scheduler run folders were created and no commands were executed.")
+        return 0
     max_runs = 1 if args.run_once else args.max_runs
     templates = _resolve_command_templates(args)
     summary = run_pipeline_scheduler(
@@ -655,4 +707,10 @@ def main(argv: list[str] | None = None) -> int:
     return run_cli(parse_args(argv))
 
 
-__all__ = ["build_parser", "main", "parse_args", "run_cli"]
+__all__ = [
+    "build_parser",
+    "main",
+    "parse_args",
+    "run_cli",
+    "validate_resolved_scheduler_config",
+]
