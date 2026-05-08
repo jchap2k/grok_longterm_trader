@@ -135,6 +135,7 @@ def test_scheduler_profile_cli_can_render_ready_no_submit_run_profile(tmp_path, 
     ledger_db = tmp_path / "paper_ledger.db"
     action_plan = tmp_path / "account_action_plan.json"
     validation_summary = tmp_path / "scheduler_profile_validation.json"
+    run_validation_summary = tmp_path / "scheduler_run_profile_validation.json"
     rules_path = tmp_path / "active_rules.txt"
 
     rules_path.write_text("<rules />", encoding="utf-8")
@@ -169,6 +170,8 @@ def test_scheduler_profile_cli_can_render_ready_no_submit_run_profile(tmp_path, 
                 "no-submit",
                 "--set",
                 "summary_output=path/to/scheduler_run_summary.json",
+                "--set",
+                f"scheduler_config_validation={run_validation_summary}",
                 "--validate-after-write",
                 "--json",
             ]
@@ -187,9 +190,14 @@ def test_scheduler_profile_cli_can_render_ready_no_submit_run_profile(tmp_path, 
     assert printed["scheduler_command"].endswith(f"--config-file {output_profile}")
     assert profile_args["validate_config_only"] is False
     assert profile_args["summary_output"] == "path/to/scheduler_run_summary.json"
+    assert profile_args["scheduler_config_validation"] == str(run_validation_summary)
     assert "submit_paper_orders" not in profile_args
     assert "confirm_paper_submit" not in profile_args
     assert not validation_summary.exists()
+    run_validation_payload = json.loads(run_validation_summary.read_text(encoding="utf-8"))
+    assert printed["validation_summary"] == str(run_validation_summary.resolve())
+    assert run_validation_payload["config_file"] == str(output_profile.resolve())
+    assert run_validation_payload["recurring_no_submit_ready"] is True
     assert not (Path.cwd() / "path" / "to" / "scheduler_run_summary.json").exists()
     assert not output_dir.exists()
 

@@ -290,9 +290,23 @@ def test_dashboard_server_exposes_scheduler_config_validation_from_manifest(tmp_
                 "schema_version": 1,
                 "mode": "pipeline_scheduler_config_validation",
                 "status": "ready",
+                "recurring_no_submit_ready": True,
                 "config_file": str(tmp_path / "ongoing_no_submit_scheduler.local.json"),
                 "preset": "ongoing-no-submit",
                 "order_submission_enabled": False,
+                "operating_mode_summary": {
+                    "name": "recurring_no_submit",
+                    "ready_for_unattended_no_submit": True,
+                    "broker_submit_boundary": "blocked_by_no_submit_scheduler",
+                    "readiness_blockers": [],
+                    "stage_flags": {
+                        "pre_pipeline_refresh": True,
+                        "research_pipeline": True,
+                        "scheduler_policy": True,
+                        "account_refresh": True,
+                        "post_run_verification": True,
+                    },
+                },
                 "resource_controls": {
                     "provider_mode": "perplexity",
                     "research_max_pass_count": 25,
@@ -330,13 +344,38 @@ def test_dashboard_server_exposes_scheduler_config_validation_from_manifest(tmp_
     assert api["mode"] == "pipeline_scheduler_config_validation"
     assert api["config_file"].endswith("ongoing_no_submit_scheduler.local.json")
     assert api["order_submission_enabled"] is False
+    assert api["recurring_no_submit_ready"] is True
+    assert api["operating_mode_summary"]["broker_submit_boundary"] == "blocked_by_no_submit_scheduler"
     assert summary_status == 200
     assert dashboard_summary["scheduler_config_validation"]["status"] == "ready"
+    assert dashboard_summary["scheduler_config_validation"]["recurring_no_submit_ready"] is True
     assert index_status == 200
     assert "Scheduler Profile" in html
+    assert "Recurring No Submit" in html
+    assert "Ready For Unattended No Submit" in html
+    assert "Blocked By No Submit Scheduler" in html
     assert "Ready" in html
     assert "Perplexity" in html
     assert "ongoing_no_submit_scheduler.local.json" in html
+
+
+def test_dashboard_server_marks_missing_scheduler_validation_as_not_recurring_ready(tmp_path):
+    action_plan = tmp_path / "action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    manifest_path = tmp_path / "dashboard_manifest.json"
+    action_plan.write_text(json.dumps({"intents": []}), encoding="utf-8")
+    portfolio.write_text(json.dumps({"holdings": []}), encoding="utf-8")
+    manifest_path.write_text(
+        json.dumps(build_dashboard_manifest(action_plan=action_plan, portfolio_state=portfolio)),
+        encoding="utf-8",
+    )
+
+    api = build_scheduler_config_validation_from_manifest(load_dashboard_manifest(manifest_path))
+
+    assert api["status"] == "unavailable"
+    assert api["recurring_no_submit_ready"] is False
+    assert api["operating_mode_summary"]["ready_for_unattended_no_submit"] is False
+    assert "scheduler_config_validation_artifact_missing" in api["operating_mode_summary"]["readiness_blockers"]
 
 
 def test_dashboard_server_exposes_scheduler_task_plan_from_manifest(tmp_path):

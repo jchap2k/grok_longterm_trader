@@ -1421,6 +1421,11 @@ def _scheduler_config_validation_panel(validation: Mapping[str, Any]) -> str:
     preset = _display_label(validation.get("preset") or "unavailable")
     config_file = str(validation.get("config_file") or "").strip()
     config_label = Path(config_file).name if config_file else "No profile validation artifact"
+    mode = validation.get("operating_mode_summary") if isinstance(validation.get("operating_mode_summary"), Mapping) else {}
+    mode_name = _display_label(mode.get("name") or "unavailable")
+    recurring_ready = bool(validation.get("recurring_no_submit_ready"))
+    recurring_ready_label = "Yes" if recurring_ready else "No"
+    broker_boundary = _display_label(mode.get("broker_submit_boundary") or "unavailable")
     controls = validation.get("resource_controls") if isinstance(validation.get("resource_controls"), Mapping) else {}
     provider = _display_label(controls.get("provider_mode") or "unavailable")
     bounded = controls.get("bounded")
@@ -1436,8 +1441,11 @@ def _scheduler_config_validation_panel(validation: Mapping[str, Any]) -> str:
         "</div>"
         "<div class=\"pipeline-health-grid\">"
         f"<div><span>Status</span><strong data-scheduler-validation-status>{escape(status)}</strong></div>"
+        f"<div><span>Mode</span><strong data-scheduler-validation-mode>{escape(mode_name)}</strong></div>"
+        f"<div><span>Ready For Unattended No Submit</span><strong data-scheduler-validation-recurring-ready>{escape(recurring_ready_label)}</strong></div>"
         f"<div><span>Preset</span><strong data-scheduler-validation-preset>{escape(preset)}</strong></div>"
         f"<div><span>Profile</span><strong data-scheduler-validation-config>{escape(config_label)}</strong></div>"
+        f"<div><span>Broker Boundary</span><strong data-scheduler-validation-boundary>{escape(broker_boundary)}</strong></div>"
         f"<div><span>Provider</span><strong data-scheduler-validation-provider>{escape(provider)}</strong></div>"
         f"<div><span>Research Cap</span><strong data-scheduler-validation-research-cap>{escape(str(research_cap if research_cap is not None else 'n/a'))}</strong></div>"
         f"<div><span>Committee Cap</span><strong data-scheduler-validation-committee-cap>{escape(str(committee_cap if committee_cap is not None else 'n/a'))}</strong></div>"

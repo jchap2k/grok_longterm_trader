@@ -8,6 +8,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Mapping
 
+from longterm.scheduler_config_validation import scheduler_validation_ready_for_unattended_no_submit
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Check scheduler validation/task/dashboard handoff artifacts.")
@@ -53,6 +55,9 @@ def run_cli(args: argparse.Namespace) -> int:
         "profile_file": str(task_plan.get("profile_file") or validation.get("config_file") or ""),
         "checks": {
             "scheduler_config_validation": "ready" if _is_ready(validation) else "blocked",
+            "recurring_no_submit_readiness": (
+                "ready" if scheduler_validation_ready_for_unattended_no_submit(validation) else "blocked"
+            ),
             "scheduler_task_plan": "ready" if _is_ready(task_plan) else "blocked",
             "dashboard_manifest": "ready" if not _manifest_blockers(manifest, validation_path, task_plan_path) else "blocked",
             "order_submission_boundary": "ready" if order_submission_boundary_ready else "blocked",
@@ -97,6 +102,8 @@ def _blockers(
     blockers: list[str] = []
     if not _is_ready(validation):
         blockers.append("scheduler_config_validation_not_ready")
+    if not scheduler_validation_ready_for_unattended_no_submit(validation):
+        blockers.append("recurring_no_submit_readiness_not_confirmed")
     if not _is_ready(task_plan):
         blockers.append("scheduler_task_plan_not_ready")
     if bool(validation.get("order_submission_enabled")) or bool(task_plan.get("order_submission_enabled")):

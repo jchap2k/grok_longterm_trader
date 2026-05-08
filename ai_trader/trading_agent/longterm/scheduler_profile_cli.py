@@ -85,6 +85,8 @@ def run_cli(args: argparse.Namespace) -> int:
         validation_payload = validate_resolved_scheduler_config(scheduler_args)
         if args.run_mode == "validate":
             validation_summary = _write_validation_summary_if_requested(profile_args, validation_payload)
+        else:
+            validation_summary = _write_no_submit_validation_summary_if_requested(profile_args, validation_payload)
 
     result = {
         "schema_version": 1,
@@ -194,6 +196,19 @@ def _write_validation_summary_if_requested(
     validation_payload: dict[str, Any],
 ) -> str:
     raw_summary = str(profile_args.get("summary_output") or "").strip()
+    if not raw_summary:
+        return ""
+    summary_path = Path(raw_summary).expanduser().resolve()
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(json.dumps(validation_payload, indent=2, sort_keys=True), encoding="utf-8")
+    return str(summary_path)
+
+
+def _write_no_submit_validation_summary_if_requested(
+    profile_args: dict[str, Any],
+    validation_payload: dict[str, Any],
+) -> str:
+    raw_summary = str(profile_args.get("scheduler_config_validation") or "").strip()
     if not raw_summary:
         return ""
     summary_path = Path(raw_summary).expanduser().resolve()

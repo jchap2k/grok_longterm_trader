@@ -1011,10 +1011,12 @@ python scripts/longterm_scheduler_profile.py --output-profile path\to\ongoing_no
 ```
 
 After that validation payload is reviewed, render a no-submit run profile
-instead of hand-editing `validate_config_only`:
+instead of hand-editing `validate_config_only`. Use a separate run-profile
+validation artifact, because the Windows task plan and handoff must point at
+the exact no-submit profile that will be scheduled:
 
 ```powershell
-python scripts/longterm_scheduler_profile.py --template path\to\ongoing_no_submit_scheduler.local.json --output-profile path\to\ongoing_no_submit_scheduler.run.json --run-mode no-submit --set summary_output=path\to\pipeline_scheduler_summary.json --validate-after-write --json
+python scripts/longterm_scheduler_profile.py --template path\to\ongoing_no_submit_scheduler.local.json --output-profile path\to\ongoing_no_submit_scheduler.run.json --run-mode no-submit --set summary_output=path\to\pipeline_scheduler_summary.json --set scheduler_config_validation=path\to\scheduler_run_profile_validation.json --validate-after-write --json
 ```
 
 The renderer refuses submit-capable keys and does not support
@@ -1043,8 +1045,13 @@ the same reviewed artifacts:
 python scripts/longterm_scheduler_handoff.py --scheduler-config-validation path\to\scheduler_profile_validation.json --scheduler-task-plan path\to\scheduler_task_plan.json --dashboard-manifest path\to\dashboard_manifest.json --output path\to\scheduler_handoff.json --json
 ```
 
-The handoff check returns exit code `0` only when the chain is ready and no
-artifact enables order submission.
+The handoff check returns exit code `0` only when the chain is ready, the
+validation artifact explicitly reports `recurring_no_submit_ready=true`, and no
+artifact enables order submission. Older validation artifacts that only say
+`status=ready` are intentionally blocked; regenerate profile validation before
+registering a recurring Windows task. For Task Scheduler handoff, pass the
+run-profile validation artifact (`scheduler_run_profile_validation.json` in the
+example above), not the earlier validation-only local-profile artifact.
 
 The config file accepts an `args` object using the same argparse destination
 names as the CLI, for example `journal_db`, `action_plan`, and
@@ -1084,6 +1091,12 @@ validation JSON into the manifest writer or read-only account/dashboard refresh:
 python scripts/longterm_operator_dashboard_server.py --manifest path\to\dashboard_manifest.json --write-manifest --write-manifest-only --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio_state.json --scheduler-config-validation path\to\scheduler_profile_validation.json --json
 python scripts/longterm_paper_account_refresh.py --profile-config path\to\roth_ira_profile.json --journal-db path\to\journal.db --action-plan path\to\account_action_plan.json --paper-ledger-db path\to\paper_ledger.db --output-dir path\to\account_refresh --scheduler-config-validation path\to\scheduler_profile_validation.json --scheduler-task-plan path\to\scheduler_task_plan.json --json
 ```
+
+The dashboard API and Safety / Preflight card normalize missing or legacy
+scheduler validation artifacts to `recurring_no_submit_ready=false`, with
+readiness blockers shown in `operating_mode_summary.readiness_blockers`.
+This keeps the visible operator surface aligned with the stricter handoff
+check.
 
 The same preset can also run a bounded upstream research cadence before the
 paper-preflight chain. Keep paid/reasoning work capped; `--perplexity-research`

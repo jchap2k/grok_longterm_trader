@@ -11,8 +11,8 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-08 by Codex after adding explicit recurring no-submit
-scheduler readiness reporting to config validation.
+Last updated: 2026-05-08 by Codex after wiring recurring no-submit scheduler
+readiness into dashboard and handoff consumers.
 
 ## 1. Project Identity
 
@@ -405,6 +405,16 @@ Scheduler-readiness features now exist:
   pipeline, scheduler policy, account/dashboard refresh, post-run verifier,
   scheduler-review bundle, generated committee batches, final planning, and
   portfolio-news follow-up committee work.
+- Dashboard and handoff consumers normalize scheduler validation through
+  `longterm/scheduler_config_validation.py`. Missing or legacy status-only
+  validation artifacts are treated as `recurring_no_submit_ready=false`.
+  `longterm_scheduler_handoff.py` now blocks Windows Task Scheduler handoff
+  unless the validation artifact explicitly confirms unattended no-submit
+  readiness and the no-submit broker boundary.
+- `longterm_scheduler_profile.py --run-mode no-submit --validate-after-write`
+  now writes validation to the profile's `scheduler_config_validation` path,
+  not to `summary_output` (which belongs to the future scheduler run summary).
+  Use that run-profile validation artifact for task-plan handoff.
 
 Book-principle context:
 - `knowledge_agent/sources/longterm_trader/books/The Intelligent Investor Third

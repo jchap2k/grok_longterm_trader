@@ -12,6 +12,7 @@ from urllib.parse import unquote, urlparse
 
 from longterm.operator_dashboard import build_operator_dashboard, build_operator_dashboard_site
 from longterm.pipeline_health_cli import build_pipeline_health_report
+from longterm.scheduler_config_validation import normalize_scheduler_config_validation
 
 
 DEFAULT_PROTECTED_SYMBOLS = {"FXAIX"}
@@ -353,15 +354,7 @@ def build_scheduler_config_validation_from_manifest(manifest: Mapping[str, Any])
             "scheduler_config_validation_artifact_unreadable",
             source_path=validation_path,
         )
-    normalized = dict(payload)
-    normalized.setdefault("schema_version", 1)
-    normalized.setdefault("mode", "pipeline_scheduler_config_validation")
-    normalized.setdefault("status", "unknown")
-    normalized.setdefault("resource_controls", {})
-    normalized.setdefault("next_safe_action", "validate_scheduler_profile_before_launch")
-    normalized["source_path"] = str(validation_path)
-    normalized["order_submission_enabled"] = False
-    return normalized
+    return normalize_scheduler_config_validation(payload, source_path=validation_path)
 
 
 def build_scheduler_task_plan_from_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
@@ -630,18 +623,11 @@ def _empty_api_usage(reason: str, *, source_path: Path | None = None) -> dict[st
 
 
 def _empty_scheduler_config_validation(reason: str, *, source_path: Path | None = None) -> dict[str, Any]:
-    return {
-        "schema_version": 1,
-        "mode": "pipeline_scheduler_config_validation",
-        "status": "unavailable",
-        "source_path": str(source_path or ""),
-        "config_file": "",
-        "preset": "",
-        "resource_controls": {},
-        "warnings": [reason],
-        "next_safe_action": "run_scheduler_config_validation_before_recurring_launch",
-        "order_submission_enabled": False,
-    }
+    return normalize_scheduler_config_validation(
+        {},
+        source_path=source_path or "",
+        unavailable_reason=reason,
+    )
 
 
 def _empty_scheduler_task_plan(reason: str, *, source_path: Path | None = None) -> dict[str, Any]:
