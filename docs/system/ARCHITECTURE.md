@@ -222,7 +222,9 @@ portfolio holdings and optional watchlist/evidence ideas. It reuses the
 relevant-news scorer, excludes protected holdings by default, links queued
 portfolio rows to the latest journal decision when available, and writes an
 `enrichment_needed_queue` for later deeper enrichment or thesis review. It does
-not call brokers, does not call LLMs, and does not create order intents.
+not call brokers, does not call LLMs, and does not create order intents. Daily
+scheduler runs can pass a `published_after` timestamp so previously seen
+articles are ignored while undated articles are kept for conservative review.
 
 `longterm/portfolio_news_monitor_ingest.py`
 Validates a saved portfolio-news monitor report, summarizes high-impact and
@@ -415,7 +417,7 @@ Builds read-only evidence for future review-aware rebalance tuning. It groups ev
 Converts a structured decision into a non-executing proposed `BUY`, `SELL`, or `NONE` intent.
 
 `longterm/account_action_plan.py`
-Builds the structured dry-run account action contract that future paper/live execution should consume. It aggregates recommendation-table rows, buy-promotion review status, portfolio state, benchmark gating, capital-shortfall suppression, review status, account tax-mode policy, optional idle-cash parking policy, and rebalance proposals into JSON-compatible intents (`BUY`, `SELL`, `REDUCE`, `PARK_IDLE_CASH`, `PARK_DEFENSIVE_CASH`, `REBALANCE`, `REVIEW`, `CAPITAL_NEEDED`, or `BLOCKED`). Explicit non-protected `SELL` / `REDUCE` decisions are surfaced as sell intents before the default held-position `REVIEW` path, while protected symbols remain blocked. Non-actionable promotion reviews become review/enrichment intents with no order, pending-evidence names are excluded as rebalance targets, and broad parking/rebalance churn is suppressed for taxable or unspecified profiles. It does not place orders.
+Builds the structured dry-run account action contract that future paper/live execution should consume. It aggregates recommendation-table rows, buy-promotion review status, portfolio state, benchmark gating, capital-shortfall suppression, review status, account tax-mode policy, optional idle-cash parking policy, and rebalance proposals into JSON-compatible intents (`BUY`, `SELL`, `REDUCE`, `PARK_IDLE_CASH`, `PARK_DEFENSIVE_CASH`, `REBALANCE`, `REVIEW`, `CAPITAL_NEEDED`, or `BLOCKED`). Explicit non-protected `SELL` / `REDUCE` decisions are surfaced as sell intents before the default held-position `REVIEW` path, while protected symbols remain blocked. Non-actionable promotion reviews become review/enrichment intents with no order, pending-evidence names are excluded as rebalance targets, and actionable BUYs can be resized down to the Graham staged-entry starter size when margin-of-safety support is moderate. Missing margin detail alone does not automatically shrink otherwise clean legacy buys. Broad parking/rebalance churn is suppressed for taxable or unspecified profiles. It does not place orders.
 
 `longterm/portfolio_state.py`
 Loads read-only portfolio snapshots and separates active versus protected holdings.

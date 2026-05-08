@@ -448,7 +448,10 @@ watchlist/evidence ideas, and cached/snapshot news rows; then write an
 `enrichment_needed_queue` only for high-signal articles. Queue rows are review
 triggers, not trade intents. They keep `order_submission_enabled=false` and
 `llm_escalation_allowed=false` by default so the later scheduler can decide
-whether deeper enrichment is justified.
+whether deeper enrichment is justified. Use `--published-after` for daily
+cadence so the monitor only counts articles at or after the previous watermark;
+articles without parseable timestamps are retained rather than silently
+dropped.
 
 ```powershell
 python scripts/longterm_portfolio_news_monitor.py --portfolio-state path\to\portfolio.json --watchlist-ideas path\to\research_queue_selected.json --snapshot-file path\to\raw_news.json --journal-db path\to\journal.db --output path\to\portfolio_news_monitor.json --as-of-date 2026-05-06 --json
@@ -593,12 +596,23 @@ research committee says "interesting buy" -> promotion gate says "actionable
 enough" -> account planning sizes the candidate -> Stage 6B eligibility
 revalidates again before any supervised paper submission.
 
+When promotion says a BUY is actionable but the Graham staged-entry review says
+`starter_position`, account-action planning uses the starter percentage for the
+planned dry-run trade value and target value. This keeps promising but
+moderate-margin names in the plan without letting a full-size target slip in as
+if the margin of safety were already compelling. Missing margin detail by
+itself does not shrink older clean BUY rows; it must be an explicit moderate
+margin or permanent-loss-risk signal.
+
 For existing holdings, next-actions applies the Graham/Mr. Market lens to large
 quote moves. A material drawdown becomes a `mr_market_drawdown_review` asking
 whether the quote is a bargain or a broken thesis. A material rally becomes a
 `mr_market_rally_review` asking whether valuation, margin of safety, and
 trailing-profit protection need review. These prompts never sell, trim, or add
-automatically.
+automatically. The position-review queue applies the same lens directly to
+current portfolio holdings, so daily scheduler artifacts can surface
+`sell_or_add_after_thesis_check` and `trim_or_trailing_profit_review` prompts
+even when the latest journal row is not itself a SELL or REDUCE decision.
 
 When a research cycle or scheduler run has both a journal and portfolio state,
 the result JSON also includes `buy_promotion_markdown` and

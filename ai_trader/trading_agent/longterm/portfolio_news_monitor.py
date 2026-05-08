@@ -52,9 +52,14 @@ def build_portfolio_news_monitor_report(
 
     queue: list[dict[str, Any]] = []
     articles_checked = 0
+    published_after = _parse_timestamp(inputs.published_after)
     for item in monitored:
         symbol = item["symbol"]
-        raw_articles = [dict(article) for article in inputs.articles_by_symbol.get(symbol, [])]
+        raw_articles = [
+            dict(article)
+            for article in inputs.articles_by_symbol.get(symbol, [])
+            if _article_is_after(article, published_after)
+        ]
         articles_checked += len(raw_articles)
         relevant = rank_relevant_news(
             symbol,
@@ -261,6 +266,39 @@ def _load_symbol_articles(path: str | Path) -> dict[str, list[dict[str, Any]]]:
         for symbol, rows in payload.items()
         if isinstance(rows, list)
     }
+
+
+def _article_is_after(article: Mapping[str, Any], published_after: datetime | None) -> bool:
+    if published_after is None:
+        return True
+    article_timestamp = _parse_timestamp(
+        str(
+            article.get("published_utc")
+            or article.get("published_at")
+            or article.get("date")
+            or ""
+        )
+    )
+    if article_timestamp is None:
+        return True
+    return article_timestamp >= published_after
+
+
+def _parse_timestamp(value: str) -> datetime | None:
+    value = str(value or "").strip()
+    if not value:
+        return None
+    try:
+        if value.endswith("Z"):
+            value = value[:-1] + "+00:00"
+        if len(value) == 10:
+            value = f"{value}T00:00:00+00:00"
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _utc_now() -> datetime:

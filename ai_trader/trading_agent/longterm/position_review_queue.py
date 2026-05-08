@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from longterm.decision_journal import LongTermDecisionJournal
+from longterm.graham_risk import mr_market_review_trigger
 from longterm.portfolio_state import Holding, PortfolioState
 from longterm.review_status import ReviewStatusBuilder
 
@@ -107,6 +108,32 @@ def build_position_review_queue_report(
                     },
                 )
             )
+
+    for holding in holdings.values():
+        if holding.symbol in protected and not inputs.include_protected_symbols:
+            excluded_protected.add(holding.symbol)
+            continue
+        quote_review = mr_market_review_trigger(holding)
+        if not quote_review.review_due:
+            continue
+        rows.append(
+            _base_row(
+                symbol=holding.symbol,
+                review_type=quote_review.category,
+                trigger_source="portfolio_state",
+                severity="high" if quote_review.category == "mr_market_drawdown_review" else "medium",
+                generated_at=generated_at,
+                holding=holding,
+                latest=latest_by_symbol.get(holding.symbol, {}),
+                status=review_status.get(holding.symbol, {}),
+                decision_id=str(latest_by_symbol.get(holding.symbol, {}).get("decision_id") or ""),
+                reason=quote_review.reason,
+                extra={
+                    "mr_market_gain_percent": quote_review.gain_percent,
+                    "suggested_review_focus": _mr_market_review_focus(quote_review.category),
+                },
+            )
+        )
 
     rows = _dedupe_rows(rows)
     rows.sort(key=lambda row: (_severity_sort(row), row["symbol"], row["review_type"]))
@@ -227,6 +254,14 @@ def _news_severity(item: Mapping[str, Any]) -> str:
     if "high" in impact or hint == "potential_invalidation":
         return "high"
     return "medium"
+
+
+def _mr_market_review_focus(category: str) -> str:
+    if category == "mr_market_drawdown_review":
+        return "sell_or_add_after_thesis_check"
+    if category == "mr_market_rally_review":
+        return "trim_or_trailing_profit_review"
+    return "review_quote_vs_value"
 
 
 def _coerce_portfolio(value: PortfolioState | Mapping[str, Any] | None) -> PortfolioState | None:

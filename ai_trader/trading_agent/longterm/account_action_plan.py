@@ -221,6 +221,23 @@ class AccountActionPlanBuilder:
                         )
                     )
                     continue
+                trade_value = planned.trade_value
+                target_value = planned.target_value
+                cash_shortfall = planned.cash_shortfall
+                planned_reason = planned.reason
+                if promotion_review:
+                    staged = _staged_buy_values(
+                        symbol,
+                        promotion_review=promotion_review,
+                        row=row,
+                        profile=profile,
+                        portfolio_state=portfolio_state,
+                    )
+                    if staged:
+                        target_value = staged["target_value"]
+                        trade_value = staged["trade_value"]
+                        cash_shortfall = staged["cash_shortfall"]
+                        planned_reason = f"{planned.reason} {staged['reason']}"
                 if not risk_review.allowed:
                     reason = "; ".join(risk_review.veto_reasons) or guard_result.reason
                     intents.append(
@@ -233,7 +250,7 @@ class AccountActionPlanBuilder:
                     )
                     blocked_reasons.append(reason)
                     continue
-                if planned.capital_needed_alert:
+                if cash_shortfall > 0:
                     if suppression_reason:
                         intents.append(
                             _blocked_intent(
@@ -250,11 +267,11 @@ class AccountActionPlanBuilder:
                                 symbol=symbol,
                                 intent_type="CAPITAL_NEEDED",
                                 order_intent="NONE",
-                                trade_value=planned.trade_value,
-                                target_value=planned.target_value,
+                                trade_value=trade_value,
+                                target_value=target_value,
                                 allowed=False,
                                 reason=(
-                                    f"Planned buy needs ${planned.cash_shortfall:,.2f} "
+                                    f"Planned buy needs ${cash_shortfall:,.2f} "
                                     "additional active-sleeve cash."
                                 ),
                                 decision_id=str(row.get("decision_id") or ""),
@@ -264,15 +281,31 @@ class AccountActionPlanBuilder:
                         )
                         blocked_reasons.append("Capital shortfall.")
                     continue
+                if trade_value <= 0:
+                    intents.append(
+                        AccountActionIntent(
+                            symbol=symbol,
+                            intent_type="REVIEW",
+                            order_intent="NONE",
+                            trade_value=0.0,
+                            target_value=target_value,
+                            allowed=True,
+                            reason="Staged-entry target is already satisfied; review before adding more.",
+                            decision_id=str(row.get("decision_id") or ""),
+                            risk_review=_risk_with_promotion(risk_review.to_dict(), promotion_review),
+                            promotion_review=_promotion_dict(promotion_review),
+                        )
+                    )
+                    continue
                 intents.append(
                     AccountActionIntent(
                         symbol=symbol,
                         intent_type="BUY",
                         order_intent="BUY",
-                        trade_value=planned.trade_value,
-                        target_value=planned.target_value,
+                        trade_value=trade_value,
+                        target_value=target_value,
                         allowed=planned.allowed,
-                        reason=planned.reason,
+                        reason=planned_reason,
                         decision_id=str(row.get("decision_id") or ""),
                         risk_review=_risk_with_promotion(risk_review.to_dict(), promotion_review),
                         promotion_review=_promotion_dict(promotion_review),
@@ -412,6 +445,33 @@ def _promotion_reason(review: BuyPromotionReview) -> str:
     if suffix:
         return f"Buy promotion review: {review.promotion_decision}. {suffix}"
     return f"Buy promotion review: {review.promotion_decision}."
+
+
+def _staged_buy_values(
+    symbol: str,
+    *,
+    promotion_review: BuyPromotionReview,
+    row: Mapping[str, Any],
+    profile: PortfolioProfile,
+    portfolio_state: PortfolioState,
+) -> dict[str, Any] | None:
+    staged_size = float(promotion_review.staged_entry_size_pct or 0.0)
+    original_size = float(row.get("suggested_size_pct") or 0.0)
+    if staged_size <= 0 or original_size <= 0 or staged_size >= original_size:
+        return None
+    current_value = portfolio_state.holding_value(symbol)
+    target_value = round(float(profile.tradable_capital or 0.0) * staged_size / 100.0, 2)
+    trade_value = round(max(0.0, target_value - current_value), 2)
+    cash_shortfall = round(max(0.0, trade_value - float(portfolio_state.cash or 0.0)), 2)
+    return {
+        "target_value": target_value,
+        "trade_value": trade_value,
+        "cash_shortfall": cash_shortfall,
+        "reason": (
+            f"Graham staged-entry discipline uses {staged_size:g}% starter size "
+            f"instead of {original_size:g}% target size."
+        ),
+    }
 
 
 def _idle_cash_intents(

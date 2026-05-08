@@ -143,6 +143,41 @@ def test_portfolio_news_monitor_links_latest_journal_decision_for_held_symbol(tm
     assert queue_row["thesis_impact_hint"] in {"potential_confirmation", "potential_invalidation", "review_required"}
 
 
+def test_portfolio_news_monitor_filters_articles_before_published_after():
+    report = build_portfolio_news_monitor_report(
+        PortfolioNewsMonitorInputs(
+            portfolio_state=PortfolioState(holdings=[{"symbol": "AAPL", "market_value": 2500}]),
+            articles_by_symbol={
+                "AAPL": [
+                    {
+                        "title": "Old Apple earnings guidance improves services revenue outlook",
+                        "url": "https://example.com/aapl-old",
+                        "published_utc": "2026-05-01T12:00:00Z",
+                        "description": "Revenue, guidance, profit, and cash flow were stronger than expected.",
+                        "publisher": {"name": "Reuters"},
+                        "tickers": ["AAPL"],
+                    },
+                    {
+                        "title": "New Apple earnings guidance improves services revenue outlook",
+                        "url": "https://example.com/aapl-new",
+                        "published_utc": "2026-05-05T12:00:00Z",
+                        "description": "Revenue, guidance, profit, and cash flow were stronger than expected.",
+                        "publisher": {"name": "Reuters"},
+                        "tickers": ["AAPL"],
+                    },
+                ]
+            },
+            relevance_threshold=0.55,
+            published_after="2026-05-03T00:00:00Z",
+        ),
+        now_func=_fixed_now,
+    )
+
+    assert report["articles_checked"] == 1
+    assert [row["url"] for row in report["enrichment_needed_queue"]] == ["https://example.com/aapl-new"]
+    assert "aapl-old" not in json.dumps(report)
+
+
 def test_portfolio_news_monitor_missing_optional_inputs_warns_without_submission():
     report = build_portfolio_news_monitor_report(
         PortfolioNewsMonitorInputs(

@@ -53,6 +53,20 @@ def test_defensive_enterprising_mode_and_staged_entry_for_moderate_margin():
     assert "staged" in staged.reason.lower()
 
 
+def test_staged_entry_does_not_resize_missing_margin_without_risk_flags():
+    packet = {
+        "symbol": "PLAIN",
+        "quality_score": 82,
+        "evidence_brief": "Durable growth and acceptable leverage.",
+    }
+    risk = evaluate_permanent_loss_risk(packet)
+
+    staged = evaluate_staged_entry(suggested_size_pct=8.0, margin_of_safety_score=40, risk_report=risk)
+
+    assert staged.label == "target_position"
+    assert staged.recommended_size_pct == 8.0
+
+
 def test_mr_market_review_trigger_distinguishes_drawdown_and_rally():
     drawdown = mr_market_review_trigger(
         Holding(symbol="ADBE", quantity=2, market_value=700, original_purchase_total_cost=1000)

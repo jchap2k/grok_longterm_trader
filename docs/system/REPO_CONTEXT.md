@@ -141,6 +141,8 @@ Perplexity state:
   excludes protected holdings by default, links queued portfolio symbols to the
   latest journal decision when available, and writes an
   `enrichment_needed_queue` without broker calls, LLM calls, or order intents.
+  The monitor honors a `published_after` watermark for daily cadence and keeps
+  undated articles for conservative review.
 - `longterm_portfolio_news_monitor_ingest.py` validates saved monitor reports
   and creates compact queue summaries plus
   `portfolio_news_followup_ideas.json` for pipeline/scheduler/dashboard
@@ -238,8 +240,9 @@ Scheduler-readiness features now exist:
 - `scripts/longterm_position_review_queue.py` builds advisory sell/reduce,
   rebalance, and portfolio-news/thesis review rows from saved portfolio state,
   action plans, portfolio-news monitor reports, and journal review status. It
-  reuses existing thesis/review facts and linkage fields, but does not create
-  trade authority.
+  reuses existing thesis/review facts and linkage fields, adds Mr. Market
+  drawdown/rally review rows directly from current holdings, and does not
+  create trade authority.
 - `scripts/longterm_paper_submit_mode_plan.py` is a disabled-by-default
   readiness checklist for future submit-capable paper profiles. It requires a
   fresh ready scheduler handoff, a successful no-submit scheduler summary, and
@@ -514,6 +517,10 @@ Current account-mode stance:
 - Account action planning now surfaces explicit non-protected `SELL` / `REDUCE`
   decisions before the default held-position review path, so sell-worthy active
   holdings are visible in preview artifacts without enabling broker sells.
+- Actionable BUY rows can be resized to the Graham staged-entry starter
+  percentage in dry-run account plans when margin-of-safety support is
+  moderate. Missing margin detail alone does not shrink otherwise clean legacy
+  BUY rows.
 
 ## 7. Portfolio, Parking, And Risk Regime
 

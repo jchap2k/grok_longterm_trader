@@ -170,7 +170,7 @@ def evaluate_staged_entry(
             original,
             "Permanent-loss or overpayment risk requires confirmation before entry.",
         )
-    if risk_report.severity == "medium" or margin_of_safety_score < 75:
+    if risk_report.severity == "medium" or 60 <= margin_of_safety_score < 75:
         return StagedEntryPlan(
             "starter_position",
             round(min(original, 2.0), 2),

@@ -79,6 +79,50 @@ def test_account_action_plan_builds_allowed_buy_intent(tmp_path):
     assert payload["intents"][0]["risk_review"]["buy_promotion"]["promotion_decision"] == "ACTIONABLE_BUY"
 
 
+def test_account_action_plan_uses_staged_entry_size_when_margin_is_moderate(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    packet = create_research_packet_from_idea(
+        {
+            "symbol": "ADBE",
+            "benchmark_symbol": "FXAIX",
+            "quality_score": 88,
+            "valuation_score": 50,
+            "evidence_brief": (
+                "research_evidence_brief_v1 | ADBE\n"
+                "Fundamentals: durable growth and acceptable leverage.\n"
+                "Article evidence: primary-company article (source Reuters, confidence 0.8, basis snippet_grounded).\n"
+                "Grok catalyst synthesis: long-term catalyst remains intact."
+            ),
+        }
+    )
+    journal.record_decision(
+        packet,
+        decision={
+            "recommendation": "BUY",
+            "confidence": 88,
+            "suggested_size_pct": 6,
+            "key_thesis": "Creative cloud durability.",
+        },
+        candidate_price=100,
+        benchmark_price=100,
+    )
+    profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
+    state = PortfolioState(cash=5000, protected_symbols=["FXAIX"])
+
+    plan = AccountActionPlanBuilder().build(
+        journal,
+        profile=profile,
+        portfolio_state=state,
+    )
+
+    buy = plan.to_dict()["intents"][0]
+    assert buy["intent_type"] == "BUY"
+    assert buy["trade_value"] == 680.0
+    assert buy["target_value"] == 680.0
+    assert buy["promotion_review"]["staged_entry_label"] == "starter_position"
+    assert "staged" in buy["reason"].lower()
+
+
 def test_account_action_plan_pauses_new_buy_but_keeps_review_intent(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
     first = _record(journal, "NVDA", recommendation="BUY", confidence=91, size=8)

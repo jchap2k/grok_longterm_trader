@@ -108,6 +108,42 @@ def test_position_review_queue_escalates_portfolio_news_and_excludes_protected_s
     assert row["article_title"] == "Adobe faces major regulatory review"
 
 
+def test_position_review_queue_adds_mr_market_reviews_from_portfolio_holdings():
+    report = build_position_review_queue_report(
+        PositionReviewQueueInputs(
+            portfolio_state=PortfolioState(
+                cash=5000,
+                holdings=[
+                    {
+                        "symbol": "ADBE",
+                        "market_value": 700,
+                        "quantity": 2,
+                        "original_purchase_total_cost": 1000,
+                    },
+                    {
+                        "symbol": "MSFT",
+                        "market_value": 1500,
+                        "quantity": 2,
+                        "original_purchase_total_cost": 1000,
+                    },
+                ],
+            ),
+        ),
+        now_func=lambda: datetime(2026, 5, 8, 13, 0, tzinfo=timezone.utc),
+    )
+
+    assert report["review_count"] == 2
+    by_symbol = {row["symbol"]: row for row in report["review_queue"]}
+    assert by_symbol["ADBE"]["review_type"] == "mr_market_drawdown_review"
+    assert by_symbol["ADBE"]["severity"] == "high"
+    assert by_symbol["ADBE"]["suggested_review_focus"] == "sell_or_add_after_thesis_check"
+    assert "broken thesis" in by_symbol["ADBE"]["reason"].lower()
+    assert by_symbol["MSFT"]["review_type"] == "mr_market_rally_review"
+    assert by_symbol["MSFT"]["severity"] == "medium"
+    assert by_symbol["MSFT"]["suggested_review_focus"] == "trim_or_trailing_profit_review"
+    assert "valuation" in by_symbol["MSFT"]["reason"].lower()
+
+
 def test_position_review_queue_cli_writes_json_report(tmp_path):
     portfolio = tmp_path / "portfolio.json"
     action_plan = tmp_path / "action_plan.json"
