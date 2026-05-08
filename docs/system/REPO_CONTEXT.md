@@ -313,6 +313,11 @@ Scheduler-readiness features now exist:
   inspection, including the resolved `config_file` path for provenance. Keep
   validation enabled in new local profiles until the operator has reviewed the
   generated command surface.
+- `scripts/longterm_scheduler_profile.py` renders a local scheduler JSON
+  profile from `ongoing_no_submit_scheduler.example.json` using explicit
+  `--set key=value` plus boolean `--enable` / `--disable` overrides. It keeps
+  `validate_config_only=true` and can validate/write the profile-validation
+  summary in the same no-submit pass.
 - Dashboard manifests can point at a saved scheduler config-validation JSON via
   `scheduler_config_validation`; the localhost server exposes it at
   `/api/scheduler-config-validation.json`, includes it in `/api/summary.json`,

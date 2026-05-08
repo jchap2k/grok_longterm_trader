@@ -958,6 +958,13 @@ artifact paths, and launch the same safe preset with:
 python scripts/longterm_pipeline_scheduler.py --config-file path\to\ongoing_no_submit_scheduler.local.json
 ```
 
+Or render the local profile from the safe template with explicit overrides,
+then validate it immediately without creating scheduler run folders:
+
+```powershell
+python scripts/longterm_scheduler_profile.py --output-profile path\to\ongoing_no_submit_scheduler.local.json --set output_dir=path\to\pipeline_scheduler_runs --set journal_db=path\to\journal.db --set ledger_db=path\to\paper_ledger.db --set action_plan=path\to\account_action_plan.json --set profile_config=path\to\roth_ira_profile.json --set summary_output=path\to\scheduler_profile_validation.json --set scheduler_config_validation=path\to\scheduler_profile_validation.json --enable allow_existing_paper_positions --enable expected_cash_from_portfolio_state --validate-after-write --json
+```
+
 The config file accepts an `args` object using the same argparse destination
 names as the CLI, for example `journal_db`, `action_plan`, and
 `allow_existing_paper_positions`. Unknown config keys fail closed so typos do
