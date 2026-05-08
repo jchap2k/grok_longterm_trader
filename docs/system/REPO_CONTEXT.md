@@ -11,8 +11,9 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-08 by Codex after the no-submit position-review queue,
-safe scheduler verifier seam, and disabled paper submit-mode readiness plan.
+Last updated: 2026-05-08 by Codex after adding the no-submit scheduler review
+bundle that joins post-run verification, position-review, handoff, scheduler
+policy, and disabled submit-mode readiness artifacts for dashboard review.
 
 ## 1. Project Identity
 
@@ -240,6 +241,16 @@ Scheduler-readiness features now exist:
   a completed position-review queue; it emits no runnable submit command and
   keeps `order_submission_enabled=false`, `submit_profile_enabled=false`, and
   `broker_calls_enabled=false`.
+- `scripts/longterm_scheduler_review_bundle.py` is the post-scheduler
+  no-submit review gate bundler. It consumes a dashboard manifest, scheduler
+  handoff, scheduler summary, position-review queue, and post-run verifier
+  report; writes `paper_submit_mode_plan.json`,
+  `scheduler_review_bundle.json`, and
+  `dashboard_review_gates_manifest.json`; and returns ready only when the
+  verifier, resource controls, scheduler run, position queue, benchmark policy,
+  and disabled submit-mode plan are clean. It can optionally block on supplied
+  buy-promotion/final-action artifacts. It never emits submit commands,
+  enables a submit profile, calls a broker, or calls an LLM.
 - Scheduler policy treats unbounded paid/provider resource controls as a
   high-urgency `resource_control_review` blocker, while bounded paid runs carry
   a warning for operator awareness. Operator status bundles and markdown surface
@@ -384,6 +395,11 @@ Scheduler-readiness features now exist:
   server exposes `/api/paper-submit-mode-plan.json`, includes it in
   `/api/summary.json`, and renders a disabled submit-profile readiness card.
   It remains a checklist only and never emits runnable submit commands.
+- `dashboard_review_gates_manifest.json` is now the preferred manifest after a
+  completed no-submit scheduler run when `longterm_scheduler_review_bundle.py`
+  has been run. It preserves existing dashboard inputs and adds/replaces the
+  latest scheduler handoff, pipeline scheduler summary, position review queue,
+  and generated paper submit-mode plan paths for live localhost review.
 - Read-only paper-account refresh and the `ongoing-no-submit` scheduler preset
   can pass scheduler review artifacts, position-review queues, and optional
   paper-submit readiness plans through to refreshed dashboard manifests/sites,
