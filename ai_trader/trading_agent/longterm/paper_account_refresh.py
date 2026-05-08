@@ -38,6 +38,7 @@ def refresh_paper_account_artifacts(
     pipeline_scheduler_summary_path: str | Path = "",
     scheduler_config_validation_path: str | Path = "",
     scheduler_task_plan_path: str | Path = "",
+    scheduler_handoff_path: str | Path = "",
     scheduler_policy_path: str | Path = "",
     committee_preset_policy_path: str | Path = "",
     status_refresh_file: str | Path = "",
@@ -76,6 +77,7 @@ def refresh_paper_account_artifacts(
     scheduler_policy = _load_json_optional(scheduler_policy_path)
     scheduler_config_validation = _load_json_optional(scheduler_config_validation_path)
     scheduler_task_plan = _load_json_optional(scheduler_task_plan_path)
+    scheduler_handoff = _load_json_optional(scheduler_handoff_path)
     committee_preset_policy = _load_json_optional(committee_preset_policy_path)
     price_history = _load_json_optional(price_history_file)
     evidence_items = _load_json_list_optional(evidence_file)
@@ -120,6 +122,7 @@ def refresh_paper_account_artifacts(
         pipeline_scheduler_summary=pipeline_scheduler_summary_path,
         scheduler_config_validation=scheduler_config_validation_path,
         scheduler_task_plan=scheduler_task_plan_path,
+        scheduler_handoff=scheduler_handoff_path,
         scheduler_policy=scheduler_policy_path,
         committee_preset_policy=committee_preset_policy_path,
         decision_journal_path=journal_db,
@@ -139,6 +142,7 @@ def refresh_paper_account_artifacts(
             price_history_by_symbol=price_history,
             scheduler_config_validation=scheduler_config_validation,
             scheduler_task_plan=scheduler_task_plan,
+            scheduler_handoff=scheduler_handoff,
         )
         _write_site(site_dir, pages)
         site_page_count = len(pages)
@@ -176,6 +180,7 @@ def refresh_paper_account_artifacts(
             "pipeline_scheduler_summary": _component(pipeline_scheduler_summary_path),
             "scheduler_config_validation": _component(scheduler_config_validation_path),
             "scheduler_task_plan": _component(scheduler_task_plan_path),
+            "scheduler_handoff": _component(scheduler_handoff_path),
             "scheduler_policy": _component(scheduler_policy_path),
             "committee_preset_policy": _component(committee_preset_policy_path),
             "status_refresh_file": _component(status_refresh_file),

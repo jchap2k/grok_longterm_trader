@@ -11,8 +11,9 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-07 by Codex after portfolio-news follow-up committee
-reviews were surfaced as a distinct pipeline-health/dashboard inspection step.
+Last updated: 2026-05-08 by Codex after the no-submit scheduler handoff packet,
+dashboard handoff seam, bounded scheduled-research print-plan, and
+sell/rebalance simulation visibility pass.
 
 ## 1. Project Identity
 
@@ -271,6 +272,19 @@ Scheduler-readiness features now exist:
     completed with `error_count=0`, `order_submission_enabled=false`,
     pre-pipeline snapshot `0`, pipeline `0`, scheduler policy `0`, post-run
     verifier `0`, and account/dashboard refresh `0`.
+  - `%TEMP%\longterm_scheduler_handoff_20260508_062101`: reviewed no-submit
+    handoff packet and one-cycle scheduler execution. The config validation,
+    task plan, dashboard manifest, and handoff check all aligned with
+    `status=ready`, including an explicit `order_submission_boundary=ready`
+    handoff check; the one-cycle scheduler run completed with
+    `order_submission_enabled=false`, bounded resource controls, no submit
+    flags, post-run verification success, and refreshed dashboard manifests
+    carrying both scheduler task-plan and scheduler handoff paths.
+  - `%TEMP%\longterm_scheduled_research_printplan_20260508_062300`: bounded
+    paid-resource scheduler print-plan only. It did not run Perplexity or
+    committee work, but proved the command shape for `provider_mode=perplexity`
+    with `research_max_pass_count=3`, `research_max_evidence_batches=1`,
+    `generated_committee_max_batches=1`, and no submit flags.
 - Policy-state artifacts track `last_full_research_at`,
   `last_no_submit_preflight_at`, `last_account_refresh_at`, and
   `last_final_planning_at`; when portfolio-news features are enabled they also
@@ -330,7 +344,8 @@ Scheduler-readiness features now exist:
 - `scripts/longterm_scheduler_handoff.py` validates the final scheduler
   handoff chain across the config-validation artifact, task-plan artifact, and
   dashboard manifest. It exits ready only when the artifacts agree and
-  `order_submission_enabled=false` throughout.
+  `order_submission_enabled=false` throughout, and now exposes the explicit
+  `order_submission_boundary` check for dashboard/operator review.
 - Dashboard manifests can point at a saved scheduler config-validation JSON via
   `scheduler_config_validation`; the localhost server exposes it at
   `/api/scheduler-config-validation.json`, includes it in `/api/summary.json`,
@@ -340,10 +355,16 @@ Scheduler-readiness features now exist:
   server exposes `/api/scheduler-task-plan.json`, includes it in
   `/api/summary.json`, and renders the Windows Task Scheduler registration
   plan as a review artifact.
+- Dashboard manifests can point at `scheduler_handoff`; the localhost server
+  exposes `/api/scheduler-handoff.json`, includes it in `/api/summary.json`,
+  and renders a Scheduler Handoff card in Safety / Preflight. Read-only
+  paper-account refresh and the `ongoing-no-submit` scheduler preset can pass
+  scheduler config-validation, task-plan, and handoff paths through to refreshed
+  dashboard manifests/sites.
 - Read-only paper-account refresh and the `ongoing-no-submit` scheduler preset
-  can pass `--scheduler-config-validation` through to refreshed dashboard
-  manifests/sites, so reviewed local profiles remain visible after recurring
-  account/dashboard refreshes.
+  can pass scheduler review artifacts through to refreshed dashboard
+  manifests/sites, so reviewed local profiles and handoff evidence remain
+  visible after recurring account/dashboard refreshes.
 - One longer full no-submit execute was intentionally stopped after wrapper
   timeout while the empty-batch final-planning refresh was still running; use
   longer supervised windows, existing saved action plans, or smaller resumable
@@ -418,6 +439,9 @@ Dashboard should remain an operator/review surface first:
 - Future chat commands can be added later.
 - Command chat must route through explicit safety parsing and approval logic.
 - The dashboard should not bypass paper/live execution gates.
+- Review / Simulation Intents now keep SELL, REDUCE, REBALANCE, REVIEW, and
+  HOLD rows visible for analysis while Stage 6B V1 still submits only simple
+  BUY previews.
 
 ## 9. Safety Rules
 

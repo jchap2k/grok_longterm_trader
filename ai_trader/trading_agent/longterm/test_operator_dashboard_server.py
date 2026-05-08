@@ -10,6 +10,7 @@ from longterm.operator_dashboard_server import (
     build_dashboard_pages_from_manifest,
     build_pipeline_health_from_manifest,
     build_portfolio_summary_from_manifest,
+    build_scheduler_handoff_from_manifest,
     build_scheduler_task_plan_from_manifest,
     build_scheduler_config_validation_from_manifest,
     find_latest_dashboard_manifest,
@@ -42,6 +43,7 @@ def test_dashboard_manifest_records_traceability_and_rules_hash(tmp_path):
     assert manifest["committee_preset_policy"].endswith("committee_preset_policy.json")
     assert manifest["scheduler_config_validation"] == ""
     assert manifest["scheduler_task_plan"] == ""
+    assert manifest["scheduler_handoff"] == ""
     assert manifest["api_usage"] == ""
     assert manifest["active_rules_hash"]
     assert manifest["generated_at"].endswith("Z")
@@ -389,6 +391,68 @@ def test_dashboard_server_exposes_scheduler_task_plan_from_manifest(tmp_path):
     assert "09:35" in html
 
 
+def test_dashboard_server_exposes_scheduler_handoff_from_manifest(tmp_path):
+    action_plan = tmp_path / "action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    handoff = tmp_path / "scheduler_handoff.json"
+    manifest_path = tmp_path / "dashboard_manifest.json"
+    action_plan.write_text(json.dumps({"intents": []}), encoding="utf-8")
+    portfolio.write_text(json.dumps({"holdings": []}), encoding="utf-8")
+    handoff.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "mode": "scheduler_handoff_check",
+                "status": "ready",
+                "scheduler_config_validation": str(tmp_path / "scheduler_profile_validation.json"),
+                "scheduler_task_plan": str(tmp_path / "scheduler_task_plan.json"),
+                "manifest": str(manifest_path),
+                "checks": {
+                    "scheduler_config_validation": "ready",
+                    "scheduler_task_plan": "ready",
+                    "dashboard_manifest": "ready",
+                    "order_submission_boundary": "ready",
+                },
+                "blockers": [],
+                "warnings": [],
+                "next_safe_action": "review_task_plan_then_register_manually_if_approved",
+                "order_submission_enabled": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest_path.write_text(
+        json.dumps(
+            build_dashboard_manifest(
+                action_plan=action_plan,
+                portfolio_state=portfolio,
+                scheduler_handoff=handoff,
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    summary = build_scheduler_handoff_from_manifest(load_dashboard_manifest(manifest_path))
+    status, content_type, body = resolve_dashboard_request(manifest_path, "/api/scheduler-handoff.json")
+    summary_status, _, summary_body = resolve_dashboard_request(manifest_path, "/api/summary.json")
+    index_status, _, index_body = resolve_dashboard_request(manifest_path, "/")
+    api = json.loads(body.decode("utf-8"))
+    dashboard_summary = json.loads(summary_body.decode("utf-8"))
+    html = index_body.decode("utf-8")
+
+    assert summary["status"] == "ready"
+    assert summary["checks"]["order_submission_boundary"] == "ready"
+    assert status == 200
+    assert content_type == "application/json; charset=utf-8"
+    assert api["mode"] == "scheduler_handoff_check"
+    assert api["order_submission_enabled"] is False
+    assert summary_status == 200
+    assert dashboard_summary["scheduler_handoff"]["status"] == "ready"
+    assert index_status == 200
+    assert "Scheduler Handoff" in html
+    assert "Review Task Plan Then Register Manually If Approved" in html
+
+
 def test_live_dashboard_filters_protected_symbol_from_actionable_candidates(tmp_path):
     action_plan = tmp_path / "action_plan.json"
     portfolio = tmp_path / "portfolio.json"
@@ -588,6 +652,7 @@ def test_dashboard_server_cli_can_write_manifest_without_serving(tmp_path, capsy
     committee_preset_policy = tmp_path / "committee_preset_policy.json"
     scheduler_config_validation = tmp_path / "scheduler_profile_validation.json"
     scheduler_task_plan = tmp_path / "scheduler_task_plan.json"
+    scheduler_handoff = tmp_path / "scheduler_handoff.json"
     manifest = tmp_path / "dashboard_manifest.json"
     rules.write_text("rules", encoding="utf-8")
     action_plan.write_text("{}", encoding="utf-8")
@@ -595,6 +660,7 @@ def test_dashboard_server_cli_can_write_manifest_without_serving(tmp_path, capsy
     committee_preset_policy.write_text(json.dumps({"recommended_preset": "decision_4"}), encoding="utf-8")
     scheduler_config_validation.write_text(json.dumps({"status": "ready"}), encoding="utf-8")
     scheduler_task_plan.write_text(json.dumps({"status": "ready", "task_name": "LongTermTraderNoSubmit"}), encoding="utf-8")
+    scheduler_handoff.write_text(json.dumps({"status": "ready", "mode": "scheduler_handoff_check"}), encoding="utf-8")
 
     code = run_cli(
         build_parser().parse_args(
@@ -615,6 +681,8 @@ def test_dashboard_server_cli_can_write_manifest_without_serving(tmp_path, capsy
                 str(scheduler_config_validation),
                 "--scheduler-task-plan",
                 str(scheduler_task_plan),
+                "--scheduler-handoff",
+                str(scheduler_handoff),
                 "--campaign-id",
                 "campaign-2",
                 "--json",
@@ -632,4 +700,5 @@ def test_dashboard_server_cli_can_write_manifest_without_serving(tmp_path, capsy
     assert saved["committee_preset_policy"] == str(committee_preset_policy)
     assert saved["scheduler_config_validation"] == str(scheduler_config_validation)
     assert saved["scheduler_task_plan"] == str(scheduler_task_plan)
+    assert saved["scheduler_handoff"] == str(scheduler_handoff)
     assert saved["active_rules_hash"]

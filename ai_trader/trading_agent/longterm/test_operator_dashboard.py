@@ -221,6 +221,23 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
                 "trade_value": 30940,
                 "reason": "Normal regime parking.",
             },
+            {
+                "intent_type": "SELL",
+                "order_intent": "SELL",
+                "symbol": "AAPL",
+                "allowed": True,
+                "trade_value": 1200,
+                "reason": "Thesis broken; review-only sell simulation.",
+            },
+            {
+                "intent_type": "REBALANCE",
+                "order_intent": "SELL_TO_FUND_BUY",
+                "symbol": "MSFT",
+                "source_symbol": "AAPL",
+                "allowed": True,
+                "trade_value": 900,
+                "reason": "Rebalance candidate; hard-blocked from Stage 6B V1 submission.",
+            },
         ]
     }
     dashboard = build_operator_dashboard(
@@ -361,6 +378,10 @@ def test_operator_dashboard_site_builds_index_and_ticker_pages_with_chart():
     assert "Scorecards" in site["index.html"]
     assert "Portfolio" in site["index.html"]
     assert "Safety" in site["index.html"]
+    assert "Review / Simulation Intents" in site["index.html"]
+    assert "Sell and rebalance candidates remain visible for operator review but are never Stage 6B V1 paper-submit candidates." in site["index.html"]
+    assert "Thesis broken; review-only sell simulation." in site["index.html"]
+    assert "Rebalance candidate; hard-blocked from Stage 6B V1 submission." in site["index.html"]
     assert "dashboard-topbar" in site["index.html"]
     assert 'href="#dashboard-overview">Long-Term Advisor</a>' in site["index.html"]
     assert 'href="#portfolio">My Stocks</a>' in site["index.html"]

@@ -30,6 +30,7 @@ def build_dashboard_manifest(
     pipeline_scheduler_summary: str | Path = "",
     scheduler_config_validation: str | Path = "",
     scheduler_task_plan: str | Path = "",
+    scheduler_handoff: str | Path = "",
     scheduler_policy: str | Path = "",
     committee_preset_policy: str | Path = "",
     decision_journal_path: str | Path = "",
@@ -55,6 +56,7 @@ def build_dashboard_manifest(
         "pipeline_scheduler_summary": str(pipeline_scheduler_summary or ""),
         "scheduler_config_validation": str(scheduler_config_validation or ""),
         "scheduler_task_plan": str(scheduler_task_plan or ""),
+        "scheduler_handoff": str(scheduler_handoff or ""),
         "scheduler_policy": str(scheduler_policy or ""),
         "committee_preset_policy": str(committee_preset_policy or ""),
         "decision_journal_path": str(decision_journal_path or ""),
@@ -124,6 +126,7 @@ def build_dashboard_pages_from_manifest(manifest: Mapping[str, Any]) -> dict[str
     price_history = _load_json_optional(_resolve_manifest_path(base_dir, manifest.get("price_history_file")))
     scheduler_config_validation = build_scheduler_config_validation_from_manifest(manifest)
     scheduler_task_plan = build_scheduler_task_plan_from_manifest(manifest)
+    scheduler_handoff = build_scheduler_handoff_from_manifest(manifest)
     api_usage = build_api_usage_from_manifest(manifest)
     action_plan = _sanitize_action_plan_for_dashboard(action_plan, portfolio_state)
     dashboard = build_operator_dashboard(
@@ -141,6 +144,7 @@ def build_dashboard_pages_from_manifest(manifest: Mapping[str, Any]) -> dict[str
         api_usage=api_usage,
         scheduler_config_validation=scheduler_config_validation,
         scheduler_task_plan=scheduler_task_plan,
+        scheduler_handoff=scheduler_handoff,
     )
 
 
@@ -154,6 +158,7 @@ def build_dashboard_summary_from_manifest(manifest: Mapping[str, Any]) -> dict[s
     scheduler_policy = _load_json_optional(_resolve_manifest_path(base_dir, manifest.get("scheduler_policy")))
     scheduler_config_validation = build_scheduler_config_validation_from_manifest(manifest)
     scheduler_task_plan = build_scheduler_task_plan_from_manifest(manifest)
+    scheduler_handoff = build_scheduler_handoff_from_manifest(manifest)
     action_plan = _sanitize_action_plan_for_dashboard(action_plan, portfolio_state)
     dashboard = build_operator_dashboard(
         action_plan=action_plan,
@@ -167,6 +172,7 @@ def build_dashboard_summary_from_manifest(manifest: Mapping[str, Any]) -> dict[s
         "api_usage": build_api_usage_from_manifest(manifest),
         "scheduler_config_validation": scheduler_config_validation,
         "scheduler_task_plan": scheduler_task_plan,
+        "scheduler_handoff": scheduler_handoff,
         "order_submission_enabled": False,
     }
 
@@ -366,6 +372,28 @@ def build_scheduler_task_plan_from_manifest(manifest: Mapping[str, Any]) -> dict
     return normalized
 
 
+def build_scheduler_handoff_from_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
+    """Load the scheduler handoff check artifact from the manifest."""
+    base_dir = Path(str(manifest.get("_manifest_path") or ".")).parent
+    handoff_path = _resolve_manifest_path(base_dir, manifest.get("scheduler_handoff"))
+    if not handoff_path:
+        return _empty_scheduler_handoff("scheduler_handoff_artifact_missing")
+    payload = _load_json_optional(handoff_path)
+    if not payload:
+        return _empty_scheduler_handoff("scheduler_handoff_artifact_unreadable", source_path=handoff_path)
+    normalized = dict(payload)
+    normalized.setdefault("schema_version", 1)
+    normalized.setdefault("mode", "scheduler_handoff_check")
+    normalized.setdefault("status", "unknown")
+    normalized.setdefault("checks", {})
+    normalized.setdefault("blockers", [])
+    normalized.setdefault("warnings", [])
+    normalized.setdefault("next_safe_action", "generate_scheduler_handoff_check")
+    normalized["source_path"] = str(handoff_path)
+    normalized["order_submission_enabled"] = False
+    return normalized
+
+
 def resolve_dashboard_request(
     manifest_path: str | Path,
     request_path: str,
@@ -395,6 +423,8 @@ def resolve_dashboard_request(
         )
     if parsed_path == "/api/scheduler-task-plan.json":
         return 200, "application/json; charset=utf-8", _json_bytes(build_scheduler_task_plan_from_manifest(manifest))
+    if parsed_path == "/api/scheduler-handoff.json":
+        return 200, "application/json; charset=utf-8", _json_bytes(build_scheduler_handoff_from_manifest(manifest))
     pages = build_dashboard_pages_from_manifest(manifest)
     key = "index.html" if parsed_path in {"/", "/index.html"} else parsed_path.lstrip("/")
     if key not in pages:
@@ -556,6 +586,20 @@ def _empty_scheduler_task_plan(reason: str, *, source_path: Path | None = None) 
         "schedule": {},
         "warnings": [reason],
         "next_safe_action": "generate_windows_task_scheduler_plan",
+        "order_submission_enabled": False,
+    }
+
+
+def _empty_scheduler_handoff(reason: str, *, source_path: Path | None = None) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "mode": "scheduler_handoff_check",
+        "status": "unavailable",
+        "source_path": str(source_path or ""),
+        "checks": {},
+        "blockers": [],
+        "warnings": [reason],
+        "next_safe_action": "generate_scheduler_handoff_check",
         "order_submission_enabled": False,
     }
 
@@ -736,6 +780,7 @@ __all__ = [
     "build_pipeline_health_from_manifest",
     "build_portfolio_summary_from_manifest",
     "build_scheduler_config_validation_from_manifest",
+    "build_scheduler_handoff_from_manifest",
     "build_scheduler_policy_from_manifest",
     "find_latest_dashboard_manifest",
     "load_latest_dashboard_manifest",

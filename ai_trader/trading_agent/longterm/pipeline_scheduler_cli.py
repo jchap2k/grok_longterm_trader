@@ -60,6 +60,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--market-regime-file", default="")
     parser.add_argument("--price-map", default="")
     parser.add_argument("--scheduler-config-validation", default="")
+    parser.add_argument("--scheduler-task-plan", default="")
+    parser.add_argument("--scheduler-handoff", default="")
     parser.add_argument("--skip-price-map", action="store_true")
     parser.add_argument("--allow-existing-paper-positions", action="store_true")
     parser.add_argument("--final-planning-refresh", action="store_true")
@@ -536,6 +538,8 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
     ]
     _append_optional_path(account_refresh_parts, "--market-regime", args.market_regime_file)
     _append_optional_path(account_refresh_parts, "--scheduler-config-validation", args.scheduler_config_validation)
+    _append_optional_path(account_refresh_parts, "--scheduler-task-plan", args.scheduler_task_plan)
+    _append_optional_path(account_refresh_parts, "--scheduler-handoff", args.scheduler_handoff)
 
     post_run_verification_parts = [
         "python",

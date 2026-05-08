@@ -123,6 +123,7 @@ def build_operator_dashboard_site(
     api_usage: Mapping[str, Any] | None = None,
     scheduler_config_validation: Mapping[str, Any] | None = None,
     scheduler_task_plan: Mapping[str, Any] | None = None,
+    scheduler_handoff: Mapping[str, Any] | None = None,
 ) -> dict[str, str]:
     """Build a static dashboard package with index and ticker pages."""
     action_plan = action_plan or {}
@@ -145,6 +146,7 @@ def build_operator_dashboard_site(
             api_usage=api_usage or {},
             scheduler_config_validation=scheduler_config_validation or {},
             scheduler_task_plan=scheduler_task_plan or {},
+            scheduler_handoff=scheduler_handoff or {},
         )
     }
     for symbol in symbols:
@@ -407,6 +409,7 @@ def _site_index_html(
     api_usage: Mapping[str, Any] | None = None,
     scheduler_config_validation: Mapping[str, Any] | None = None,
     scheduler_task_plan: Mapping[str, Any] | None = None,
+    scheduler_handoff: Mapping[str, Any] | None = None,
 ) -> str:
     regime = dashboard.get("market_regime") or {}
     advisory = dashboard.get("agent_advisory") or {}
@@ -545,6 +548,7 @@ def _site_index_html(
               </div>
               {_intent_rows(parking_intents, empty_label="No parking intent generated.")}
             </section>
+            {_review_simulation_intents_panel(review_intents)}
             <section class="panel" id="portfolio">
               <div class="section-heading">
                 <p class="eyebrow">Portfolio Snapshot</p>
@@ -573,6 +577,7 @@ def _site_index_html(
               {_tax_mode_suppressions_panel(dashboard.get("suppressed_reasons") or [])}
               {_scheduler_config_validation_panel(scheduler_config_validation or {})}
               {_scheduler_task_plan_panel(scheduler_task_plan or {})}
+              {_scheduler_handoff_panel(scheduler_handoff or {})}
               {_pipeline_health_panel()}
             </section>
             <section class="panel" id="research-board">
@@ -1465,6 +1470,56 @@ def _scheduler_task_plan_panel(task_plan: Mapping[str, Any]) -> str:
         "</div>"
         f"<p data-scheduler-task-message>{escape(next_action)}</p>"
         "<small>This is a review artifact only; the dashboard does not register Windows tasks.</small>"
+        "</div>"
+    )
+
+
+def _review_simulation_intents_panel(items: list[Mapping[str, Any]]) -> str:
+    visible = [
+        item
+        for item in items
+        if str(item.get("intent_type") or "").upper() in {"SELL", "REDUCE", "REBALANCE", "REVIEW", "HOLD"}
+    ]
+    if not visible:
+        return ""
+    return (
+        "<section class=\"panel\" id=\"review-simulation-intents\">"
+        "<div class=\"section-heading\">"
+        "<p class=\"eyebrow\">Review / Simulation</p>"
+        "<h2>Review / Simulation Intents</h2>"
+        "</div>"
+        "<p>Sell and rebalance candidates remain visible for operator review but are never Stage 6B V1 paper-submit candidates.</p>"
+        f"{_intent_rows(visible, empty_label='No review/simulation intents.')}"
+        "</section>"
+    )
+
+
+def _scheduler_handoff_panel(handoff: Mapping[str, Any]) -> str:
+    status = _display_label(handoff.get("status") or "unavailable")
+    next_action = _display_label(handoff.get("next_safe_action") or "generate_scheduler_handoff_check")
+    checks = handoff.get("checks") if isinstance(handoff.get("checks"), Mapping) else {}
+    blockers = [str(item) for item in (handoff.get("blockers") or []) if str(item).strip()]
+    validation = _display_label(checks.get("scheduler_config_validation") or "n/a")
+    task = _display_label(checks.get("scheduler_task_plan") or "n/a")
+    manifest = _display_label(checks.get("dashboard_manifest") or "n/a")
+    boundary = _display_label(checks.get("order_submission_boundary") or "n/a")
+    blocker_text = ", ".join(_display_label(item) for item in blockers) or "none"
+    return (
+        "<div class=\"scheduler-validation-card\" data-scheduler-handoff>"
+        "<div class=\"section-heading compact-heading\">"
+        "<p class=\"eyebrow\">Scheduler Handoff</p>"
+        "<h3>Launch Readiness Packet</h3>"
+        "</div>"
+        "<div class=\"pipeline-health-grid\">"
+        f"<div><span>Status</span><strong data-scheduler-handoff-status>{escape(status)}</strong></div>"
+        f"<div><span>Profile</span><strong>{escape(validation)}</strong></div>"
+        f"<div><span>Task Plan</span><strong>{escape(task)}</strong></div>"
+        f"<div><span>Manifest</span><strong>{escape(manifest)}</strong></div>"
+        f"<div><span>Submit Boundary</span><strong>{escape(boundary)}</strong></div>"
+        f"<div><span>Blockers</span><strong>{escape(blocker_text)}</strong></div>"
+        "</div>"
+        f"<p data-scheduler-handoff-message>{escape(next_action)}</p>"
+        "<small>Handoff is advisory and read-only; recurring task registration remains a separate operator action.</small>"
         "</div>"
     )
 

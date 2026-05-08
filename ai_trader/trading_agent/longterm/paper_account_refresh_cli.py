@@ -27,6 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pipeline-scheduler-summary", default="")
     parser.add_argument("--scheduler-config-validation", default="")
     parser.add_argument("--scheduler-task-plan", default="")
+    parser.add_argument("--scheduler-handoff", default="")
     parser.add_argument("--scheduler-policy", default="")
     parser.add_argument("--committee-preset-policy", default="")
     parser.add_argument("--status-refresh-file", default="")
@@ -54,6 +55,7 @@ def run_cli(
         pipeline_scheduler_summary_path=args.pipeline_scheduler_summary,
         scheduler_config_validation_path=args.scheduler_config_validation,
         scheduler_task_plan_path=args.scheduler_task_plan,
+        scheduler_handoff_path=args.scheduler_handoff,
         scheduler_policy_path=args.scheduler_policy,
         committee_preset_policy_path=args.committee_preset_policy,
         status_refresh_file=args.status_refresh_file,

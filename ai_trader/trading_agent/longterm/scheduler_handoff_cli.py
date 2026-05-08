@@ -26,6 +26,11 @@ def run_cli(args: argparse.Namespace) -> int:
     validation = _load_json(validation_path)
     task_plan = _load_json(task_plan_path)
     manifest = _load_json(manifest_path)
+    order_submission_boundary_ready = not _order_submission_boundary_blocked(
+        validation=validation,
+        task_plan=task_plan,
+        manifest=manifest,
+    )
     blockers = _blockers(
         validation=validation,
         validation_path=validation_path,
@@ -50,6 +55,7 @@ def run_cli(args: argparse.Namespace) -> int:
             "scheduler_config_validation": "ready" if _is_ready(validation) else "blocked",
             "scheduler_task_plan": "ready" if _is_ready(task_plan) else "blocked",
             "dashboard_manifest": "ready" if not _manifest_blockers(manifest, validation_path, task_plan_path) else "blocked",
+            "order_submission_boundary": "ready" if order_submission_boundary_ready else "blocked",
         },
         "blockers": blockers,
         "order_submission_enabled": False,
@@ -116,6 +122,21 @@ def _manifest_blockers(manifest: Mapping[str, Any], validation_path: Path, task_
     if not manifest_task_plan or Path(manifest_task_plan).resolve() != task_plan_path:
         blockers.append("dashboard_manifest_task_plan_mismatch")
     return blockers
+
+
+def _order_submission_boundary_blocked(
+    *,
+    validation: Mapping[str, Any],
+    task_plan: Mapping[str, Any],
+    manifest: Mapping[str, Any],
+) -> bool:
+    profile_validation = task_plan.get("profile_validation")
+    if not isinstance(profile_validation, Mapping):
+        profile_validation = {}
+    return any(
+        bool(payload.get("order_submission_enabled"))
+        for payload in (validation, task_plan, profile_validation, manifest)
+    )
 
 
 def _is_ready(payload: Mapping[str, Any]) -> bool:
