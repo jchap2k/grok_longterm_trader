@@ -15,6 +15,8 @@ ai_trader/ai_trader_data/broker_config.json
 **/config/discord_thread_id.txt
 **/config/discord_channel_id.txt
 **/config/broker_config.json
+**/config/mailchimp*.txt
+**/config/mailchip*.txt
 **/email_notifications.json
 **/config/schwab_login.txt
 **/config/schwab_login.enc
