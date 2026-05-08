@@ -60,6 +60,10 @@ def test_scheduler_task_plan_cli_writes_reviewable_windows_task_plan(tmp_path, c
     assert saved["profile_run_mode"] == "no-submit"
     assert saved["scheduler_command"].endswith(f"--config-file {profile.resolve()}")
     assert "longterm_pipeline_scheduler.py" in saved["scheduler_command"]
+    assert saved["profile_validation"]["mode"] == "pipeline_scheduler_config_validation"
+    assert saved["profile_validation"]["status"] == "ready"
+    assert saved["profile_validation"]["config_file"] == str(profile.resolve())
+    assert saved["profile_validation"]["order_submission_enabled"] is False
     assert "schtasks /Create" in saved["schtasks_command"]
     assert "/TN LongTermTraderNoSubmit" in saved["schtasks_command"]
     assert "/SC DAILY" in saved["schtasks_command"]
@@ -141,3 +145,44 @@ def test_scheduler_task_plan_cli_rejects_submit_capable_profile(tmp_path):
         assert "Submit-capable scheduler profile keys are not allowed" in str(exc)
     else:
         raise AssertionError("Expected submit-capable profile to fail")
+
+
+def test_scheduler_task_plan_cli_rejects_unbounded_paid_profile(tmp_path):
+    profile = tmp_path / "unbounded.json"
+    profile.write_text(
+        json.dumps(
+            {
+                "args": {
+                    "preset": "ongoing-no-submit",
+                    "output_dir": str(tmp_path / "scheduler_runs"),
+                    "journal_db": str(tmp_path / "journal.db"),
+                    "ledger_db": str(tmp_path / "paper_ledger.db"),
+                    "action_plan": str(tmp_path / "account_action_plan.json"),
+                    "research_source_file": str(tmp_path / "universe.csv"),
+                    "research_source": "manual_watchlist",
+                    "research_campaign_dir": str(tmp_path / "campaign"),
+                    "perplexity_research": True,
+                    "validate_config_only": False,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    try:
+        run_cli(
+            build_parser().parse_args(
+                [
+                    "--profile-file",
+                    str(profile),
+                    "--task-name",
+                    "LongTermTraderNoSubmit",
+                    "--start-time",
+                    "09:35",
+                ]
+            )
+        )
+    except ValueError as exc:
+        assert "--research-max-pass-count" in str(exc)
+    else:
+        raise AssertionError("Expected unbounded paid profile to fail validation")

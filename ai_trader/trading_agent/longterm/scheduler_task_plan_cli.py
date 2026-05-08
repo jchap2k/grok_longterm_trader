@@ -9,6 +9,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from longterm.pipeline_scheduler_cli import parse_args as parse_scheduler_args
+from longterm.pipeline_scheduler_cli import validate_resolved_scheduler_config
+
 
 SUBMIT_CAPABLE_KEYS = {"submit_paper_orders", "confirm_paper_submit"}
 TRADING_AGENT_DIR = Path(__file__).resolve().parents[1]
@@ -36,6 +39,7 @@ def run_cli(args: argparse.Namespace) -> int:
     profile_args = _profile_args(profile_payload)
     _validate_no_submit_run_profile(profile_args)
     _validate_start_time(args.start_time)
+    profile_validation = validate_resolved_scheduler_config(parse_scheduler_args(["--config-file", str(profile_path)]))
 
     scheduler_script = working_dir / "scripts" / "longterm_pipeline_scheduler.py"
     scheduler_command = " ".join(
@@ -65,6 +69,7 @@ def run_cli(args: argparse.Namespace) -> int:
         "working_dir": str(working_dir),
         "schedule": {"type": str(args.schedule), "start_time": str(args.start_time)},
         "scheduler_command": scheduler_command,
+        "profile_validation": profile_validation,
         "schtasks_command": _schtasks_command(
             task_name=args.task_name,
             start_time=args.start_time,
