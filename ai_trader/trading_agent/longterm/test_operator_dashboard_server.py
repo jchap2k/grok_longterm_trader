@@ -10,6 +10,7 @@ from longterm.operator_dashboard_server import (
     build_dashboard_pages_from_manifest,
     build_pipeline_health_from_manifest,
     build_portfolio_summary_from_manifest,
+    build_scheduler_config_validation_from_manifest,
     find_latest_dashboard_manifest,
     load_dashboard_manifest,
     resolve_dashboard_request,
@@ -38,6 +39,7 @@ def test_dashboard_manifest_records_traceability_and_rules_hash(tmp_path):
     assert manifest["pipeline_summary"].endswith("pipeline_summary.json")
     assert manifest["scheduler_policy"].endswith("scheduler_policy.json")
     assert manifest["committee_preset_policy"].endswith("committee_preset_policy.json")
+    assert manifest["scheduler_config_validation"] == ""
     assert manifest["api_usage"] == ""
     assert manifest["active_rules_hash"]
     assert manifest["generated_at"].endswith("Z")
@@ -267,6 +269,68 @@ def test_dashboard_server_exposes_scheduler_resource_controls_from_manifest(tmp_
     assert api["resource_controls"]["bounded"] is True
 
 
+def test_dashboard_server_exposes_scheduler_config_validation_from_manifest(tmp_path):
+    action_plan = tmp_path / "action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    validation = tmp_path / "scheduler_profile_validation.json"
+    manifest_path = tmp_path / "dashboard_manifest.json"
+    action_plan.write_text(json.dumps({"intents": []}), encoding="utf-8")
+    portfolio.write_text(json.dumps({"holdings": []}), encoding="utf-8")
+    validation.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "mode": "pipeline_scheduler_config_validation",
+                "status": "ready",
+                "config_file": str(tmp_path / "ongoing_no_submit_scheduler.local.json"),
+                "preset": "ongoing-no-submit",
+                "order_submission_enabled": False,
+                "resource_controls": {
+                    "provider_mode": "perplexity",
+                    "research_max_pass_count": 25,
+                    "generated_committee_max_batches": 1,
+                    "bounded": True,
+                },
+                "next_safe_action": "run_scheduler_profile_when_operator_window_is_approved",
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest_path.write_text(
+        json.dumps(
+            build_dashboard_manifest(
+                action_plan=action_plan,
+                portfolio_state=portfolio,
+                scheduler_config_validation=validation,
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    summary = build_scheduler_config_validation_from_manifest(load_dashboard_manifest(manifest_path))
+    status, content_type, body = resolve_dashboard_request(manifest_path, "/api/scheduler-config-validation.json")
+    summary_status, _, summary_body = resolve_dashboard_request(manifest_path, "/api/summary.json")
+    index_status, _, index_body = resolve_dashboard_request(manifest_path, "/")
+    api = json.loads(body.decode("utf-8"))
+    dashboard_summary = json.loads(summary_body.decode("utf-8"))
+    html = index_body.decode("utf-8")
+
+    assert summary["status"] == "ready"
+    assert summary["resource_controls"]["bounded"] is True
+    assert status == 200
+    assert content_type == "application/json; charset=utf-8"
+    assert api["mode"] == "pipeline_scheduler_config_validation"
+    assert api["config_file"].endswith("ongoing_no_submit_scheduler.local.json")
+    assert api["order_submission_enabled"] is False
+    assert summary_status == 200
+    assert dashboard_summary["scheduler_config_validation"]["status"] == "ready"
+    assert index_status == 200
+    assert "Scheduler Profile" in html
+    assert "Ready" in html
+    assert "Perplexity" in html
+    assert "ongoing_no_submit_scheduler.local.json" in html
+
+
 def test_live_dashboard_filters_protected_symbol_from_actionable_candidates(tmp_path):
     action_plan = tmp_path / "action_plan.json"
     portfolio = tmp_path / "portfolio.json"
@@ -464,11 +528,13 @@ def test_dashboard_server_cli_can_write_manifest_without_serving(tmp_path, capsy
     action_plan = tmp_path / "action_plan.json"
     pipeline_summary = tmp_path / "pipeline_summary.json"
     committee_preset_policy = tmp_path / "committee_preset_policy.json"
+    scheduler_config_validation = tmp_path / "scheduler_profile_validation.json"
     manifest = tmp_path / "dashboard_manifest.json"
     rules.write_text("rules", encoding="utf-8")
     action_plan.write_text("{}", encoding="utf-8")
     pipeline_summary.write_text(json.dumps({"artifact_paths": {}}), encoding="utf-8")
     committee_preset_policy.write_text(json.dumps({"recommended_preset": "decision_4"}), encoding="utf-8")
+    scheduler_config_validation.write_text(json.dumps({"status": "ready"}), encoding="utf-8")
 
     code = run_cli(
         build_parser().parse_args(
@@ -485,6 +551,8 @@ def test_dashboard_server_cli_can_write_manifest_without_serving(tmp_path, capsy
                 str(pipeline_summary),
                 "--committee-preset-policy",
                 str(committee_preset_policy),
+                "--scheduler-config-validation",
+                str(scheduler_config_validation),
                 "--campaign-id",
                 "campaign-2",
                 "--json",
@@ -500,4 +568,5 @@ def test_dashboard_server_cli_can_write_manifest_without_serving(tmp_path, capsy
     assert saved["campaign_id"] == "campaign-2"
     assert saved["pipeline_summary"] == str(pipeline_summary)
     assert saved["committee_preset_policy"] == str(committee_preset_policy)
+    assert saved["scheduler_config_validation"] == str(scheduler_config_validation)
     assert saved["active_rules_hash"]

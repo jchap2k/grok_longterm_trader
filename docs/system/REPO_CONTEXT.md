@@ -313,6 +313,11 @@ Scheduler-readiness features now exist:
   inspection, including the resolved `config_file` path for provenance. Keep
   validation enabled in new local profiles until the operator has reviewed the
   generated command surface.
+- Dashboard manifests can point at a saved scheduler config-validation JSON via
+  `scheduler_config_validation`; the localhost server exposes it at
+  `/api/scheduler-config-validation.json`, includes it in `/api/summary.json`,
+  and renders a read-only Scheduler Profile card on the Safety / Preflight
+  section.
 - One longer full no-submit execute was intentionally stopped after wrapper
   timeout while the empty-batch final-planning refresh was still running; use
   longer supervised windows, existing saved action plans, or smaller resumable

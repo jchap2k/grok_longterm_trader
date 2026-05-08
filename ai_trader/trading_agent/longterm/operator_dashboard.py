@@ -121,6 +121,7 @@ def build_operator_dashboard_site(
     evidence_items: Iterable[Mapping[str, Any]] | None = None,
     price_history_by_symbol: Mapping[str, Any] | None = None,
     api_usage: Mapping[str, Any] | None = None,
+    scheduler_config_validation: Mapping[str, Any] | None = None,
 ) -> dict[str, str]:
     """Build a static dashboard package with index and ticker pages."""
     action_plan = action_plan or {}
@@ -141,6 +142,7 @@ def build_operator_dashboard_site(
             evidence_by_symbol=evidence_by_symbol,
             price_history_by_symbol=price_history_by_symbol,
             api_usage=api_usage or {},
+            scheduler_config_validation=scheduler_config_validation or {},
         )
     }
     for symbol in symbols:
@@ -401,6 +403,7 @@ def _site_index_html(
     evidence_by_symbol: Mapping[str, Mapping[str, Any]],
     price_history_by_symbol: Mapping[str, Any] | None = None,
     api_usage: Mapping[str, Any] | None = None,
+    scheduler_config_validation: Mapping[str, Any] | None = None,
 ) -> str:
     regime = dashboard.get("market_regime") or {}
     advisory = dashboard.get("agent_advisory") or {}
@@ -565,6 +568,7 @@ def _site_index_html(
                 {_safety_chip("Rebalance submit", "hard-blocked")}
               </div>
               {_tax_mode_suppressions_panel(dashboard.get("suppressed_reasons") or [])}
+              {_scheduler_config_validation_panel(scheduler_config_validation or {})}
               {_pipeline_health_panel()}
             </section>
             <section class="panel" id="research-board">
@@ -1391,6 +1395,39 @@ def _pipeline_health_panel() -> str:
         "<p data-pipeline-health-message>Serve the dashboard locally to check saved pipeline artifacts from "
         "<code>/api/pipeline-health.json</code>.</p>"
         "<small data-pipeline-health-updated>Static snapshot shown.</small>"
+        "</div>"
+    )
+
+
+def _scheduler_config_validation_panel(validation: Mapping[str, Any]) -> str:
+    status = _display_label(validation.get("status") or "unavailable")
+    preset = _display_label(validation.get("preset") or "unavailable")
+    config_file = str(validation.get("config_file") or "").strip()
+    config_label = Path(config_file).name if config_file else "No profile validation artifact"
+    controls = validation.get("resource_controls") if isinstance(validation.get("resource_controls"), Mapping) else {}
+    provider = _display_label(controls.get("provider_mode") or "unavailable")
+    bounded = controls.get("bounded")
+    bounded_label = "Yes" if bounded is True else "No" if bounded is False else "n/a"
+    research_cap = controls.get("research_max_pass_count")
+    committee_cap = controls.get("generated_committee_max_batches")
+    next_action = _display_label(validation.get("next_safe_action") or "run_scheduler_config_validation_before_recurring_launch")
+    return (
+        "<div class=\"scheduler-validation-card\" data-scheduler-config-validation>"
+        "<div class=\"section-heading compact-heading\">"
+        "<p class=\"eyebrow\">Scheduler Profile</p>"
+        "<h3>Config Validation</h3>"
+        "</div>"
+        "<div class=\"pipeline-health-grid\">"
+        f"<div><span>Status</span><strong data-scheduler-validation-status>{escape(status)}</strong></div>"
+        f"<div><span>Preset</span><strong data-scheduler-validation-preset>{escape(preset)}</strong></div>"
+        f"<div><span>Profile</span><strong data-scheduler-validation-config>{escape(config_label)}</strong></div>"
+        f"<div><span>Provider</span><strong data-scheduler-validation-provider>{escape(provider)}</strong></div>"
+        f"<div><span>Research Cap</span><strong data-scheduler-validation-research-cap>{escape(str(research_cap if research_cap is not None else 'n/a'))}</strong></div>"
+        f"<div><span>Committee Cap</span><strong data-scheduler-validation-committee-cap>{escape(str(committee_cap if committee_cap is not None else 'n/a'))}</strong></div>"
+        f"<div><span>Bounded</span><strong data-scheduler-validation-bounded>{escape(bounded_label)}</strong></div>"
+        "</div>"
+        f"<p data-scheduler-validation-message>{escape(next_action)}</p>"
+        "<small>Validation is read-only and does not create scheduler run folders or submit orders.</small>"
         "</div>"
     )
 
@@ -2461,7 +2498,7 @@ def _html_shell(*, title: str, body: str) -> str:
     .holdings-table-wrap {{ margin-top: 24px; }}
     .holdings-table-wrap h3 {{ margin: 0 0 8px; font-size: 22px; letter-spacing: -.03em; }}
     .holdings-table td[colspan] {{ color: var(--muted); font-style: italic; }}
-    .portfolio-live-card, .pipeline-health-card, .api-usage-card, .tax-suppression-card {{
+    .portfolio-live-card, .pipeline-health-card, .scheduler-validation-card, .api-usage-card, .tax-suppression-card {{
       margin-top: 22px;
       padding: 22px;
       border: 1px solid rgba(15,107,86,.22);
@@ -2535,10 +2572,11 @@ def _html_shell(*, title: str, body: str) -> str:
     .usage-provider-empty {{
       border-style: dashed;
     }}
-    .pipeline-health-card[data-pipeline-health-state="attention_required"] {{
+    .pipeline-health-card[data-pipeline-health-state="attention_required"],
+    .scheduler-validation-card[data-scheduler-validation-state="attention_required"] {{
       border-color: rgba(176,75,45,.34);
     }}
-    .tax-suppression-card p {{ margin: 12px 0 0; color: var(--muted); }}
+    .scheduler-validation-card p, .tax-suppression-card p {{ margin: 12px 0 0; color: var(--muted); }}
     .tax-suppression-card ul {{
       display: grid;
       gap: 10px;

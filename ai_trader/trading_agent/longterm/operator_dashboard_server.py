@@ -28,6 +28,7 @@ def build_dashboard_manifest(
     api_usage: str | Path = "",
     pipeline_summary: str | Path = "",
     pipeline_scheduler_summary: str | Path = "",
+    scheduler_config_validation: str | Path = "",
     scheduler_policy: str | Path = "",
     committee_preset_policy: str | Path = "",
     decision_journal_path: str | Path = "",
@@ -51,6 +52,7 @@ def build_dashboard_manifest(
         "api_usage": str(api_usage or ""),
         "pipeline_summary": str(pipeline_summary or ""),
         "pipeline_scheduler_summary": str(pipeline_scheduler_summary or ""),
+        "scheduler_config_validation": str(scheduler_config_validation or ""),
         "scheduler_policy": str(scheduler_policy or ""),
         "committee_preset_policy": str(committee_preset_policy or ""),
         "decision_journal_path": str(decision_journal_path or ""),
@@ -118,6 +120,7 @@ def build_dashboard_pages_from_manifest(manifest: Mapping[str, Any]) -> dict[str
     scheduler_policy = _load_json_optional(_resolve_manifest_path(base_dir, manifest.get("scheduler_policy")))
     evidence_items = _load_json_list_optional(_resolve_manifest_path(base_dir, manifest.get("evidence_file")))
     price_history = _load_json_optional(_resolve_manifest_path(base_dir, manifest.get("price_history_file")))
+    scheduler_config_validation = build_scheduler_config_validation_from_manifest(manifest)
     api_usage = build_api_usage_from_manifest(manifest)
     action_plan = _sanitize_action_plan_for_dashboard(action_plan, portfolio_state)
     dashboard = build_operator_dashboard(
@@ -133,6 +136,7 @@ def build_dashboard_pages_from_manifest(manifest: Mapping[str, Any]) -> dict[str
         evidence_items=evidence_items,
         price_history_by_symbol=price_history,
         api_usage=api_usage,
+        scheduler_config_validation=scheduler_config_validation,
     )
 
 
@@ -144,6 +148,7 @@ def build_dashboard_summary_from_manifest(manifest: Mapping[str, Any]) -> dict[s
     market_regime = _load_json_optional(_resolve_manifest_path(base_dir, manifest.get("market_regime")))
     operator_status = _load_json_optional(_resolve_manifest_path(base_dir, manifest.get("operator_status")))
     scheduler_policy = _load_json_optional(_resolve_manifest_path(base_dir, manifest.get("scheduler_policy")))
+    scheduler_config_validation = build_scheduler_config_validation_from_manifest(manifest)
     action_plan = _sanitize_action_plan_for_dashboard(action_plan, portfolio_state)
     dashboard = build_operator_dashboard(
         action_plan=action_plan,
@@ -155,6 +160,7 @@ def build_dashboard_summary_from_manifest(manifest: Mapping[str, Any]) -> dict[s
         **dashboard,
         "manifest": _public_manifest(manifest),
         "api_usage": build_api_usage_from_manifest(manifest),
+        "scheduler_config_validation": scheduler_config_validation,
         "order_submission_enabled": False,
     }
 
@@ -311,6 +317,29 @@ def build_scheduler_policy_from_manifest(manifest: Mapping[str, Any]) -> dict[st
     return payload
 
 
+def build_scheduler_config_validation_from_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
+    """Load the safe scheduler config-validation artifact from the manifest."""
+    base_dir = Path(str(manifest.get("_manifest_path") or ".")).parent
+    validation_path = _resolve_manifest_path(base_dir, manifest.get("scheduler_config_validation"))
+    if not validation_path:
+        return _empty_scheduler_config_validation("scheduler_config_validation_artifact_missing")
+    payload = _load_json_optional(validation_path)
+    if not payload:
+        return _empty_scheduler_config_validation(
+            "scheduler_config_validation_artifact_unreadable",
+            source_path=validation_path,
+        )
+    normalized = dict(payload)
+    normalized.setdefault("schema_version", 1)
+    normalized.setdefault("mode", "pipeline_scheduler_config_validation")
+    normalized.setdefault("status", "unknown")
+    normalized.setdefault("resource_controls", {})
+    normalized.setdefault("next_safe_action", "validate_scheduler_profile_before_launch")
+    normalized["source_path"] = str(validation_path)
+    normalized["order_submission_enabled"] = False
+    return normalized
+
+
 def resolve_dashboard_request(
     manifest_path: str | Path,
     request_path: str,
@@ -334,6 +363,10 @@ def resolve_dashboard_request(
         return 200, "application/json; charset=utf-8", _json_bytes(build_pipeline_health_from_manifest(manifest))
     if parsed_path == "/api/scheduler-policy.json":
         return 200, "application/json; charset=utf-8", _json_bytes(build_scheduler_policy_from_manifest(manifest))
+    if parsed_path == "/api/scheduler-config-validation.json":
+        return 200, "application/json; charset=utf-8", _json_bytes(
+            build_scheduler_config_validation_from_manifest(manifest)
+        )
     pages = build_dashboard_pages_from_manifest(manifest)
     key = "index.html" if parsed_path in {"/", "/index.html"} else parsed_path.lstrip("/")
     if key not in pages:
@@ -464,6 +497,21 @@ def _empty_api_usage(reason: str, *, source_path: Path | None = None) -> dict[st
         "tier_tracking": {},
         "warnings": [reason],
         "next_safe_action": "run_or_select_enrichment_artifact_with_usage_summary",
+        "order_submission_enabled": False,
+    }
+
+
+def _empty_scheduler_config_validation(reason: str, *, source_path: Path | None = None) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "mode": "pipeline_scheduler_config_validation",
+        "status": "unavailable",
+        "source_path": str(source_path or ""),
+        "config_file": "",
+        "preset": "",
+        "resource_controls": {},
+        "warnings": [reason],
+        "next_safe_action": "run_scheduler_config_validation_before_recurring_launch",
         "order_submission_enabled": False,
     }
 
@@ -643,6 +691,7 @@ __all__ = [
     "build_dashboard_summary_from_manifest",
     "build_pipeline_health_from_manifest",
     "build_portfolio_summary_from_manifest",
+    "build_scheduler_config_validation_from_manifest",
     "build_scheduler_policy_from_manifest",
     "find_latest_dashboard_manifest",
     "load_latest_dashboard_manifest",
