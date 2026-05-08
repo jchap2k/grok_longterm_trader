@@ -1349,6 +1349,29 @@ def test_print_plan_only_renders_post_run_verification_command(tmp_path):
     assert "{post_run_verification}" not in run.post_run_verification_command
 
 
+def test_print_plan_renders_absolute_rules_path_for_child_scheduler_cwd(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    relative_rules_path = "active_rules.txt"
+
+    summary = run_pipeline_scheduler(
+        PipelineSchedulerInputs(
+            output_dir=tmp_path / "scheduler",
+            pipeline_command_template=_safe_pipeline_template(),
+            scheduler_policy_command_template=_safe_scheduler_policy_template(),
+            rules_path=relative_rules_path,
+        ),
+        PipelineSchedulerConfig(max_runs=1, print_plan_only=True),
+        command_runner=lambda command: (0, "", ""),
+        now_func=FakeClock().now,
+    )
+
+    run = summary.runs[0]
+    assert str(rules_path.resolve()) in run.pipeline_command
+    assert str(rules_path.resolve()) in run.scheduler_policy_command
+
+
 def test_scheduler_policy_template_can_use_stable_summary_and_state_placeholders(tmp_path):
     rules_path = tmp_path / "active_rules.txt"
     rules_path.write_text("<rules />", encoding="utf-8")

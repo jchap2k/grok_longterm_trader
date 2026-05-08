@@ -11,9 +11,9 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-08 by Codex after wiring the no-submit scheduler review
-bundle into the recurring scheduler chain after successful post-run
-verification.
+Last updated: 2026-05-08 by Codex after proving the full no-submit scheduler
+review-bundle print plan and making scheduler rules paths absolute for child
+processes.
 
 ## 1. Project Identity
 
@@ -354,6 +354,15 @@ Scheduler-readiness features now exist:
 - The safe scheduler preset can be launched from the repo root via
   `python ai_trader\trading_agent\scripts\longterm_pipeline_scheduler.py ...`;
   generated child commands use absolute script paths and a trading-agent cwd.
+  Scheduler `rules_path` inputs are resolved to absolute paths before command
+  rendering so child commands do not inherit repo-root-relative active-rules
+  paths while running from `ai_trader/trading_agent`.
+- `%TEMP%\longterm_scheduler_review_bundle_printplan_20260508_124852`:
+  print-plan proof of the full no-submit artifact chain. It rendered
+  portfolio-news monitor, position-review queue, post-run verifier, and
+  scheduler-review bundle stages together, confirmed
+  `order_submission_enabled=false`, rendered an absolute active-rules path, and
+  included no submit flags.
 - The scheduler CLI now supports `--config-file` JSON profiles with a strict
   `args` object. Example:
   `longterm/configs/ongoing_no_submit_scheduler.example.json`. This keeps

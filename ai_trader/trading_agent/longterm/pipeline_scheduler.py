@@ -149,7 +149,7 @@ def run_pipeline_scheduler(
         raise ValueError("max_runs must be at least 1.")
     output_dir = Path(inputs.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    rules_path = Path(inputs.rules_path)
+    rules_path = Path(inputs.rules_path).expanduser().resolve()
     summary_output_path = _summary_output_path(inputs, output_dir)
     scheduler_policy_state_path = output_dir / "scheduler_policy_state.json"
     runner = command_runner or _run_command
