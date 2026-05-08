@@ -990,6 +990,17 @@ profiles and submit-capable profile keys. To show it on the dashboard, pass
 `--scheduler-task-plan path\to\scheduler_task_plan.json` to the dashboard
 manifest writer or read-only account refresh.
 
+Before manually registering the Windows task, write a final handoff check that
+confirms the profile validation, task plan, and dashboard manifest all point at
+the same reviewed artifacts:
+
+```powershell
+python scripts/longterm_scheduler_handoff.py --scheduler-config-validation path\to\scheduler_profile_validation.json --scheduler-task-plan path\to\scheduler_task_plan.json --dashboard-manifest path\to\dashboard_manifest.json --output path\to\scheduler_handoff.json --json
+```
+
+The handoff check returns exit code `0` only when the chain is ready and no
+artifact enables order submission.
+
 The config file accepts an `args` object using the same argparse destination
 names as the CLI, for example `journal_db`, `action_plan`, and
 `allow_existing_paper_positions`. Unknown config keys fail closed so typos do

@@ -325,7 +325,12 @@ Scheduler-readiness features now exist:
   profile into a read-only Windows Task Scheduler plan artifact containing the
   scheduler command plus `schtasks` and PowerShell registration commands. It
   does not register tasks, rejects validation-only profiles, and rejects
-  submit-capable profile keys.
+  submit-capable profile keys. It also runs scheduler profile validation before
+  emitting commands, so unbounded paid-provider profiles fail closed.
+- `scripts/longterm_scheduler_handoff.py` validates the final scheduler
+  handoff chain across the config-validation artifact, task-plan artifact, and
+  dashboard manifest. It exits ready only when the artifacts agree and
+  `order_submission_enabled=false` throughout.
 - Dashboard manifests can point at a saved scheduler config-validation JSON via
   `scheduler_config_validation`; the localhost server exposes it at
   `/api/scheduler-config-validation.json`, includes it in `/api/summary.json`,
