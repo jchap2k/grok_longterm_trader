@@ -15,6 +15,7 @@ def build_paper_runbook(
     output_dir: str,
     expected_cash: float | None = None,
     profile_config: str = "",
+    scheduler_review_bundle: str = "",
     include_submit_command: bool = False,
 ) -> dict[str, Any]:
     """Build ordered operator commands for a supervised paper-trading smoke."""
@@ -34,13 +35,17 @@ def build_paper_runbook(
     }
     expected_cash_arg = f" --expected-cash {_format_number(expected_cash)}" if expected_cash is not None else ""
     profile_arg = f" --profile-config {profile_config}" if profile_config else ""
+    scheduler_review_bundle_arg = (
+        f" --scheduler-review-bundle {scheduler_review_bundle}" if scheduler_review_bundle else ""
+    )
     submit_command = (
         "python scripts/longterm_paper_execution.py "
         f"--journal-db {journal_db} --ledger-db {ledger_db} "
         f"--portfolio-state {portfolio_state} --action-plan {action_plan} "
         "--submit-paper-orders --confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY "
         f"--runbook-check {artifacts['runbook_check']} "
-        f"--audit-output {artifacts['paper_execution_audit']}{profile_arg} --json"
+        f"--audit-output {artifacts['paper_execution_audit']}{profile_arg}"
+        f"{scheduler_review_bundle_arg} --json"
     )
     submit_step = {
         "step_id": "supervised_submit",
@@ -176,6 +181,7 @@ def build_paper_runbook(
         "order_submission_enabled": False,
         "expected_cash": expected_cash,
         "profile_config": profile_config,
+        "scheduler_review_bundle": scheduler_review_bundle,
         "include_submit_command": include_submit_command,
         "artifacts": artifacts,
         "steps": steps,

@@ -124,6 +124,82 @@ def _action_plan(decision_id, *, symbol="NVDA", intent_type="BUY", allowed=True,
     }
 
 
+def _ready_runbook_check(action_plan):
+    return {
+        "schema_version": 2,
+        "ready_for_supervised_submit": True,
+        "plan_id": str(action_plan.get("plan_id") or ""),
+        "action_plan_hash": hash_action_plan(action_plan),
+        "promotion_summary": {
+            "workflow_blocked_count": 0,
+            "workflow_missing_count": 0,
+            "workflow_non_actionable_count": 0,
+            "readiness_blocked_count": 0,
+            "readiness_missing_count": 0,
+            "readiness_non_actionable_count": 0,
+        },
+        "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+    }
+
+
+def _write_ready_scheduler_review_bundle(tmp_path):
+    submit_plan_path = tmp_path / "paper_submit_mode_plan.json"
+    bundle_path = tmp_path / "scheduler_review_bundle.json"
+    submit_plan_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "mode": "paper_submit_mode_plan",
+                "status": "ready_for_manual_review",
+                "blockers": [],
+                "order_submission_enabled": False,
+                "submit_profile_enabled": False,
+                "broker_calls_enabled": False,
+                "llm_calls_enabled": False,
+                "runnable_submit_command_emitted": False,
+                "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            }
+        ),
+        encoding="utf-8",
+    )
+    bundle_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "mode": "scheduler_review_bundle",
+                "status": "ready_for_manual_review",
+                "blockers": [],
+                "checks": {
+                    "paper_submit_mode_plan": "ready",
+                    "post_run_verification": "ready",
+                    "scheduler_summary": "ready",
+                    "scheduler_policy": "ready",
+                    "position_review_queue": "ready",
+                    "order_submission_boundary": "ready",
+                },
+                "scheduler_policy_summary": {
+                    "blocker_count": 0,
+                    "benchmark_paused": False,
+                },
+                "position_review_summary": {
+                    "status": "completed",
+                    "high_priority_count": 0,
+                    "review_count": 0,
+                },
+                "paper_submit_mode_plan": str(submit_plan_path),
+                "order_submission_enabled": False,
+                "submit_profile_enabled": False,
+                "broker_calls_enabled": False,
+                "llm_calls_enabled": False,
+                "runnable_submit_command_emitted": False,
+                "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            }
+        ),
+        encoding="utf-8",
+    )
+    return bundle_path
+
+
 def _record_preview(
     ledger,
     decision_id,
@@ -968,6 +1044,188 @@ def test_paper_execution_cli_blocks_submit_when_market_is_closed_before_refresh(
     assert "market_closed" in payload["blockers"]
     assert calls == {"refreshed": 0, "broker": 0}
     assert ledger.list_execution_events(limit=10) == []
+
+
+def test_paper_execution_cli_accepts_ready_scheduler_review_bundle_before_market_check(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    import longterm.paper_execution_cli as cli
+
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = _record_decision(journal)
+    _record_preview(ledger, decision_id)
+    action_plan = _action_plan(decision_id)
+    portfolio_path = tmp_path / "portfolio.json"
+    plan_path = tmp_path / "plan.json"
+    runbook_check_path = tmp_path / "paper_runbook_check.json"
+    scheduler_bundle_path = _write_ready_scheduler_review_bundle(tmp_path)
+    portfolio_path.write_text(json.dumps({"cash": 5000, "protected_symbols": ["FXAIX"]}), encoding="utf-8")
+    plan_path.write_text(json.dumps(action_plan), encoding="utf-8")
+    runbook_check_path.write_text(json.dumps(_ready_runbook_check(action_plan)), encoding="utf-8")
+    calls = {"refreshed": 0, "broker": 0}
+    monkeypatch.setattr(
+        cli,
+        "_fresh_alpaca_paper_state",
+        lambda profile: calls.__setitem__("refreshed", calls["refreshed"] + 1)
+        or PortfolioState(cash=8000, protected_symbols=profile.protected_symbols),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        cli.AlpacaPaperSubmitAdapter,
+        "from_env",
+        staticmethod(lambda: calls.__setitem__("broker", calls["broker"] + 1) or FakePaperBroker()),
+    )
+    args = build_parser().parse_args(
+        [
+            "--journal-db",
+            str(journal.db_path),
+            "--ledger-db",
+            str(ledger.db_path),
+            "--portfolio-state",
+            str(portfolio_path),
+            "--action-plan",
+            str(plan_path),
+            "--submit-paper-orders",
+            "--confirm-paper-submit",
+            "SUPERVISED_PAPER_BUY_ONLY",
+            "--runbook-check",
+            str(runbook_check_path),
+            "--scheduler-review-bundle",
+            str(scheduler_bundle_path),
+            "--json",
+        ]
+    )
+
+    assert run_cli(args, market_clock_factory=lambda: False) == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["mode"] == "paper_execution_market_closed"
+    assert "market_closed" in payload["blockers"]
+    assert calls == {"refreshed": 0, "broker": 0}
+
+
+def test_paper_execution_cli_blocks_bad_scheduler_review_bundle_before_refresh(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    import longterm.paper_execution_cli as cli
+
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = _record_decision(journal)
+    _record_preview(ledger, decision_id)
+    action_plan = _action_plan(decision_id)
+    portfolio_path = tmp_path / "portfolio.json"
+    plan_path = tmp_path / "plan.json"
+    runbook_check_path = tmp_path / "paper_runbook_check.json"
+    scheduler_bundle_path = _write_ready_scheduler_review_bundle(tmp_path)
+    bundle = json.loads(scheduler_bundle_path.read_text(encoding="utf-8"))
+    bundle["status"] = "blocked"
+    bundle["blockers"] = ["scheduler_policy_benchmark_guard_paused"]
+    scheduler_bundle_path.write_text(json.dumps(bundle), encoding="utf-8")
+    portfolio_path.write_text(json.dumps({"cash": 5000, "protected_symbols": ["FXAIX"]}), encoding="utf-8")
+    plan_path.write_text(json.dumps(action_plan), encoding="utf-8")
+    runbook_check_path.write_text(json.dumps(_ready_runbook_check(action_plan)), encoding="utf-8")
+    calls = {"refreshed": 0, "broker": 0}
+    monkeypatch.setattr(
+        cli,
+        "_fresh_alpaca_paper_state",
+        lambda profile: calls.__setitem__("refreshed", calls["refreshed"] + 1)
+        or PortfolioState(cash=8000, protected_symbols=profile.protected_symbols),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        cli.AlpacaPaperSubmitAdapter,
+        "from_env",
+        staticmethod(lambda: calls.__setitem__("broker", calls["broker"] + 1) or FakePaperBroker()),
+    )
+    args = build_parser().parse_args(
+        [
+            "--journal-db",
+            str(journal.db_path),
+            "--ledger-db",
+            str(ledger.db_path),
+            "--portfolio-state",
+            str(portfolio_path),
+            "--action-plan",
+            str(plan_path),
+            "--submit-paper-orders",
+            "--confirm-paper-submit",
+            "SUPERVISED_PAPER_BUY_ONLY",
+            "--runbook-check",
+            str(runbook_check_path),
+            "--scheduler-review-bundle",
+            str(scheduler_bundle_path),
+            "--json",
+        ]
+    )
+
+    assert run_cli(args) == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert "scheduler_review_bundle_not_ready" in payload["blockers"]
+    assert "scheduler_review_bundle:scheduler_policy_benchmark_guard_paused" in payload["blockers"]
+    assert payload["scheduler_review_bundle"]["status"] == "blocked"
+    assert calls == {"refreshed": 0, "broker": 0}
+
+
+def test_paper_execution_cli_blocks_scheduler_review_bundle_with_submit_fragments(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    import longterm.paper_execution_cli as cli
+
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    ledger = PaperTradeLedger(tmp_path / "paper.db")
+    decision_id = _record_decision(journal)
+    _record_preview(ledger, decision_id)
+    action_plan = _action_plan(decision_id)
+    portfolio_path = tmp_path / "portfolio.json"
+    plan_path = tmp_path / "plan.json"
+    runbook_check_path = tmp_path / "paper_runbook_check.json"
+    scheduler_bundle_path = _write_ready_scheduler_review_bundle(tmp_path)
+    bundle = json.loads(scheduler_bundle_path.read_text(encoding="utf-8"))
+    bundle["unsafe_note"] = "--submit-paper-orders"
+    scheduler_bundle_path.write_text(json.dumps(bundle), encoding="utf-8")
+    portfolio_path.write_text(json.dumps({"cash": 5000, "protected_symbols": ["FXAIX"]}), encoding="utf-8")
+    plan_path.write_text(json.dumps(action_plan), encoding="utf-8")
+    runbook_check_path.write_text(json.dumps(_ready_runbook_check(action_plan)), encoding="utf-8")
+    calls = {"refreshed": 0}
+    monkeypatch.setattr(
+        cli,
+        "_fresh_alpaca_paper_state",
+        lambda profile: calls.__setitem__("refreshed", calls["refreshed"] + 1)
+        or PortfolioState(cash=8000, protected_symbols=profile.protected_symbols),
+        raising=False,
+    )
+    args = build_parser().parse_args(
+        [
+            "--journal-db",
+            str(journal.db_path),
+            "--ledger-db",
+            str(ledger.db_path),
+            "--portfolio-state",
+            str(portfolio_path),
+            "--action-plan",
+            str(plan_path),
+            "--submit-paper-orders",
+            "--confirm-paper-submit",
+            "SUPERVISED_PAPER_BUY_ONLY",
+            "--runbook-check",
+            str(runbook_check_path),
+            "--scheduler-review-bundle",
+            str(scheduler_bundle_path),
+            "--json",
+        ]
+    )
+
+    assert run_cli(args) == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert "scheduler_review_bundle_submit_capable_fragment_present" in payload["blockers"]
+    assert calls == {"refreshed": 0}
 
 
 def test_paper_execution_cli_submit_requires_confirmation_token(tmp_path, capsys, monkeypatch):

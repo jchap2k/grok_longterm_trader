@@ -75,6 +75,7 @@ def test_paper_runbook_reveals_supervised_submit_only_when_requested():
         output_dir="artifacts",
         expected_cash=74000,
         profile_config="profile.json",
+        scheduler_review_bundle="artifacts\\scheduler_review_bundle.json",
         include_submit_command=True,
     )
 
@@ -83,7 +84,27 @@ def test_paper_runbook_reveals_supervised_submit_only_when_requested():
     assert submit_step["requires_explicit_reveal"] is False
     assert "--confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY" in submit_step["command"]
     assert "--runbook-check artifacts\\paper_runbook_check.json" in submit_step["command"]
+    assert "--scheduler-review-bundle artifacts\\scheduler_review_bundle.json" in submit_step["command"]
     assert "--profile-config profile.json" in submit_step["command"]
+    assert runbook["scheduler_review_bundle"] == "artifacts\\scheduler_review_bundle.json"
+
+
+def test_paper_runbook_stores_scheduler_review_bundle_without_revealing_submit_command():
+    runbook = build_paper_runbook(
+        journal_db="journal.db",
+        ledger_db="paper_ledger.db",
+        portfolio_state="portfolio.json",
+        action_plan="account_action_plan.json",
+        output_dir="artifacts",
+        scheduler_review_bundle="artifacts\\scheduler_review_bundle.json",
+    )
+
+    submit_step = runbook["steps"][5]
+
+    assert runbook["scheduler_review_bundle"] == "artifacts\\scheduler_review_bundle.json"
+    assert submit_step["requires_explicit_reveal"] is True
+    assert "--scheduler-review-bundle" not in submit_step["command"]
+    assert "redacted" in submit_step["command"].lower()
 
 
 def test_paper_runbook_cli_outputs_json(tmp_path, capsys):
@@ -137,6 +158,8 @@ def test_paper_runbook_cli_can_explicitly_reveal_submit_command(tmp_path, capsys
             "account_action_plan.json",
             "--output-dir",
             str(tmp_path / "artifacts"),
+            "--scheduler-review-bundle",
+            "artifacts\\scheduler_review_bundle.json",
             "--include-submit-command",
             "--json",
         ]
@@ -146,4 +169,6 @@ def test_paper_runbook_cli_can_explicitly_reveal_submit_command(tmp_path, capsys
     payload = json.loads(capsys.readouterr().out)
 
     assert payload["include_submit_command"] is True
+    assert payload["scheduler_review_bundle"] == "artifacts\\scheduler_review_bundle.json"
     assert "--confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY" in payload["steps"][5]["command"]
+    assert "--scheduler-review-bundle artifacts\\scheduler_review_bundle.json" in payload["steps"][5]["command"]

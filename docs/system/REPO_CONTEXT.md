@@ -371,6 +371,12 @@ Scheduler-readiness features now exist:
   `runnable_submit_command_emitted=false`, `order_submission_enabled=false`,
   `submit_profile_enabled=false`, `broker_calls_enabled=false`, and
   `llm_calls_enabled=false`.
+- Stage 6B submit prechecks can now consume the scheduler-review bundle before
+  any broker refresh. A supplied bundle must be fresh, `ready_for_manual_review`,
+  policy-clean, position-review-clean, no-broker/no-LLM/no-submit-command, and
+  free of submit-capable command fragments. The Monday paper runbook can store
+  and, when explicitly revealed, pass `--scheduler-review-bundle` into the
+  supervised submit command.
 - The scheduler CLI now supports `--config-file` JSON profiles with a strict
   `args` object. Example:
   `longterm/configs/ongoing_no_submit_scheduler.example.json`. This keeps

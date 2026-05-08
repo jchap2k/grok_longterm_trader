@@ -17,6 +17,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--action-plan", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--profile-config", default="")
+    parser.add_argument(
+        "--scheduler-review-bundle",
+        default="",
+        help="Optional scheduler review bundle required by the revealed supervised submit command.",
+    )
     parser.add_argument("--expected-cash", type=float, default=None)
     parser.add_argument(
         "--include-submit-command",
@@ -37,6 +42,7 @@ def run_cli(args: argparse.Namespace) -> int:
         output_dir=args.output_dir,
         expected_cash=args.expected_cash,
         profile_config=args.profile_config,
+        scheduler_review_bundle=args.scheduler_review_bundle,
         include_submit_command=args.include_submit_command,
     )
     canonical_output = Path(runbook["artifacts"]["paper_runbook"])

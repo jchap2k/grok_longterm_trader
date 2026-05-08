@@ -798,12 +798,17 @@ artifacts. Reveal it only after review:
 
 ```powershell
 python scripts/longterm_paper_runbook.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --output-dir path\to\paper_artifacts --profile-config path\to\profile.json --expected-cash 74000 --include-submit-command
+python scripts/longterm_paper_runbook.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --output-dir path\to\paper_artifacts --profile-config path\to\profile.json --expected-cash 74000 --scheduler-review-bundle path\to\scheduler_review_bundle.json --include-submit-command
 ```
 
 Even when revealed, the supervised submit command still requires
 `--confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY`.
 When `--profile-config` is supplied, the generated snapshot, workflow-smoke,
-and supervised-submit commands reuse the same paper profile. After any future
+and supervised-submit commands reuse the same paper profile. When
+`--scheduler-review-bundle` is supplied, the revealed supervised-submit command
+also carries that bundle into the Stage 6B pre-submit validator; the redacted
+runbook still stores the path as metadata without printing a runnable submit
+command. After any future
 supervised paper buy is observed, the runbook includes a manual cleanup reminder
 to sell or cancel the temporary paper position in Alpaca before the next run.
 
@@ -1430,7 +1435,7 @@ Submit eligible simple BUY previews to Alpaca paper only when explicitly
 intended:
 
 ```powershell
-python scripts/longterm_paper_execution.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --submit-paper-orders --confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY --runbook-check path\to\paper_runbook_check.json --audit-output path\to\paper_execution_audit.json
+python scripts/longterm_paper_execution.py --journal-db path\to\journal.db --ledger-db path\to\paper_ledger.db --portfolio-state path\to\portfolio.json --action-plan path\to\account_action_plan.json --submit-paper-orders --confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY --runbook-check path\to\paper_runbook_check.json --scheduler-review-bundle path\to\scheduler_review_bundle.json --audit-output path\to\paper_execution_audit.json
 ```
 
 Stage 6B is deliberately narrow:
@@ -1438,6 +1443,11 @@ Stage 6B is deliberately narrow:
 - It submits only simple `BUY` previews.
 - `--submit-paper-orders` also requires the exact `--confirm-paper-submit SUPERVISED_PAPER_BUY_ONLY` latch; without it, the command exits before refreshing broker state or constructing the submit adapter.
 - `--submit-paper-orders` also requires a ready, fresh `--runbook-check` artifact whose plan ID and canonical action-plan hash match the action plan being submitted.
+- When `--scheduler-review-bundle` is supplied, the submit CLI validates that
+  the latest scheduler handoff is `ready_for_manual_review`, contains no
+  scheduler policy or high-priority position-review blockers, keeps broker/LLM
+  calls and runnable submit command emission disabled, and contains no
+  submit-capable command fragments before any Alpaca paper state refresh.
 - The runbook-check artifact must be schema v2 or newer, proving the saved
   evidence came from the promotion-aware workflow/readiness path.
 - The runbook-check artifact must include a clean `promotion_summary`; missing
