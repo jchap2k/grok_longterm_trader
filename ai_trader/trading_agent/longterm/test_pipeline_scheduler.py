@@ -1332,6 +1332,7 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_safe_commands(t
     rules_path = tmp_path / "active_rules.txt"
     rules_path.write_text("<rules />", encoding="utf-8")
     summary_output = tmp_path / "summary.json"
+    scheduler_config_validation = tmp_path / "scheduler_profile_validation.json"
     profile = tmp_path / "profile.json"
     profile.write_text("{}", encoding="utf-8")
 
@@ -1361,6 +1362,8 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_safe_commands(t
                 "--expected-cash-from-portfolio-state",
                 "--skip-price-map",
                 "--allow-existing-paper-positions",
+                "--scheduler-config-validation",
+                str(scheduler_config_validation),
                 "--print-plan-only",
                 "--summary-output",
                 str(summary_output),
@@ -1398,6 +1401,8 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_safe_commands(t
     assert "--state-output" in run["scheduler_policy_command"]
     assert "longterm_paper_account_refresh.py" in run["account_refresh_command"]
     assert "--scheduler-policy" in run["account_refresh_command"]
+    assert "--scheduler-config-validation" in run["account_refresh_command"]
+    assert str(scheduler_config_validation.resolve()) in run["account_refresh_command"]
     assert "dashboard_manifest.json" in run["account_refresh_command"]
     assert "longterm_pipeline_scheduler_verify.py" in run["post_run_verification_command"]
     assert "--require-resource-bounded" in run["post_run_verification_command"]

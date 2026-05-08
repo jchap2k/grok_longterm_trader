@@ -977,10 +977,11 @@ python scripts/longterm_pipeline_scheduler.py --config-file path\to\ongoing_no_s
 ```
 
 To show the reviewed scheduler profile on the localhost dashboard, pass that
-validation JSON into the manifest writer:
+validation JSON into the manifest writer or read-only account/dashboard refresh:
 
 ```powershell
 python scripts/longterm_operator_dashboard_server.py --manifest path\to\dashboard_manifest.json --write-manifest --write-manifest-only --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio_state.json --scheduler-config-validation path\to\scheduler_profile_validation.json --json
+python scripts/longterm_paper_account_refresh.py --profile-config path\to\roth_ira_profile.json --journal-db path\to\journal.db --action-plan path\to\account_action_plan.json --paper-ledger-db path\to\paper_ledger.db --output-dir path\to\account_refresh --scheduler-config-validation path\to\scheduler_profile_validation.json --json
 ```
 
 The same preset can also run a bounded upstream research cadence before the

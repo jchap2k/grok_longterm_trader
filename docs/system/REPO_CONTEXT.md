@@ -318,6 +318,10 @@ Scheduler-readiness features now exist:
   `/api/scheduler-config-validation.json`, includes it in `/api/summary.json`,
   and renders a read-only Scheduler Profile card on the Safety / Preflight
   section.
+- Read-only paper-account refresh and the `ongoing-no-submit` scheduler preset
+  can pass `--scheduler-config-validation` through to refreshed dashboard
+  manifests/sites, so reviewed local profiles remain visible after recurring
+  account/dashboard refreshes.
 - One longer full no-submit execute was intentionally stopped after wrapper
   timeout while the empty-batch final-planning refresh was still running; use
   longer supervised windows, existing saved action plans, or smaller resumable
