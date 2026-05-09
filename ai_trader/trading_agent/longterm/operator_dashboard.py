@@ -3017,6 +3017,49 @@ def _html_shell(*, title: str, body: str) -> str:
       border-color: rgba(176,75,45,.34);
     }}
     .scheduler-validation-card p, .tax-suppression-card p {{ margin: 12px 0 0; color: var(--muted); }}
+    .scheduler-readiness-panel .scheduler-validation-card {{
+      color: var(--ink);
+      border-color: rgba(15,107,86,.18);
+      background:
+        radial-gradient(circle at 96% 8%, rgba(15,107,86,.08), transparent 18rem),
+        linear-gradient(145deg, rgba(255,250,240,.98), rgba(239,226,201,.72));
+    }}
+    .scheduler-readiness-panel .compact-heading h3 {{
+      color: var(--ink);
+      opacity: 1;
+    }}
+    .scheduler-readiness-panel .eyebrow {{
+      color: var(--accent-2);
+      opacity: 1;
+    }}
+    .scheduler-readiness-panel .pipeline-health-grid {{
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    }}
+    .scheduler-readiness-panel .pipeline-health-grid div {{
+      color: var(--ink);
+      border-color: rgba(15,107,86,.16);
+      background: rgba(255,250,240,.78);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.35);
+    }}
+    .scheduler-readiness-panel .pipeline-health-grid span {{
+      color: var(--muted);
+    }}
+    .scheduler-readiness-panel .pipeline-health-grid strong {{
+      color: var(--ink);
+      font-size: 20px;
+      line-height: 1.16;
+    }}
+    .scheduler-readiness-panel .scheduler-validation-card p {{
+      color: var(--muted);
+      font-size: 17px;
+      line-height: 1.4;
+    }}
+    .scheduler-readiness-panel .scheduler-validation-card small {{
+      display: block;
+      margin-top: 7px;
+      color: var(--muted);
+      line-height: 1.35;
+    }}
     .tax-suppression-card ul {{
       display: grid;
       gap: 10px;
