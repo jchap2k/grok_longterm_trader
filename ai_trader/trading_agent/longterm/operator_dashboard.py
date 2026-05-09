@@ -3328,6 +3328,51 @@ def _html_shell(*, title: str, body: str) -> str:
       color: var(--accent) !important;
       opacity: 1 !important;
     }}
+    .dashboard-main .ticker-card:hover,
+    .dashboard-main .ticker-card:focus {{
+      color: var(--ink) !important;
+      background:
+        radial-gradient(circle at 94% 6%, rgba(15,107,86,.1), transparent 8rem),
+        linear-gradient(145deg, rgba(255,250,240,1), rgba(237,224,198,.82)) !important;
+    }}
+    .dashboard-main .ticker-card span,
+    .dashboard-main .ticker-card strong,
+    .dashboard-main .ticker-card em,
+    .dashboard-main .ticker-card small,
+    .dashboard-main .ticker-card:hover span,
+    .dashboard-main .ticker-card:hover strong,
+    .dashboard-main .ticker-card:hover em,
+    .dashboard-main .ticker-card:hover small,
+    .dashboard-main .ticker-card:focus span,
+    .dashboard-main .ticker-card:focus strong,
+    .dashboard-main .ticker-card:focus em,
+    .dashboard-main .ticker-card:focus small {{
+      background: transparent !important;
+      background-color: transparent !important;
+      text-shadow: none !important;
+    }}
+    .dashboard-main .pipeline-health-grid div,
+    .dashboard-main .portfolio-total-grid div,
+    .dashboard-main .api-usage-total-grid div {{
+      color: var(--ink) !important;
+      border-color: rgba(15,107,86,.16) !important;
+      background:
+        radial-gradient(circle at 96% 0%, rgba(15,107,86,.07), transparent 7rem),
+        rgba(255,250,240,.8) !important;
+      opacity: 1 !important;
+    }}
+    .dashboard-main .pipeline-health-grid span,
+    .dashboard-main .portfolio-total-grid span,
+    .dashboard-main .api-usage-total-grid span {{
+      color: var(--muted) !important;
+      opacity: 1 !important;
+    }}
+    .dashboard-main .pipeline-health-grid strong,
+    .dashboard-main .portfolio-total-grid strong,
+    .dashboard-main .api-usage-total-grid strong {{
+      color: var(--ink) !important;
+      opacity: 1 !important;
+    }}
     .ticker-hero {{ display: grid; grid-template-columns: 1fr minmax(220px, 320px); gap: 24px; align-items: end; }}
     .top-nav {{ display: flex; justify-content: space-between; padding: 16px 4px; color: var(--muted); }}
     .price-chart svg {{ width: 100%; height: auto; display: block; }}
