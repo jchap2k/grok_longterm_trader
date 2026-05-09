@@ -1555,11 +1555,12 @@ def _scheduler_readiness_section(
         "</div>"
         "<p>This is the operator checkpoint for unattended monitoring/research. It is separate from broker authorization and keeps order submission disabled.</p>"
         "<div class=\"scheduler-readiness-strip\">"
-        f"<div><span>Launch Packet</span><strong>{escape(chain_status)}</strong></div>"
-        f"<div><span>Registration</span><strong>{escape(registration_status)}</strong></div>"
-        f"<div><span>Blockers</span><strong>{escape(blocker_label)}</strong></div>"
-        f"<div><span>Broker Submit</span><strong>{escape(submit_label)}</strong></div>"
+        f"<div><span>Launch Packet</span><strong>{escape(_scheduler_brief_status(chain_status))}</strong><small>{escape(chain_status)}</small></div>"
+        f"<div><span>Registration</span><strong>{escape(_scheduler_brief_status(registration_status))}</strong><small>{escape(registration_status)}</small></div>"
+        f"<div><span>Blockers</span><strong>{escape(_scheduler_brief_status(blocker_label))}</strong><small>{escape(blocker_label)}</small></div>"
+        f"<div><span>Broker Submit</span><strong>{escape(_scheduler_brief_status(submit_label))}</strong><small>Order submission remains disabled.</small></div>"
         "</div>"
+        "<p class=\"scheduler-readiness-note\"><strong>Expected:</strong> Launch Packet = Ready, Registration = Ready, Blockers = None, Broker Submit = Off. That means it is safe to register the no-submit monitoring task, not that paper orders are authorized.</p>"
         "<div class=\"scheduler-card-stack\">"
         f"{_scheduler_chain_panel(scheduler_chain)}"
         f"{_scheduler_config_validation_panel(scheduler_config_validation)}"
@@ -1569,6 +1570,22 @@ def _scheduler_readiness_section(
         "</div>"
         "</section>"
     )
+
+
+def _scheduler_brief_status(value: object) -> str:
+    text = _display_label(value)
+    normalized = text.lower()
+    if normalized in {"none", "no blockers"}:
+        return "None"
+    if normalized in {"off", "disabled", "false"}:
+        return "Off"
+    if normalized.startswith("ready"):
+        return "Ready"
+    if "ready" in normalized and "not" not in normalized:
+        return "Ready"
+    if normalized in {"unavailable", "unknown", "n/a"}:
+        return text
+    return text
 
 
 def _scheduler_handoff_panel(handoff: Mapping[str, Any]) -> str:
@@ -2792,13 +2809,16 @@ def _html_shell(*, title: str, body: str) -> str:
       gap: 12px;
       margin: 20px 0 4px;
     }}
-    .scheduler-readiness-strip div {{
+    .scheduler-readiness-panel .scheduler-readiness-strip > div {{
       padding: 16px;
       border: 1px solid rgba(15,107,86,.22);
       border-radius: 18px;
-      background: rgba(255,250,240,.78);
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 100% 0%, rgba(125,240,208,.16), transparent 8rem),
+        rgba(255,250,240,.86);
     }}
-    .scheduler-readiness-strip span {{
+    .scheduler-readiness-panel .scheduler-readiness-strip span {{
       display: block;
       color: var(--muted);
       font-size: 11px;
@@ -2806,21 +2826,58 @@ def _html_shell(*, title: str, body: str) -> str:
       text-transform: uppercase;
       font-weight: 900;
     }}
-    .scheduler-readiness-strip strong {{
+    .scheduler-readiness-panel .scheduler-readiness-strip strong {{
       display: block;
       margin-top: 8px;
-      font-size: 22px;
+      color: var(--ink);
+      font-size: 24px;
       line-height: 1.1;
       overflow-wrap: anywhere;
     }}
+    .scheduler-readiness-panel .scheduler-readiness-strip small {{
+      display: block;
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.25;
+    }}
+    .scheduler-readiness-note {{
+      margin: 16px 0 0;
+      padding: 14px 16px;
+      border: 1px solid rgba(15,107,86,.2);
+      border-radius: 16px;
+      color: var(--muted);
+      background: rgba(255,250,240,.62);
+      line-height: 1.4;
+    }}
+    .scheduler-readiness-note strong {{
+      color: var(--ink);
+    }}
     .scheduler-card-stack {{
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      grid-template-columns: 1fr;
       gap: 14px;
       margin-top: 18px;
     }}
     .scheduler-card-stack .scheduler-validation-card {{
       margin-top: 0;
+    }}
+    .scheduler-readiness-panel .scheduler-validation-card {{
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 96% 8%, rgba(15,107,86,.1), transparent 16rem),
+        linear-gradient(145deg, rgba(255,250,240,.96), rgba(237,224,198,.68));
+    }}
+    .scheduler-readiness-panel .pipeline-health-grid {{
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    }}
+    .scheduler-readiness-panel .pipeline-health-grid div {{
+      color: var(--ink);
+      background: rgba(255,250,240,.72);
+    }}
+    .scheduler-readiness-panel .pipeline-health-grid strong {{
+      color: var(--ink);
+      font-size: 20px;
     }}
     .safety-note {{
       margin-top: 18px;
