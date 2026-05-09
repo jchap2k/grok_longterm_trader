@@ -369,8 +369,10 @@ available, and the recurring no-submit profile can now generate the snapshot
 through `fredapi` using `FRED_API_KEY`. The FRED path reads only public macro
 series such as `VIXCLS`, `SP500`, `DGS10`, `CPIAUCSL`, `T10Y2Y`, and
 `BAMLH0A0HYM2`, then annotates the snapshot with inflation pressure, yield
-curve spread, and high-yield credit spread. The artifact is advisory and does
-not submit orders.
+curve spread, and high-yield credit spread. If FRED is temporarily unavailable,
+the CLI falls back to the yfinance regime source and, if all providers are down,
+writes a safe `market_data_unavailable` snapshot instead of failing the
+no-submit scheduler. The artifact is advisory and does not submit orders.
 
 `longterm/live_readiness.py`
 Builds a dry-run live-readiness checklist. It reports unmet gates such as benchmark proof, paper trading, broker-capability match, protected-symbol enforcement, manual approval, kill switch, audit logs, broker-read reconciliation, explicit live-mode config, and secrets hygiene. The broker-capability gate prevents Alpaca paper notional/fractional behavior from being treated as proof that a future live broker supports the same sizing model. It does not enable live execution.

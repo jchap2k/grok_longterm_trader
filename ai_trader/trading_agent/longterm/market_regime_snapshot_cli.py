@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import json
 from pathlib import Path
+import sys
 from typing import Any, Mapping
 
+from longterm.idle_cash_policy import MarketRegimeSnapshot
 from longterm.market_regime_snapshot import (
     DEFAULT_FRED_CPI_SERIES,
     DEFAULT_FRED_CREDIT_SPREAD_SERIES,
@@ -57,17 +60,43 @@ def run_cli(args: argparse.Namespace, *, fred_fetcher=None) -> int:
     elif args.provider == "fredapi":
         import os
 
-        snapshot = build_fred_market_regime_snapshot(
-            fetch_fred_history=fred_fetcher,
-            api_key=os.environ.get(args.fred_api_key_env),
-            vix_series=args.fred_vix_series,
-            sp500_series=args.fred_sp500_series,
-            ten_year_series=args.fred_ten_year_series,
-            cpi_series=args.fred_cpi_series,
-            yield_curve_series=args.fred_yield_curve_series,
-            credit_spread_series=args.fred_credit_spread_series,
-        )
-        mode = args.provider
+        try:
+            snapshot = build_fred_market_regime_snapshot(
+                fetch_fred_history=fred_fetcher,
+                api_key=os.environ.get(args.fred_api_key_env),
+                vix_series=args.fred_vix_series,
+                sp500_series=args.fred_sp500_series,
+                ten_year_series=args.fred_ten_year_series,
+                cpi_series=args.fred_cpi_series,
+                yield_curve_series=args.fred_yield_curve_series,
+                credit_spread_series=args.fred_credit_spread_series,
+            )
+            mode = args.provider
+        except Exception as fred_exc:
+            print(f"FRED market-regime provider failed: {_safe_error(fred_exc)}", file=sys.stderr)
+            try:
+                snapshot = build_market_regime_snapshot(
+                    fetch_history=fetch_yfinance_history,
+                    vix_symbol=args.vix_symbol,
+                    spy_symbol=args.spy_symbol,
+                    ten_year_yield_symbol=args.ten_year_yield_symbol,
+                    period=args.period,
+                )
+                snapshot = replace(
+                    snapshot,
+                    reason=f"FRED provider unavailable; fell back to yfinance. {snapshot.reason}",
+                )
+                mode = "fredapi_fallback_yfinance"
+            except Exception as fallback_exc:
+                print(f"Fallback market-regime provider failed: {_safe_error(fallback_exc)}", file=sys.stderr)
+                snapshot = MarketRegimeSnapshot(
+                    risk_regime="market_data_unavailable",
+                    reason=(
+                        "Market-regime providers unavailable; no-submit scheduler continues with "
+                        "parking/rebalance decisions constrained by missing regime data."
+                    ),
+                )
+                mode = "fredapi_unavailable"
     else:
         snapshot = build_market_regime_snapshot(
             fetch_history=fetch_yfinance_history,
@@ -100,6 +129,11 @@ def _load_snapshot_file(path: str | Path) -> dict[str, list[dict[str, Any]]]:
         for key, value in payload.items()
         if isinstance(value, list)
     }
+
+
+def _safe_error(exc: Exception) -> str:
+    message = str(exc).strip() or exc.__class__.__name__
+    return f"{exc.__class__.__name__}: {message[:240]}"
 
 
 __all__ = ["build_parser", "main", "run_cli"]

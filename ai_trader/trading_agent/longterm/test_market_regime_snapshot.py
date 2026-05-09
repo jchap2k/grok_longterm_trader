@@ -154,3 +154,75 @@ def test_market_regime_snapshot_cli_supports_fredapi_provider_with_injected_fetc
     assert payload["risk_regime"] == "normal"
     assert payload["source_type"] == "fredapi_market_regime_snapshot"
     assert printed["mode"] == "fredapi"
+
+
+def test_market_regime_snapshot_cli_falls_back_to_yfinance_when_fredapi_fails(tmp_path, capsys, monkeypatch):
+    output = tmp_path / "market_regime.json"
+
+    def broken_fred_fetcher(_series_id, _api_key=None):
+        raise ValueError("Internal Server Error")
+
+    def yfinance_fetcher(symbol, _period):
+        histories = {
+            "^VIX": _series([17, 18, 19]),
+            "SPY": _series([450] * 200 + [500]),
+            "^TNX": _series([4.0, 4.0, 4.0]),
+        }
+        return histories[symbol]
+
+    monkeypatch.setattr("longterm.market_regime_snapshot_cli.fetch_yfinance_history", yfinance_fetcher)
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--provider",
+                "fredapi",
+                "--output",
+                str(output),
+            ]
+        ),
+        fred_fetcher=broken_fred_fetcher,
+    )
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    printed = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert payload["risk_regime"] == "normal"
+    assert payload["source_type"] == "market_regime_snapshot"
+    assert printed["mode"] == "fredapi_fallback_yfinance"
+    assert "FRED provider unavailable" in payload["reason"]
+
+
+def test_market_regime_snapshot_cli_writes_safe_unavailable_snapshot_when_all_providers_fail(
+    tmp_path, capsys, monkeypatch
+):
+    output = tmp_path / "market_regime.json"
+
+    def broken_fred_fetcher(_series_id, _api_key=None):
+        raise ValueError("Internal Server Error")
+
+    def broken_yfinance_fetcher(_symbol, _period):
+        raise RuntimeError("network unavailable")
+
+    monkeypatch.setattr("longterm.market_regime_snapshot_cli.fetch_yfinance_history", broken_yfinance_fetcher)
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--provider",
+                "fredapi",
+                "--output",
+                str(output),
+            ]
+        ),
+        fred_fetcher=broken_fred_fetcher,
+    )
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    printed = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert payload["risk_regime"] == "market_data_unavailable"
+    assert printed["mode"] == "fredapi_unavailable"
+    assert "providers unavailable" in payload["reason"]

@@ -652,6 +652,10 @@ Current regime source:
   S&P 500 trend, 10-year yield trend, CPI inflation pressure, 10Y-2Y yield
   curve spread, and high-yield credit spread. It is consumed by account action
   planning, scheduler policy, paper-account refresh, and the dashboard.
+- FRED is advisory, not a scheduler hard dependency. If FRED returns a transient
+  server/API failure, the market-regime CLI falls back to yfinance; if all
+  providers are unavailable, it writes `risk_regime=market_data_unavailable`
+  so the no-submit run can continue without treating stale macro data as valid.
 
 Open point:
 - Scheduler should refresh parking prices for the chosen parking symbols, not
