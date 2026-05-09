@@ -3443,13 +3443,74 @@ def _html_shell(*, title: str, body: str) -> str:
     table {{ width: 100%; border-collapse: collapse; margin-top: 18px; }}
     th, td {{ border-top: 1px solid var(--line); padding: 11px 8px; text-align: left; vertical-align: top; }}
     th {{ color: var(--muted); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }}
+    .dashboard-main table,
+    .dashboard-main thead,
+    .dashboard-main tbody,
+    .dashboard-main tr,
+    .dashboard-main th,
+    .dashboard-main td {{
+      color: var(--ink) !important;
+      background-color: transparent !important;
+      opacity: 1 !important;
+    }}
+    .dashboard-main th {{
+      color: var(--muted) !important;
+    }}
+    .dashboard-main td a,
+    .dashboard-main td a:link,
+    .dashboard-main td a:visited {{
+      color: var(--accent) !important;
+      opacity: 1 !important;
+    }}
+    .dashboard-main .rankings-table th:nth-child(1),
+    .dashboard-main .rankings-table td:nth-child(1),
+    .dashboard-main .rankings-table th:nth-child(2),
+    .dashboard-main .rankings-table td:nth-child(2),
+    .dashboard-main .rankings-table th:nth-child(3),
+    .dashboard-main .rankings-table td:nth-child(3),
+    .dashboard-main .scorecards-table th:nth-child(1),
+    .dashboard-main .scorecards-table td:nth-child(1) {{
+      color: var(--ink) !important;
+      background:
+        linear-gradient(145deg, rgba(255,250,240,.98), rgba(244,237,223,.94)) !important;
+      opacity: 1 !important;
+      box-shadow: 1px 0 0 var(--line) !important;
+    }}
+    .dashboard-main .rankings-table th:nth-child(1),
+    .dashboard-main .rankings-table th:nth-child(2),
+    .dashboard-main .rankings-table th:nth-child(3),
+    .dashboard-main .scorecards-table th:nth-child(1) {{
+      color: var(--muted) !important;
+    }}
+    .dashboard-main .table-scroll-top {{
+      background: rgba(255,250,240,.5) !important;
+      border-radius: 999px;
+    }}
+    .dashboard-main .table-scroll-top::-webkit-scrollbar {{
+      height: 11px;
+    }}
+    .dashboard-main .table-scroll-top::-webkit-scrollbar-track {{
+      background: rgba(214,197,168,.55);
+      border-radius: 999px;
+    }}
+    .dashboard-main .table-scroll-top::-webkit-scrollbar-thumb {{
+      background: var(--accent);
+      border-radius: 999px;
+    }}
     .section-heading {{ display: flex; justify-content: space-between; gap: 16px; align-items: end; }}
     .safety-strip {{
       padding: 18px 22px;
-      border-left: 5px solid var(--danger);
-      background: rgba(255,250,240,.72);
+      border: 1px solid rgba(15,107,86,.22);
+      border-left: 5px solid var(--accent);
+      background:
+        radial-gradient(circle at 100% 0%, rgba(15,107,86,.1), transparent 12rem),
+        rgba(255,250,240,.86) !important;
       border-radius: 18px;
-      color: var(--muted);
+      color: var(--ink) !important;
+      box-shadow: 0 10px 26px rgba(69, 47, 20, 0.06);
+    }}
+    .safety-strip strong {{
+      color: var(--accent) !important;
     }}
     .reference-footer {{
       width: min(1180px, calc(100vw - 40px));
