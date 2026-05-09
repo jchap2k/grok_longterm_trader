@@ -2573,7 +2573,14 @@ def _html_shell(*, title: str, body: str) -> str:
       min-width: 0;
       overflow-wrap: anywhere;
     }}
-    .dashboard-main {{ min-width: 0; padding-bottom: 34px; }}
+    .dashboard-main {{
+      min-width: 0;
+      padding-bottom: 34px;
+      background:
+        radial-gradient(circle at 12% 0%, rgba(15,107,86,.12), transparent 26rem),
+        radial-gradient(circle at 88% 10%, rgba(182,106,44,.1), transparent 24rem),
+        linear-gradient(135deg, #f7efe0, #efe2c9);
+    }}
     .dashboard-topbar {{
       position: sticky;
       top: 0;
@@ -3258,14 +3265,28 @@ def _html_shell(*, title: str, body: str) -> str:
       min-height: 190px;
       padding: 22px;
       text-decoration: none;
+      color: var(--ink);
       border-radius: 24px;
       border: 1px solid var(--line);
       background: linear-gradient(145deg, rgba(255,250,240,.95), rgba(237,224,198,.75));
       transition: transform .18s ease, box-shadow .18s ease;
     }}
+    .ticker-card:visited {{
+      color: var(--ink);
+    }}
     .ticker-card:hover {{ transform: translateY(-5px) rotate(-.35deg); box-shadow: var(--shadow); }}
     .ticker-card strong {{ display: block; margin: 12px 0; font-size: 42px; letter-spacing: -.05em; }}
-    .ticker-card em {{ display: block; color: var(--muted); font-style: normal; line-height: 1.35; }}
+    .ticker-card em {{
+      display: -webkit-box;
+      min-height: 5.4em;
+      color: var(--muted);
+      font-style: normal;
+      line-height: 1.35;
+      overflow: hidden;
+      overflow-wrap: anywhere;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 4;
+    }}
     .ticker-card small {{ display: block; margin-top: 18px; color: var(--accent); font-weight: 800; }}
     .ticker-hero {{ display: grid; grid-template-columns: 1fr minmax(220px, 320px); gap: 24px; align-items: end; }}
     .top-nav {{ display: flex; justify-content: space-between; padding: 16px 4px; color: var(--muted); }}
