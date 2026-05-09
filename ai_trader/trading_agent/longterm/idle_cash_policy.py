@@ -23,6 +23,10 @@ class MarketRegimeSnapshot:
     yield_curve_spread: float | None = None
     credit_spread: float | None = None
     macro_signals: dict[str, Any] | None = None
+    macro_regime_label: str = ""
+    provider_status: str = "ok"
+    provider_mode: str = ""
+    provider_warning: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "risk_regime", _normalize_regime(self.risk_regime))
@@ -97,6 +101,10 @@ def load_market_regime_snapshot(path: str | Path) -> MarketRegimeSnapshot:
             yield_curve_spread=payload.get("yield_curve_spread"),
             credit_spread=payload.get("credit_spread"),
             macro_signals=dict(payload.get("macro_signals") or {}),
+            macro_regime_label=str(payload.get("macro_regime_label") or ""),
+            provider_status=str(payload.get("provider_status") or "ok"),
+            provider_mode=str(payload.get("provider_mode") or ""),
+            provider_warning=str(payload.get("provider_warning") or ""),
         )
     return MarketRegimeSnapshot.from_signals(
         vix_level=payload.get("vix_level"),

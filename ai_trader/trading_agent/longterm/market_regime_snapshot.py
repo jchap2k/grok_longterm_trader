@@ -21,6 +21,10 @@ DEFAULT_FRED_TEN_YEAR_SERIES = "DGS10"
 DEFAULT_FRED_CPI_SERIES = "CPIAUCSL"
 DEFAULT_FRED_YIELD_CURVE_SERIES = "T10Y2Y"
 DEFAULT_FRED_CREDIT_SPREAD_SERIES = "BAMLH0A0HYM2"
+VIX_ELEVATED_THRESHOLD = 22.0
+VIX_STRESS_THRESHOLD = 30.0
+CPI_ANNUALIZED_PRESSURE_THRESHOLD_PCT = 4.0
+CREDIT_SPREAD_ELEVATED_THRESHOLD_PCT = 5.0
 
 
 def build_market_regime_snapshot(
@@ -110,9 +114,21 @@ def build_market_regime_snapshot_from_fred_histories(
             "yield_curve": yield_curve_series,
             "credit_spread": credit_spread_series,
         },
+        "interpretation": _fred_interpretation_metadata(
+            vix_series=vix_series,
+            sp500_series=sp500_series,
+            ten_year_series=ten_year_series,
+            cpi_series=cpi_series,
+            yield_curve_series=yield_curve_series,
+            credit_spread_series=credit_spread_series,
+        ),
+        "thresholds": _fred_threshold_metadata(),
+        "policy_boundary": "FRED macro-regime fields are advisory only; they may inform review cadence, parking posture, sizing caution, and committee context, but never directly authorize orders.",
         "inflation_pressure": inflation_pressure,
         "yield_curve_inverted": yield_curve_spread is not None and yield_curve_spread < 0,
-        "credit_spread_elevated": credit_spread is not None and credit_spread >= 5.0,
+        "credit_spread_elevated": (
+            credit_spread is not None and credit_spread >= CREDIT_SPREAD_ELEVATED_THRESHOLD_PCT
+        ),
     }
     reason = " ".join(
         [
@@ -132,6 +148,13 @@ def build_market_regime_snapshot_from_fred_histories(
         yield_curve_spread=yield_curve_spread,
         credit_spread=credit_spread,
         macro_signals=macro_signals,
+        macro_regime_label=_macro_regime_label(
+            risk_regime=base.risk_regime,
+            yield_curve_spread=yield_curve_spread,
+            credit_spread=credit_spread,
+        ),
+        provider_status="ok",
+        provider_mode="fredapi",
     )
 
 
@@ -219,6 +242,10 @@ def market_regime_to_dict(snapshot: MarketRegimeSnapshot) -> dict[str, Any]:
         "reason": snapshot.reason,
         "source_type": "market_regime_snapshot",
         "schema_version": 1,
+        "macro_regime_label": snapshot.macro_regime_label or snapshot.risk_regime,
+        "provider_status": snapshot.provider_status or "ok",
+        "provider_mode": snapshot.provider_mode or "",
+        "provider_warning": snapshot.provider_warning or "",
     }
     if (
         snapshot.inflation_pressure
@@ -287,6 +314,79 @@ def _inflation_pressure(rows: list[Mapping[str, Any]], *, months: int = 6, annua
         return False
     annualized = (((end / start) ** (12 / months)) - 1) * 100
     return annualized >= annualized_threshold_pct
+
+
+def _fred_threshold_metadata() -> dict[str, Any]:
+    return {
+        "vix_elevated": VIX_ELEVATED_THRESHOLD,
+        "vix_stress": VIX_STRESS_THRESHOLD,
+        "cpi_annualized_pressure_pct": CPI_ANNUALIZED_PRESSURE_THRESHOLD_PCT,
+        "yield_curve_inverted_threshold": 0.0,
+        "credit_spread_elevated_pct": CREDIT_SPREAD_ELEVATED_THRESHOLD_PCT,
+        "equity_index_trend": "latest close above 200-day simple moving average",
+    }
+
+
+def _fred_interpretation_metadata(
+    *,
+    vix_series: str,
+    sp500_series: str,
+    ten_year_series: str,
+    cpi_series: str,
+    yield_curve_series: str,
+    credit_spread_series: str,
+) -> dict[str, Any]:
+    return {
+        vix_series: {
+            "meaning": "CBOE volatility index close; proxy for near-term equity volatility stress.",
+            "allowed_uses": ["volatility stress context", "review cadence", "parking posture"],
+            "not_allowed": ["standalone buy/sell trigger"],
+        },
+        sp500_series: {
+            "meaning": "Broad U.S. equity price-index trend proxy.",
+            "allowed_uses": ["market trend context", "parking posture"],
+            "not_allowed": ["standalone benchmark proof"],
+        },
+        ten_year_series: {
+            "meaning": "10-year Treasury constant maturity yield; proxy for long-rate and duration pressure.",
+            "allowed_uses": ["duration-risk context", "cost-of-capital context"],
+            "not_allowed": ["automatic duration hedge without equity-panic confirmation"],
+        },
+        cpi_series: {
+            "meaning": "Consumer Price Index level; recent annualized change is used as inflation-pressure context.",
+            "allowed_uses": ["pricing-power review", "margin-of-safety caution", "duration-risk context"],
+            "not_allowed": ["standalone recession signal"],
+        },
+        yield_curve_series: {
+            "meaning": "10-year Treasury yield minus 2-year Treasury yield; negative values flag curve inversion.",
+            "allowed_uses": ["late-cycle caution", "review cadence"],
+            "not_allowed": ["standalone liquidation trigger"],
+        },
+        credit_spread_series: {
+            "meaning": "ICE BofA high-yield option-adjusted spread; proxy for credit stress.",
+            "allowed_uses": ["credit-stress context", "review cadence", "sizing caution"],
+            "not_allowed": ["standalone broad sell trigger"],
+        },
+    }
+
+
+def _macro_regime_label(
+    *,
+    risk_regime: str,
+    yield_curve_spread: float | None,
+    credit_spread: float | None,
+) -> str:
+    if risk_regime == "market_data_unavailable":
+        return "market_data_unavailable"
+    if risk_regime == "inflation_rate_shock":
+        return "inflation_rate_shock"
+    if risk_regime == "equity_panic_falling_rates":
+        return "equity_panic_falling_rates"
+    if credit_spread is not None and credit_spread >= CREDIT_SPREAD_ELEVATED_THRESHOLD_PCT:
+        return "credit_stress"
+    if yield_curve_spread is not None and yield_curve_spread < 0:
+        return "late_cycle_caution"
+    return risk_regime or "normal"
 
 
 def _reason(

@@ -29,6 +29,17 @@ If the active sleeve cannot beat `FXAIX` over a meaningful sample, the system sh
 
 Capital-needed alerts are informational only. They should never be phrased as a deposit instruction, and they must not bypass sizing, cash, or protected-holding rules.
 
+## Macro Regime Inputs
+
+FRED/fredapi macro-regime data is advisory context only. It may inform review
+cadence, parking posture, sizing caution, and committee context, but it must
+not directly authorize buys, sells, broad liquidations, protected-symbol
+actions, or broker calls.
+
+Fallback behavior must be visible. A run with `provider_status=degraded_fallback`
+or `provider_status=unavailable` is a degraded macro-data run, not a successful
+FRED run.
+
 ## Future Live Readiness Checklist
 
 Before live execution exists:

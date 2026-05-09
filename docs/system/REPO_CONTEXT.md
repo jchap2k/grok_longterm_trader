@@ -652,6 +652,13 @@ Current regime source:
   S&P 500 trend, 10-year yield trend, CPI inflation pressure, 10Y-2Y yield
   curve spread, and high-yield credit spread. It is consumed by account action
   planning, scheduler policy, paper-account refresh, and the dashboard.
+- FRED snapshots include provider-health metadata. `provider_status=ok` and
+  `provider_mode=fredapi` is a true FRED pass; `degraded_fallback` means the
+  run stayed alive with yfinance and must not be presented as FRED working.
+- Macro fields include interpretation and threshold metadata in
+  `macro_signals`. Current thresholds are VIX 22/30, CPI annualized pressure
+  4%, high-yield spread 5%, yield-curve inversion below 0, and S&P trend vs.
+  the 200-day average.
 - FRED is advisory, not a scheduler hard dependency. If FRED returns a transient
   server/API failure, the market-regime CLI falls back to yfinance; if all
   providers are unavailable, it writes `risk_regime=market_data_unavailable`

@@ -118,9 +118,19 @@ def test_fred_snapshot_uses_inflation_pressure_to_avoid_false_duration_hedge():
     assert result.risk_regime == "inflation_rate_shock"
     assert result.ten_year_yield_trend == "falling"
     assert payload["source_type"] == "fredapi_market_regime_snapshot"
+    assert payload["provider_status"] == "ok"
+    assert payload["provider_mode"] == "fredapi"
+    assert payload["macro_regime_label"] == "inflation_rate_shock"
     assert payload["inflation_pressure"] is True
     assert payload["yield_curve_spread"] == -0.2
     assert payload["credit_spread"] == 3.8
+    assert payload["macro_signals"]["thresholds"]["credit_spread_elevated_pct"] == 5.0
+    assert payload["macro_signals"]["interpretation"]["VIXCLS"]["allowed_uses"] == [
+        "volatility stress context",
+        "review cadence",
+        "parking posture",
+    ]
+    assert "advisory only" in payload["macro_signals"]["policy_boundary"]
     assert "inflation pressure=True" in payload["reason"]
 
 
@@ -153,6 +163,8 @@ def test_market_regime_snapshot_cli_supports_fredapi_provider_with_injected_fetc
     assert code == 0
     assert payload["risk_regime"] == "normal"
     assert payload["source_type"] == "fredapi_market_regime_snapshot"
+    assert payload["provider_status"] == "ok"
+    assert payload["provider_mode"] == "fredapi"
     assert printed["mode"] == "fredapi"
 
 
@@ -190,7 +202,11 @@ def test_market_regime_snapshot_cli_falls_back_to_yfinance_when_fredapi_fails(tm
     assert code == 0
     assert payload["risk_regime"] == "normal"
     assert payload["source_type"] == "market_regime_snapshot"
+    assert payload["provider_status"] == "degraded_fallback"
+    assert payload["provider_mode"] == "fredapi_fallback_yfinance"
+    assert payload["provider_warning"]
     assert printed["mode"] == "fredapi_fallback_yfinance"
+    assert printed["provider_status"] == "degraded_fallback"
     assert "FRED provider unavailable" in payload["reason"]
 
 
@@ -224,5 +240,8 @@ def test_market_regime_snapshot_cli_writes_safe_unavailable_snapshot_when_all_pr
 
     assert code == 0
     assert payload["risk_regime"] == "market_data_unavailable"
+    assert payload["provider_status"] == "unavailable"
+    assert payload["provider_mode"] == "fredapi_unavailable"
+    assert payload["provider_warning"]
     assert printed["mode"] == "fredapi_unavailable"
     assert "providers unavailable" in payload["reason"]

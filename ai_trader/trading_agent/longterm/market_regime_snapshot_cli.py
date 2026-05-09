@@ -85,6 +85,9 @@ def run_cli(args: argparse.Namespace, *, fred_fetcher=None) -> int:
                 snapshot = replace(
                     snapshot,
                     reason=f"FRED provider unavailable; fell back to yfinance. {snapshot.reason}",
+                    provider_status="degraded_fallback",
+                    provider_mode="fredapi_fallback_yfinance",
+                    provider_warning=f"FRED provider unavailable: {_safe_error(fred_exc)}",
                 )
                 mode = "fredapi_fallback_yfinance"
             except Exception as fallback_exc:
@@ -94,6 +97,13 @@ def run_cli(args: argparse.Namespace, *, fred_fetcher=None) -> int:
                     reason=(
                         "Market-regime providers unavailable; no-submit scheduler continues with "
                         "parking/rebalance decisions constrained by missing regime data."
+                    ),
+                    macro_regime_label="market_data_unavailable",
+                    provider_status="unavailable",
+                    provider_mode="fredapi_unavailable",
+                    provider_warning=(
+                        f"FRED provider unavailable: {_safe_error(fred_exc)}; "
+                        f"fallback provider unavailable: {_safe_error(fallback_exc)}"
                     ),
                 )
                 mode = "fredapi_unavailable"
@@ -105,6 +115,7 @@ def run_cli(args: argparse.Namespace, *, fred_fetcher=None) -> int:
             ten_year_yield_symbol=args.ten_year_yield_symbol,
             period=args.period,
         )
+        snapshot = replace(snapshot, provider_mode=args.provider or "yfinance")
         mode = args.provider
 
     output_path = Path(args.output)
