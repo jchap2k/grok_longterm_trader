@@ -1777,8 +1777,10 @@ state, Graham discipline fields, scorecard, financial sections, earnings
 context, article evidence, and safety notes. Graham fields include margin of
 safety, permanent-loss score/flags, defensive-vs-enterprising mode, staged-entry
 label/size, and normalized-earnings quality when promotion-review data is
-available. The chart is a static-file interactive widget: it includes range
-controls, hover/crosshair close values, and no external JavaScript dependency.
+available. The chart uses TradingView `lightweight-charts` when the browser can
+load the standalone library, including hover crosshair values plus native
+pan/wheel/pinch zoom. It keeps a generated SVG fallback in the page so ticker
+pages remain useful if the external chart script is unavailable.
 
 The generated site also includes an `Agent Desk` bubble as a placeholder for a
 future chat/command surface. In the current static dashboard this panel is
@@ -1825,7 +1827,12 @@ the newest valid dashboard manifest under the artifact root on each request, so
 scheduler refreshes can keep the dashboard current by writing the stable
 `latest_operator_surface` artifacts. It is an artifact viewer only: it does not
 call Alpaca, run research, call an LLM, reveal submit commands, or write
-ledgers. Protected symbols such as `FXAIX` may appear as holdings, but the
+ledgers. If `evidence-file` is omitted, the server uses the decision journal as
+a read-only evidence fallback so ticker pages do not collapse to the current
+small action-plan set. If `price-history-file` is omitted, requested ticker
+pages can fetch one-symbol yfinance history through the Python server process
+and cache it for that server session; index requests do not fetch the whole
+universe. Protected symbols such as `FXAIX` may appear as holdings, but the
 server filters them out of actionable dashboard candidate lists. The browser-side
 portfolio card polls `/api/portfolio.json`, and the safety card polls
 `/api/pipeline-health.json`; account/current-price freshness, scheduler-policy

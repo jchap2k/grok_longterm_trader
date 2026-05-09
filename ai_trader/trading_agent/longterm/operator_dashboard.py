@@ -3437,6 +3437,18 @@ def _html_shell(*, title: str, body: str) -> str:
       background: linear-gradient(180deg, rgba(255,250,240,.72), rgba(235,223,198,.42));
       overflow: hidden;
     }}
+    .lightweight-chart-canvas {{
+      min-height: 340px;
+      height: min(46vh, 420px);
+      width: 100%;
+    }}
+    .chart-fallback {{
+      display: block;
+      border-top: 1px solid rgba(214,197,168,.55);
+    }}
+    .chart-stage.is-lightweight-ready .chart-fallback {{
+      display: none;
+    }}
     .chart-tooltip {{
       position: absolute;
       top: 18px;
@@ -3465,6 +3477,12 @@ def _html_shell(*, title: str, body: str) -> str:
       font-size: 13px;
       margin-top: 10px;
     }}
+    .chart-attribution {{
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 8px;
+    }}
+    .chart-attribution a {{ color: var(--accent); font-weight: 800; }}
     .two-column {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 22px; }}
     .score-list, .data-table, .article-list {{ margin: 16px 0 0; padding: 0; list-style: none; }}
     .score-list li, .article-list li {{ padding: 12px 0; border-top: 1px solid var(--line); }}
@@ -3725,7 +3743,7 @@ def _price_chart_svg(history: list[Mapping[str, Any]]) -> str:
         return "<div class=\"empty-chart\">Price history unavailable for this generated page.</div>"
     data = json.dumps(points, sort_keys=True).replace("</", "<\\/")
     return (
-        "<div class=\"chart-workbench\" data-active-range=\"MAX\">"
+        "<div class=\"chart-workbench\" data-active-range=\"MAX\" data-lightweight-price-chart>"
         "<div class=\"chart-toolbar\" aria-label=\"Chart range controls\">"
         "<button type=\"button\" data-range=\"1M\">1M</button>"
         "<button type=\"button\" data-range=\"3M\">3M</button>"
@@ -3734,12 +3752,16 @@ def _price_chart_svg(history: list[Mapping[str, Any]]) -> str:
         "<button type=\"button\" data-range=\"MAX\" class=\"is-active\">MAX</button>"
         "</div>"
         "<div class=\"chart-stage\">"
-        f"{_static_price_chart_svg(points)}"
+        "<div class=\"lightweight-chart-canvas\" aria-label=\"Interactive TradingView Lightweight Charts price chart\"></div>"
+        f"<div class=\"chart-fallback\">{_static_price_chart_svg(points)}</div>"
         "<div class=\"chart-tooltip\" role=\"status\" aria-live=\"polite\"></div>"
         "</div>"
-        "<div class=\"chart-caption\"><span>Hover the line for date and close.</span><span>Use range chips to zoom.</span></div>"
+        "<div class=\"chart-caption\"><span>Hover, pan, or wheel-zoom the chart for price detail.</span><span>Use range chips to reset the view.</span></div>"
+        "<p class=\"chart-attribution\">Interactive chart powered by "
+        "<a href=\"https://github.com/tradingview/lightweight-charts\" rel=\"noopener noreferrer\">TradingView Lightweight Charts</a>.</p>"
         f"<script type=\"application/json\" class=\"chart-data\">{data}</script>"
-        f"<script>{_interactive_chart_script()}</script>"
+        "<script src=\"https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js\" defer></script>"
+        f"<script>{_lightweight_chart_script()}</script>"
         "</div>"
     )
 
@@ -3770,12 +3792,11 @@ def _static_price_chart_svg(points: list[Mapping[str, Any]]) -> str:
     )
 
 
-def _interactive_chart_script() -> str:
+def _lightweight_chart_script() -> str:
     return r"""
-(function initInteractiveCharts(){
-  if (window.__longtermInteractiveChartsReady) return;
-  window.__longtermInteractiveChartsReady = true;
-  const width = 820, height = 260, pad = 26;
+(function initLightweightPriceCharts(){
+  if (window.__longtermLightweightChartsReady) return;
+  window.__longtermLightweightChartsReady = true;
   const ranges = { "1M": 22, "3M": 66, "6M": 132, "1Y": 252, "MAX": Infinity };
   const money = new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 
@@ -3784,86 +3805,118 @@ def _interactive_chart_script() -> str:
     return take === Infinity ? points.slice() : points.slice(Math.max(0, points.length - take));
   }
 
-  function toCoords(points) {
-    const closes = points.map(point => Number(point.close)).filter(Number.isFinite);
-    const low = Math.min(...closes);
-    const high = Math.max(...closes);
-    const spread = high - low || 1;
-    return points.map((point, index) => {
-      const x = pad + (index / Math.max(1, points.length - 1)) * (width - pad * 2);
-      const y = height - pad - ((Number(point.close) - low) / spread) * (height - pad * 2);
-      return { ...point, x, y };
-    });
+  function chartRows(points) {
+    return points
+      .map(point => ({ time: String(point.date || "").slice(0, 10), value: Number(point.close) }))
+      .filter(point => point.time && Number.isFinite(point.value));
   }
 
-  function draw(workbench, points, range) {
-    const svg = workbench.querySelector("svg.interactive-chart");
+  function makeSeries(chart, options) {
+    if (typeof chart.addAreaSeries === "function") {
+      return chart.addAreaSeries(options);
+    }
+    if (typeof chart.addSeries === "function" && window.LightweightCharts && window.LightweightCharts.AreaSeries) {
+      return chart.addSeries(window.LightweightCharts.AreaSeries, options);
+    }
+    return null;
+  }
+
+  function draw(workbench, state, range) {
     const tooltip = workbench.querySelector(".chart-tooltip");
-    const subset = visiblePoints(points, range);
-    if (!svg || subset.length < 2) return;
-    const coords = toCoords(subset);
-    const first = Number(subset[0].close);
-    const last = Number(subset[subset.length - 1].close);
+    const subset = visiblePoints(state.points, range);
+    const rows = chartRows(subset);
+    if (!state.series || rows.length < 2) return;
+    const first = rows[0].value;
+    const last = rows[rows.length - 1].value;
     const change = first ? ((last - first) / first) * 100 : 0;
     const color = change >= 0 ? "#0f6b56" : "#7f2f25";
-    const polyline = coords.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
-    const area = `M ${pad},${height - pad} L ${coords.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" L ")} L ${width - pad},${height - pad} Z`;
-    svg.innerHTML = `
-      <defs><linearGradient id="chartFillLive" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity="0.24"/><stop offset="1" stop-color="${color}" stop-opacity="0.03"/></linearGradient></defs>
-      <path d="${area}" fill="url(#chartFillLive)"></path>
-      <line class="chart-crosshair" x1="${coords[coords.length - 1].x}" x2="${coords[coords.length - 1].x}" y1="${pad}" y2="${height - pad}" stroke="#6d6658" stroke-width="1.5" stroke-dasharray="5 7" opacity="0"></line>
-      <polyline points="${polyline}" fill="none" stroke="${color}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></polyline>
-      <circle class="chart-focus" cx="${coords[coords.length - 1].x}" cy="${coords[coords.length - 1].y}" r="6" fill="${color}" stroke="#fffaf0" stroke-width="3" opacity="0"></circle>
-      <rect class="chart-hit-area" x="0" y="0" width="${width}" height="${height}" fill="transparent"></rect>
-      <text x="${pad}" y="34" fill="#6d6658" font-size="16">Last: ${last.toFixed(2)} | Change: ${change.toFixed(1)}%</text>
-    `;
-    const focus = svg.querySelector(".chart-focus");
-    const crosshair = svg.querySelector(".chart-crosshair");
-    const hit = svg.querySelector(".chart-hit-area");
-    function show(event) {
-      const box = svg.getBoundingClientRect();
-      const x = ((event.clientX - box.left) / box.width) * width;
-      const nearest = coords.reduce((best, point) => Math.abs(point.x - x) < Math.abs(best.x - x) ? point : best, coords[0]);
-      if (!nearest || !focus || !crosshair || !tooltip) return;
-      focus.setAttribute("cx", nearest.x);
-      focus.setAttribute("cy", nearest.y);
-      focus.setAttribute("opacity", "1");
-      crosshair.setAttribute("x1", nearest.x);
-      crosshair.setAttribute("x2", nearest.x);
-      crosshair.setAttribute("opacity", ".72");
-      tooltip.innerHTML = `<strong>${money.format(Number(nearest.close))}</strong><span>${nearest.date || "date pending"}</span>`;
-      tooltip.style.left = `${Math.min(Math.max(14, (nearest.x / width) * box.width - 74), box.width - 170)}px`;
+    state.series.applyOptions({
+      lineColor: color,
+      topColor: change >= 0 ? "rgba(15, 107, 86, 0.28)" : "rgba(127, 47, 37, 0.24)",
+      bottomColor: change >= 0 ? "rgba(15, 107, 86, 0.02)" : "rgba(127, 47, 37, 0.02)",
+    });
+    state.series.setData(rows);
+    state.chart.timeScale().fitContent();
+    if (tooltip) {
+      tooltip.innerHTML = `<strong>${money.format(last)}</strong><span>${range} ${change >= 0 ? "+" : ""}${change.toFixed(1)}%</span>`;
+    }
+  }
+
+  function hydrate(workbench, points) {
+    const host = workbench.querySelector(".lightweight-chart-canvas");
+    const stage = workbench.querySelector(".chart-stage");
+    if (!host || !window.LightweightCharts || typeof window.LightweightCharts.createChart !== "function") return null;
+    const chart = LightweightCharts.createChart(host, {
+      autoSize: true,
+      layout: {
+        background: { color: "rgba(255,250,240,0)" },
+        textColor: "#6d6658",
+        fontFamily: "Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif",
+      },
+      grid: {
+        vertLines: { color: "rgba(109,102,88,0.10)" },
+        horzLines: { color: "rgba(109,102,88,0.12)" },
+      },
+      crosshair: { mode: 0 },
+      rightPriceScale: { borderColor: "rgba(109,102,88,0.20)" },
+      timeScale: {
+        borderColor: "rgba(109,102,88,0.20)",
+        rightOffset: 6,
+        barSpacing: 8,
+        timeVisible: false,
+      },
+      handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
+      handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
+    });
+    const series = makeSeries(chart, {
+      lineColor: "#0f6b56",
+      topColor: "rgba(15, 107, 86, 0.28)",
+      bottomColor: "rgba(15, 107, 86, 0.02)",
+      lineWidth: 3,
+      priceLineVisible: false,
+      lastValueVisible: true,
+    });
+    if (!series) return null;
+    const tooltip = workbench.querySelector(".chart-tooltip");
+    chart.subscribeCrosshairMove(param => {
+      if (!tooltip || !param || !param.time || !param.point) {
+        if (tooltip) tooltip.classList.remove("is-visible");
+        return;
+      }
+      const seriesData = param.seriesData && (param.seriesData.get(series) || Array.from(param.seriesData.values())[0]);
+      const value = Number(seriesData && (seriesData.value ?? seriesData.close));
+      if (!Number.isFinite(value)) {
+        tooltip.classList.remove("is-visible");
+        return;
+      }
+      tooltip.innerHTML = `<strong>${money.format(value)}</strong><span>${param.time}</span>`;
+      tooltip.style.left = `${Math.min(Math.max(14, param.point.x - 74), host.clientWidth - 170)}px`;
       tooltip.classList.add("is-visible");
-    }
-    function hide() {
-      if (focus) focus.setAttribute("opacity", "0");
-      if (crosshair) crosshair.setAttribute("opacity", "0");
-      if (tooltip) tooltip.classList.remove("is-visible");
-    }
-    if (hit) {
-      hit.addEventListener("mousemove", show);
-      hit.addEventListener("mouseleave", hide);
-      hit.addEventListener("touchstart", event => show(event.touches[0]), { passive: true });
-      hit.addEventListener("touchmove", event => show(event.touches[0]), { passive: true });
-    }
+    });
+    if (stage) stage.classList.add("is-lightweight-ready");
+    return { chart, series, points };
   }
 
   function boot() {
-    document.querySelectorAll(".chart-workbench").forEach(workbench => {
+    if (!window.LightweightCharts || typeof window.LightweightCharts.createChart !== "function") return;
+    document.querySelectorAll("[data-lightweight-price-chart]").forEach(workbench => {
       const data = workbench.querySelector(".chart-data");
       const points = JSON.parse(data ? data.textContent : "[]");
+      const state = hydrate(workbench, points);
+      if (!state) return;
       workbench.querySelectorAll("[data-range]").forEach(button => {
         button.addEventListener("click", () => {
           const range = button.getAttribute("data-range") || "MAX";
           workbench.querySelectorAll("[data-range]").forEach(other => other.classList.toggle("is-active", other === button));
-          draw(workbench, points, range);
+          draw(workbench, state, range);
         });
       });
-      draw(workbench, points, workbench.getAttribute("data-active-range") || "MAX");
+      draw(workbench, state, workbench.getAttribute("data-active-range") || "MAX");
     });
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
+  window.addEventListener("load", boot, { once: true });
 })();
 """
 

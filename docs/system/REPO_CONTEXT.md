@@ -679,6 +679,17 @@ Current regime source:
 - The dashboard now shows a dedicated Macro Regime panel with provider health,
   FRED mode, interpreted label, VIX, yield curve, credit spread, and review
   trigger state.
+- Ticker tear sheets now render their price chart through TradingView
+  `lightweight-charts` when the browser can load the standalone library. The
+  page keeps the generated SVG chart as an offline fallback, so static dashboard
+  review still works without network access.
+- The localhost dashboard server now uses the decision journal as a read-only
+  evidence fallback when the manifest has no explicit evidence file. That keeps
+  previously researched/Fool-converged ticker pages available instead of
+  shrinking the tear-sheet universe to the current action plan. Requested
+  ticker pages can also fetch/cache one-symbol yfinance history when the
+  manifest has no price-history file, which restores interactive charts without
+  fetching the whole universe on index load.
 - Scheduler verification supports `--require-fred-provider`; the
   `ongoing-no-submit` preset adds it when it auto-generates a FRED snapshot, so
   degraded fallback is visible as a blocker instead of a quiet pass.

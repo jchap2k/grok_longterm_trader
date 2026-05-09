@@ -4,6 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from longterm.decision_journal import LongTermDecisionJournal
 from longterm.operator_dashboard_server import (
     build_api_usage_from_manifest,
     build_dashboard_manifest,
@@ -22,6 +23,7 @@ from longterm.operator_dashboard_server import (
     resolve_dashboard_request,
 )
 from longterm.operator_dashboard_server_cli import build_parser, run_cli
+from research.research_packet import ResearchPacket
 
 
 def test_dashboard_manifest_records_traceability_and_rules_hash(tmp_path):
@@ -56,6 +58,100 @@ def test_dashboard_manifest_records_traceability_and_rules_hash(tmp_path):
     assert manifest["api_usage"] == ""
     assert manifest["active_rules_hash"]
     assert manifest["generated_at"].endswith("Z")
+
+
+def test_dashboard_server_uses_decision_journal_as_evidence_fallback(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    journal.record_decision(
+        ResearchPacket(
+            symbol="NVDA",
+            company_name="NVIDIA",
+            business_summary="Discovery candidate; thesis should come from journal evidence.",
+            thesis_summary="AI accelerator compounder.",
+            idea_source="motley_fool",
+            quality_score=97.0,
+            valuation_score=72.0,
+            combined_attractiveness_score=84.1,
+            evidence_brief=(
+                "research_evidence_brief_v1 | NVDA\n"
+                "Fundamentals: 3yr revenue growth 100.05%; P/E 40.2x; "
+                "gross margin 71.07%; operating margin 60.38%; TTM revenue $215.94B (+65.0%)."
+            ),
+            source_notes=[
+                "Python quality-growth scorecard: deterministic composite from provider data.",
+                "Latest relevant news: Jensen Huang announced a major AI platform update; Nvidia earnings beat.",
+                "Research selection: research_selection_id=rs-nvda; formula=research_selection_v1; selection_score=69.9; evidence_hash=abc123",
+                "Source convergence: motley_fool + wide_universe.",
+            ],
+        ),
+        decision={
+            "recommendation": "HOLD",
+            "confidence": 78,
+            "suggested_size_pct": 12,
+            "key_thesis": "NVDA remains a durable AI compounder with a CUDA moat.",
+        },
+    )
+    action_plan = tmp_path / "action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    manifest_path = tmp_path / "dashboard_manifest.json"
+    action_plan.write_text(json.dumps({"intents": []}), encoding="utf-8")
+    portfolio.write_text(json.dumps({"holdings": []}), encoding="utf-8")
+    manifest_path.write_text(
+        json.dumps(
+            build_dashboard_manifest(
+                action_plan=action_plan,
+                portfolio_state=portfolio,
+                decision_journal_path=journal.db_path,
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    pages = build_dashboard_pages_from_manifest(load_dashboard_manifest(manifest_path))
+    ticker_html = pages["tickers/NVDA.html"]
+    index_html = pages["index.html"]
+
+    assert "tickers/NVDA.html" in pages
+    assert "motley_fool + wide_universe" in ticker_html
+    assert "Superscore" in ticker_html
+    assert "84.1" in ticker_html
+    assert "100.05%" in ticker_html
+    assert "Jensen Huang announced a major AI platform update" in ticker_html
+    assert "NVDA" in index_html
+
+
+def test_dashboard_manifest_can_autofill_price_history_for_lightweight_charts(tmp_path):
+    action_plan = tmp_path / "action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    manifest_path = tmp_path / "dashboard_manifest.json"
+    action_plan.write_text(
+        json.dumps({"intents": [{"symbol": "MSFT", "intent_type": "BUY", "reason": "Test buy."}]}),
+        encoding="utf-8",
+    )
+    portfolio.write_text(json.dumps({"holdings": []}), encoding="utf-8")
+    manifest_path.write_text(
+        json.dumps(build_dashboard_manifest(action_plan=action_plan, portfolio_state=portfolio)),
+        encoding="utf-8",
+    )
+
+    def fetcher(symbol, period):
+        assert symbol == "MSFT"
+        assert period == "1y"
+        return [
+            {"date": "2026-01-01", "close": 100},
+            {"date": "2026-02-01", "close": 110},
+        ]
+
+    pages = build_dashboard_pages_from_manifest(
+        load_dashboard_manifest(manifest_path),
+        price_history_fetcher=fetcher,
+    )
+
+    html = pages["tickers/MSFT.html"]
+    assert "data-lightweight-price-chart" in html
+    assert "Price history unavailable" not in html
+    assert "2026-01-01" in html
+    assert "TradingView Lightweight Charts" in html
 
 
 def test_dashboard_server_exposes_api_usage_from_pipeline_summary(tmp_path):

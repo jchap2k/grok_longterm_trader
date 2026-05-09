@@ -569,7 +569,7 @@ Builds an advisory scheduler-readiness report from existing artifacts such as po
 Assembles a read-only operator bundle from the paper lifecycle summary, buy-promotion summary, optional Monday artifact check summary, optional live-readiness evidence summary, optional paper status-refresh summary, advisory scheduler readiness report, and position intelligence report. It also emits an `agent_next_step` rollup such as `collect_preflight_artifacts`, `blocked_preflight`, `ready_to_reveal_submit_command`, `monitor_submitted_orders`, or `review_status_errors`; this is guidance only and keeps order submission disabled. "Operator" means the current supervised human/agent control surface and the future autonomous long-term agent control surface. The bundle is meant as the pre-automation cockpit: machine-readable enough for the future agent, human-readable enough for supervised paper trading, and never a broker submission authority by itself.
 
 `longterm/operator_dashboard.py`
-Builds a static, read-only operator dashboard and optional ticker tear-sheet site from saved artifacts. It renders current advisory state, market regime, paper BUY candidates, parking guidance, portfolio holdings, rankings/actionability, universe scorecards, ticker charts, fundamentals, earnings context, Graham discipline fields, and article evidence without calling brokers or LLMs. The generated site includes a disabled `Agent Desk` placeholder for future authenticated Q&A and supervised command drafting, but the placeholder cannot send messages or orders.
+Builds a static, read-only operator dashboard and optional ticker tear-sheet site from saved artifacts. It renders current advisory state, market regime, paper BUY candidates, parking guidance, portfolio holdings, rankings/actionability, universe scorecards, ticker charts, fundamentals, earnings context, Graham discipline fields, and article evidence without calling brokers or LLMs. Ticker charts use TradingView `lightweight-charts` for hover/pan/zoom when the browser can load the standalone chart library, with an embedded SVG fallback for offline/static resilience. The generated site includes a disabled `Agent Desk` placeholder for future authenticated Q&A and supervised command drafting, but the placeholder cannot send messages or orders.
 
 `longterm/operator_dashboard_server.py`
 Builds and serves a versioned read-only dashboard manifest for localhost review.
@@ -578,9 +578,17 @@ rules path/hash, optional lessons snapshot path, and
 `order_submission_enabled=false`. The server resolves the index page, ticker
 pages, summary JSON, manifest JSON, and health check from the current artifact
 files on each request, so a rescan can update the viewer by updating saved
-artifacts rather than regenerating a static site. It filters protected symbols
-out of actionable dashboard candidates and never calls brokers, LLMs, or submit
-commands.
+artifacts rather than regenerating a static site. When explicit evidence or
+price-history files are missing, it can hydrate evidence from the durable
+decision journal and fetch/cache one requested ticker's yfinance history for
+interactive chart rendering. It filters protected symbols out of actionable
+dashboard candidates and never calls brokers, LLMs, or submit commands.
+
+`longterm/operator_dashboard_sources.py`
+Contains the dashboard source adapters that keep the server small: decision
+journal evidence fallback, source-note-to-scorecard/financial parsing, requested
+ticker detection, and session-cached yfinance price-history fetches for ticker
+charts.
 
 `longterm/position_report.py`
 Builds an on-demand monthly or quarterly position intelligence report from portfolio state, the decision journal, symbol feedback profiles, review status, paper preview status, paper execution status, provider-free paper outcome summaries, outcome freshness, and optional feedback-refresh summaries. It summarizes the portfolio and then shows collected research/feedback context for each held symbol, including knowledge gaps. It can produce a Brevo-compatible email payload, but it is not scheduler-wired and does not submit broker orders.

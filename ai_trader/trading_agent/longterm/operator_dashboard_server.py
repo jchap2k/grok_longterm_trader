@@ -11,6 +11,13 @@ from typing import Any, Mapping
 from urllib.parse import unquote, urlparse
 
 from longterm.operator_dashboard import build_operator_dashboard, build_operator_dashboard_site
+from longterm.operator_dashboard_sources import (
+    cached_yfinance_history,
+    dashboard_price_history_symbols,
+    fetch_missing_price_history,
+    load_decision_journal_evidence_items,
+    requested_ticker_symbols,
+)
 from longterm.pipeline_health_cli import build_pipeline_health_report
 from longterm.scheduler_config_validation import normalize_scheduler_config_validation
 from longterm.scheduler_launch_packet import SchedulerLaunchPacketInputs, build_scheduler_launch_packet
@@ -130,7 +137,13 @@ def find_latest_dashboard_manifest(root: str | Path) -> Path:
     return candidates[-1][3]
 
 
-def build_dashboard_pages_from_manifest(manifest: Mapping[str, Any]) -> dict[str, str]:
+def build_dashboard_pages_from_manifest(
+    manifest: Mapping[str, Any],
+    *,
+    price_history_fetcher=None,
+    price_history_period: str = "1y",
+    price_history_symbols: list[str] | None = None,
+) -> dict[str, str]:
     """Build dashboard pages from the current manifest source files."""
     base_dir = Path(str(manifest.get("_manifest_path") or ".")).parent
     action_plan = _load_json_optional(_resolve_manifest_path(base_dir, manifest.get("action_plan")))
@@ -139,6 +152,10 @@ def build_dashboard_pages_from_manifest(manifest: Mapping[str, Any]) -> dict[str
     operator_status = _load_json_optional(_resolve_manifest_path(base_dir, manifest.get("operator_status")))
     scheduler_policy = _load_json_optional(_resolve_manifest_path(base_dir, manifest.get("scheduler_policy")))
     evidence_items = _load_json_list_optional(_resolve_manifest_path(base_dir, manifest.get("evidence_file")))
+    if not evidence_items:
+        evidence_items = load_decision_journal_evidence_items(
+            _resolve_manifest_path(base_dir, manifest.get("decision_journal_path"))
+        )
     price_history = _load_json_optional(_resolve_manifest_path(base_dir, manifest.get("price_history_file")))
     scheduler_config_validation = build_scheduler_config_validation_from_manifest(manifest)
     scheduler_task_plan = build_scheduler_task_plan_from_manifest(manifest)
@@ -155,6 +172,19 @@ def build_dashboard_pages_from_manifest(manifest: Mapping[str, Any]) -> dict[str
         scheduler_policy=scheduler_policy,
         operator_status=operator_status,
     )
+    if price_history_fetcher:
+        price_history = fetch_missing_price_history(
+            existing=price_history,
+            symbols=price_history_symbols
+            or dashboard_price_history_symbols(
+                dashboard=dashboard,
+                action_plan=action_plan,
+                portfolio_state=portfolio_state,
+                evidence_items=evidence_items,
+            ),
+            period=price_history_period,
+            fetcher=price_history_fetcher,
+        )
     return build_operator_dashboard_site(
         dashboard=dashboard,
         action_plan=action_plan,
@@ -601,8 +631,13 @@ def resolve_dashboard_request(
         return 200, "application/json; charset=utf-8", _json_bytes(
             build_paper_submit_mode_plan_from_manifest(manifest)
         )
-    pages = build_dashboard_pages_from_manifest(manifest)
     key = "index.html" if parsed_path in {"/", "/index.html"} else parsed_path.lstrip("/")
+    requested_price_symbols = requested_ticker_symbols(parsed_path)
+    pages = build_dashboard_pages_from_manifest(
+        manifest,
+        price_history_fetcher=cached_yfinance_history if requested_price_symbols else None,
+        price_history_symbols=requested_price_symbols,
+    )
     if key not in pages:
         return 404, "text/plain; charset=utf-8", b"not found"
     return 200, "text/html; charset=utf-8", pages[key].encode("utf-8")
