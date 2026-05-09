@@ -31,6 +31,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scheduler-task-registration", default="")
     parser.add_argument("--scheduler-launch-packet", default="")
     parser.add_argument("--scheduler-no-submit-smoke", default="")
+    parser.add_argument("--research-queue-summary", default="")
+    parser.add_argument("--scheduler-soak-plan", default="")
     parser.add_argument("--position-review-queue", default="")
     parser.add_argument("--paper-submit-mode-plan", default="")
     parser.add_argument("--scheduler-policy", default="")
@@ -64,6 +66,8 @@ def run_cli(
         scheduler_task_registration_path=args.scheduler_task_registration,
         scheduler_launch_packet_path=args.scheduler_launch_packet,
         scheduler_no_submit_smoke_path=args.scheduler_no_submit_smoke,
+        research_queue_summary_path=args.research_queue_summary,
+        scheduler_soak_plan_path=args.scheduler_soak_plan,
         position_review_queue_path=args.position_review_queue,
         paper_submit_mode_plan_path=args.paper_submit_mode_plan,
         scheduler_policy_path=args.scheduler_policy,

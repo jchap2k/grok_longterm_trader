@@ -36,6 +36,8 @@ def build_dashboard_manifest(
     scheduler_task_registration: str | Path = "",
     scheduler_launch_packet: str | Path = "",
     scheduler_no_submit_smoke: str | Path = "",
+    research_queue_summary: str | Path = "",
+    scheduler_soak_plan: str | Path = "",
     position_review_queue: str | Path = "",
     paper_submit_mode_plan: str | Path = "",
     scheduler_policy: str | Path = "",
@@ -67,6 +69,8 @@ def build_dashboard_manifest(
         "scheduler_task_registration": str(scheduler_task_registration or ""),
         "scheduler_launch_packet": str(scheduler_launch_packet or ""),
         "scheduler_no_submit_smoke": str(scheduler_no_submit_smoke or ""),
+        "research_queue_summary": str(research_queue_summary or ""),
+        "scheduler_soak_plan": str(scheduler_soak_plan or ""),
         "position_review_queue": str(position_review_queue or ""),
         "paper_submit_mode_plan": str(paper_submit_mode_plan or ""),
         "scheduler_policy": str(scheduler_policy or ""),
@@ -468,6 +472,10 @@ def build_scheduler_chain_from_manifest(manifest: Mapping[str, Any]) -> dict[str
                 stage6b_candidate_plan="",
                 position_review_queue=_manifest_path_value(manifest, "position_review_queue"),
                 market_regime=_manifest_path_value(manifest, "market_regime"),
+                api_usage=_manifest_path_value(manifest, "api_usage"),
+                pipeline_summary=_manifest_path_value(manifest, "pipeline_summary"),
+                research_queue_summary=_manifest_path_value(manifest, "research_queue_summary"),
+                scheduler_soak_plan=_manifest_path_value(manifest, "scheduler_soak_plan"),
                 pipeline_scheduler_summary=_manifest_path_value(manifest, "pipeline_scheduler_summary"),
             )
         )
@@ -483,6 +491,10 @@ def build_scheduler_chain_from_manifest(manifest: Mapping[str, Any]) -> dict[str
         "next_safe_action": str(launch.get("next_safe_action") or "build_scheduler_launch_packet"),
         "launch_packet": str(launch_path or ""),
         "no_submit_smoke": str(smoke_path or ""),
+        "provider_usage_review": _chain_section(launch, "provider_usage_review"),
+        "research_queue_review": _chain_section(launch, "research_queue_review"),
+        "scheduler_soak_review": _chain_section(launch, "scheduler_soak_review"),
+        "registration_readiness": _chain_section(launch, "registration_readiness"),
         "order_submission_enabled": False,
     }
 
@@ -510,6 +522,13 @@ def build_position_review_queue_from_manifest(manifest: Mapping[str, Any]) -> di
     normalized["broker_calls_enabled"] = False
     normalized["llm_calls_enabled"] = False
     return normalized
+
+
+def _chain_section(launch: Mapping[str, Any], key: str) -> dict[str, Any]:
+    section = launch.get(key)
+    if isinstance(section, Mapping):
+        return dict(section)
+    return {"status": "unavailable", "order_submission_enabled": False}
 
 
 def build_paper_submit_mode_plan_from_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:

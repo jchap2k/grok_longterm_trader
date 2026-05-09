@@ -1577,6 +1577,12 @@ def _scheduler_task_registration_panel(registration: Mapping[str, Any]) -> str:
 def _scheduler_chain_panel(chain: Mapping[str, Any]) -> str:
     status = _display_label(chain.get("status") or "unavailable")
     next_action = _display_label(chain.get("next_safe_action") or "build_scheduler_launch_packet")
+    provider_usage = chain.get("provider_usage_review") if isinstance(chain.get("provider_usage_review"), Mapping) else {}
+    research_queue = chain.get("research_queue_review") if isinstance(chain.get("research_queue_review"), Mapping) else {}
+    soak_review = chain.get("scheduler_soak_review") if isinstance(chain.get("scheduler_soak_review"), Mapping) else {}
+    registration = chain.get("registration_readiness") if isinstance(chain.get("registration_readiness"), Mapping) else {}
+    providers = ", ".join(str(item) for item in provider_usage.get("providers") or []) or "n/a"
+    selected_count = int(_number(research_queue.get("selected_count")))
     rows = []
     for step in chain.get("steps") or []:
         if not isinstance(step, Mapping):
@@ -1599,6 +1605,10 @@ def _scheduler_chain_panel(chain: Mapping[str, Any]) -> str:
         "<div class=\"pipeline-health-grid\">"
         f"<div><span>Status</span><strong data-scheduler-chain-status>{escape(status)}</strong></div>"
         f"<div><span>Blockers</span><strong>{escape(blockers)}</strong></div>"
+        f"<div><span>Provider Usage</span><strong>{escape(_display_label(provider_usage.get('status') or 'unavailable'))}</strong><small>{escape(providers)}</small></div>"
+        f"<div><span>Research Queue</span><strong>{selected_count}</strong><small>{escape(_display_label(research_queue.get('status') or 'unavailable'))}</small></div>"
+        f"<div><span>Soak Plan</span><strong>{escape(_display_label(soak_review.get('status') or 'unavailable'))}</strong></div>"
+        f"<div><span>Registration Readiness</span><strong>{escape(_display_label(registration.get('status') or 'unavailable'))}</strong></div>"
         "</div>"
         f"<ul class=\"compact-list\">{''.join(rows)}</ul>"
         f"<p data-scheduler-chain-message>{escape(next_action)}</p>"

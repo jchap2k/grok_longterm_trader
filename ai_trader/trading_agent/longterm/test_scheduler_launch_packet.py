@@ -170,6 +170,113 @@ def test_launch_packet_reports_ready_no_submit_chain_with_review_only_actions(tm
     assert packet["next_safe_action"] == "review_no_submit_launch_packet_then_optionally_register_scheduler_task"
 
 
+def test_launch_packet_surfaces_provider_queue_soak_and_registration_readiness(tmp_path):
+    artifacts = _ready_artifacts(tmp_path)
+    api_usage = _write(
+        tmp_path / "api_usage.json",
+        {
+            "mode": "api_usage_summary",
+            "providers": [
+                {
+                    "provider": "perplexity",
+                    "request_count": 7,
+                    "estimated_cost_usd": 0.42,
+                    "credits_purchased_to_date_usd": 12.0,
+                    "tier_1_threshold_usd": 50.0,
+                }
+            ],
+            "totals": {"request_count": 7, "estimated_cost_usd": 0.42},
+            "order_submission_enabled": False,
+        },
+    )
+    research_queue = _write(
+        tmp_path / "research_queue_summary.json",
+        {
+            "status": "research_queue_ready",
+            "selected_count": 50,
+            "ranked_all_count": 305,
+            "source_count": 305,
+            "selected_symbols": ["ADBE", "MSFT", "MA"],
+            "order_submission_enabled": False,
+        },
+    )
+    portfolio_news = _write(
+        tmp_path / "portfolio_news_monitor.json",
+        {
+            "status": "completed",
+            "followup_reviewed_count": 4,
+            "portfolio_news_followup_count": 6,
+            "high_impact_unreviewed_count": 0,
+            "order_submission_enabled": False,
+        },
+    )
+    soak_plan = _write(
+        tmp_path / "scheduler_soak_plan.json",
+        {
+            "status": "ready_for_no_submit_soak_review",
+            "preview_command": "python ai_trader/trading_agent/scripts/longterm_pipeline_scheduler.py --preset ongoing-no-submit",
+            "order_submission_enabled": False,
+            "scheduler_executed": False,
+        },
+    )
+
+    packet = build_scheduler_launch_packet(
+        SchedulerLaunchPacketInputs(
+            scheduler_config_validation=artifacts["validation"],
+            scheduler_task_plan=artifacts["task_plan"],
+            scheduler_handoff=artifacts["handoff"],
+            scheduler_task_registration=artifacts["registration"],
+            dashboard_manifest=artifacts["manifest"],
+            api_usage=api_usage,
+            research_queue_summary=research_queue,
+            portfolio_news_monitor=portfolio_news,
+            scheduler_soak_plan=soak_plan,
+        )
+    )
+
+    assert packet["status"] == "ready_for_no_submit_launch_review"
+    assert packet["provider_usage_review"]["status"] == "tracked"
+    assert packet["provider_usage_review"]["providers"] == ["perplexity"]
+    assert packet["provider_usage_review"]["total_request_count"] == 7
+    assert packet["provider_usage_review"]["tier_tracking"]["remaining_to_tier_1_usd"] == 38.0
+    assert packet["research_queue_review"]["status"] == "ready"
+    assert packet["research_queue_review"]["selected_count"] == 50
+    assert packet["research_queue_review"]["top_symbols"] == ["ADBE", "MSFT", "MA"]
+    assert packet["research_queue_review"]["portfolio_news_followup_count"] == 6
+    assert packet["scheduler_soak_review"]["status"] == "ready_for_no_submit_soak_review"
+    assert packet["registration_readiness"]["status"] == "ready_for_guarded_no_submit_registration"
+    assert packet["registration_readiness"]["order_submission_enabled"] is False
+
+
+def test_launch_packet_blocks_if_soak_plan_not_ready_or_submit_capable(tmp_path):
+    artifacts = _ready_artifacts(tmp_path)
+    soak_plan = _write(
+        tmp_path / "scheduler_soak_plan.json",
+        {
+            "status": "blocked",
+            "preview_command": "python scheduler.py --submit-paper-orders",
+            "order_submission_enabled": True,
+        },
+    )
+
+    packet = build_scheduler_launch_packet(
+        SchedulerLaunchPacketInputs(
+            scheduler_config_validation=artifacts["validation"],
+            scheduler_task_plan=artifacts["task_plan"],
+            scheduler_handoff=artifacts["handoff"],
+            scheduler_task_registration=artifacts["registration"],
+            dashboard_manifest=artifacts["manifest"],
+            scheduler_soak_plan=soak_plan,
+        )
+    )
+
+    assert packet["status"] == "blocked"
+    assert "scheduler_soak_plan_not_ready" in packet["blockers"]
+    assert "scheduler_soak_plan_order_submission_enabled" in packet["blockers"]
+    assert "scheduler_soak_plan_contains_submit_command_fragment" in packet["blockers"]
+    assert packet["registration_readiness"]["status"] == "blocked_by_launch_packet"
+
+
 def test_launch_packet_blocks_if_stage6b_plan_contains_sell_or_rebalance(tmp_path):
     artifacts = _ready_artifacts(tmp_path)
     stage6b_plan = _write(

@@ -626,6 +626,127 @@ def test_dashboard_server_exposes_scheduler_chain_from_launch_packet(tmp_path):
     assert "Ready For No Submit Launch Review" in html
 
 
+def test_dashboard_server_synthesizes_scheduler_chain_readiness_sections(tmp_path):
+    action_plan = tmp_path / "action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    manifest_path = tmp_path / "dashboard_manifest.json"
+    config = tmp_path / "scheduler_profile_validation.json"
+    task_plan = tmp_path / "scheduler_task_plan.json"
+    handoff = tmp_path / "scheduler_handoff.json"
+    registration = tmp_path / "scheduler_task_registration_review.json"
+    api_usage = tmp_path / "api_usage.json"
+    research_queue = tmp_path / "research_queue_summary.json"
+    soak_plan = tmp_path / "scheduler_soak_plan.json"
+    action_plan.write_text(json.dumps({"intents": []}), encoding="utf-8")
+    portfolio.write_text(json.dumps({"holdings": []}), encoding="utf-8")
+    config.write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "recurring_no_submit_ready": True,
+                "operating_mode_summary": {
+                    "ready_for_unattended_no_submit": True,
+                    "broker_submit_boundary": "blocked_by_no_submit_scheduler",
+                },
+                "order_submission_enabled": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    task_plan.write_text(
+        json.dumps({"status": "ready", "profile_run_mode": "no-submit", "order_submission_enabled": False}),
+        encoding="utf-8",
+    )
+    registration.write_text(
+        json.dumps(
+            {
+                "status": "ready_for_registration_review",
+                "registration_requested": False,
+                "registration_executed": False,
+                "order_submission_enabled": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    handoff.write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "ready": True,
+                "checks": {
+                    "scheduler_config_validation": "ready",
+                    "recurring_no_submit_readiness": "ready",
+                    "scheduler_task_plan": "ready",
+                    "dashboard_manifest": "ready",
+                    "order_submission_boundary": "ready",
+                },
+                "order_submission_enabled": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    api_usage.write_text(
+        json.dumps(
+            {
+                "mode": "api_usage_summary",
+                "providers": [{"provider": "perplexity", "request_count": 3, "estimated_cost_usd": 0.2}],
+                "totals": {"request_count": 3, "estimated_cost_usd": 0.2},
+                "order_submission_enabled": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    research_queue.write_text(
+        json.dumps(
+            {
+                "status": "research_queue_ready",
+                "selected_count": 12,
+                "ranked_all_count": 120,
+                "selected_symbols": ["ADBE", "MSFT"],
+                "order_submission_enabled": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    soak_plan.write_text(
+        json.dumps({"status": "ready_for_no_submit_soak_review", "order_submission_enabled": False}),
+        encoding="utf-8",
+    )
+    manifest_path.write_text(
+        json.dumps(
+            build_dashboard_manifest(
+                action_plan=action_plan,
+                portfolio_state=portfolio,
+                api_usage=api_usage,
+                scheduler_config_validation=config,
+                scheduler_task_plan=task_plan,
+                scheduler_handoff=handoff,
+                scheduler_task_registration=registration,
+                research_queue_summary=research_queue,
+                scheduler_soak_plan=soak_plan,
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    chain = build_scheduler_chain_from_manifest(load_dashboard_manifest(manifest_path))
+    status, _, body = resolve_dashboard_request(manifest_path, "/api/scheduler-chain.json")
+    html_status, _, html_body = resolve_dashboard_request(manifest_path, "/")
+    api = json.loads(body.decode("utf-8"))
+    html = html_body.decode("utf-8")
+
+    assert chain["provider_usage_review"]["providers"] == ["perplexity"]
+    assert chain["research_queue_review"]["selected_count"] == 12
+    assert chain["scheduler_soak_review"]["status"] == "ready_for_no_submit_soak_review"
+    assert chain["registration_readiness"]["status"] == "ready_for_guarded_no_submit_registration"
+    assert status == 200
+    assert api["research_queue_review"]["top_symbols"] == ["ADBE", "MSFT"]
+    assert html_status == 200
+    assert "Provider Usage" in html
+    assert "Research Queue" in html
+    assert "Registration Readiness" in html
+
+
 def test_dashboard_server_marks_missing_scheduler_task_registration_unavailable(tmp_path):
     action_plan = tmp_path / "action_plan.json"
     portfolio = tmp_path / "portfolio.json"

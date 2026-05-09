@@ -26,6 +26,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--position-review-queue", default="")
     parser.add_argument("--market-regime", default="")
     parser.add_argument("--portfolio-news-monitor", default="")
+    parser.add_argument("--api-usage", default="")
+    parser.add_argument("--pipeline-summary", default="")
+    parser.add_argument("--research-queue-summary", default="")
+    parser.add_argument("--scheduler-soak-plan", default="")
     parser.add_argument("--pipeline-scheduler-summary", default="")
     parser.add_argument("--post-run-verification", default="")
     parser.add_argument("--scheduler-review-bundle", default="")
@@ -49,6 +53,10 @@ def run_cli(args: argparse.Namespace) -> int:
             position_review_queue=args.position_review_queue,
             market_regime=args.market_regime,
             portfolio_news_monitor=args.portfolio_news_monitor,
+            api_usage=args.api_usage,
+            pipeline_summary=args.pipeline_summary,
+            research_queue_summary=args.research_queue_summary,
+            scheduler_soak_plan=args.scheduler_soak_plan,
             pipeline_scheduler_summary=args.pipeline_scheduler_summary,
             post_run_verification=args.post_run_verification,
             scheduler_review_bundle=args.scheduler_review_bundle,

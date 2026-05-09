@@ -11,8 +11,9 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-08 by Codex after adding no-submit scheduler launch,
-smoke, soak-plan, and dashboard chain artifacts.
+Last updated: 2026-05-08 by Codex after hardening no-submit scheduler launch
+readiness with provider-usage, research-queue, soak-plan, and guarded
+registration sections.
 
 ## 1. Project Identity
 
@@ -424,8 +425,12 @@ Scheduler-readiness features now exist:
   as one operator artifact: scheduler profile validation, task plan, handoff,
   registration review, dashboard manifest, optional Stage 6B filtered plan,
   parking intent context, sell/rebalance exclusion, market-regime snapshot,
-  portfolio-news monitor, and position-review queue. It is review-only and
-  never runs the scheduler, registers a task, calls an LLM, or submits orders.
+  portfolio-news monitor, position-review queue, API/provider usage, research
+  queue status, and one-cycle soak preview. It is review-only and never runs the
+  scheduler, registers a task, calls an LLM, or submits orders. It now surfaces
+  `provider_usage_review`, `research_queue_review`, `scheduler_soak_review`,
+  and `registration_readiness`; guarded Windows registration remains optional
+  and blocked whenever the launch packet has blockers.
 - `longterm_scheduler_no_submit_smoke.py` packages that launch packet and
   markdown into a named smoke folder. This is the preferred pre-registration
   sanity artifact when the operator wants a one-command readiness bundle from
@@ -435,11 +440,14 @@ Scheduler-readiness features now exist:
   `max_cycles=1`, `run_interval_seconds=0`, and no submit-capable keys. It
   prints/writes the preview command and expected artifacts but does not execute
   the scheduler.
-- Dashboard manifests can point at `scheduler_task_registration`; the localhost
-  server exposes `/api/scheduler-task-registration.json`, includes it in
-  `/api/summary.json`, and renders a read-only Task Registration Review card.
-  The dashboard loader forces `order_submission_enabled=false` even if a saved
-  artifact is malformed or unsafe.
+- Dashboard manifests can point at `scheduler_task_registration`,
+  `scheduler_launch_packet`, `scheduler_no_submit_smoke`,
+  `research_queue_summary`, and `scheduler_soak_plan`; the localhost server
+  exposes `/api/scheduler-task-registration.json` and
+  `/api/scheduler-chain.json`, includes them in `/api/summary.json`, and renders
+  read-only task-registration plus chain-readiness cards. The dashboard loader
+  forces `order_submission_enabled=false` even if a saved artifact is malformed
+  or unsafe.
 
 Book-principle context:
 - `knowledge_agent/sources/longterm_trader/books/The Intelligent Investor Third

@@ -29,6 +29,10 @@ class SchedulerLaunchPacketInputs:
     position_review_queue: str | Path = ""
     market_regime: str | Path = ""
     portfolio_news_monitor: str | Path = ""
+    api_usage: str | Path = ""
+    pipeline_summary: str | Path = ""
+    research_queue_summary: str | Path = ""
+    scheduler_soak_plan: str | Path = ""
     pipeline_scheduler_summary: str | Path = ""
     post_run_verification: str | Path = ""
     scheduler_review_bundle: str | Path = ""
@@ -47,6 +51,10 @@ def build_scheduler_launch_packet(inputs: SchedulerLaunchPacketInputs) -> dict[s
         "position_review_queue": _load_json_optional(inputs.position_review_queue),
         "market_regime": _load_json_optional(inputs.market_regime),
         "portfolio_news_monitor": _load_json_optional(inputs.portfolio_news_monitor),
+        "api_usage": _load_json_optional(inputs.api_usage),
+        "pipeline_summary": _load_json_optional(inputs.pipeline_summary),
+        "research_queue_summary": _load_json_optional(inputs.research_queue_summary),
+        "scheduler_soak_plan": _load_json_optional(inputs.scheduler_soak_plan),
         "pipeline_scheduler_summary": _load_json_optional(inputs.pipeline_scheduler_summary),
         "post_run_verification": _load_json_optional(inputs.post_run_verification),
         "scheduler_review_bundle": _load_json_optional(inputs.scheduler_review_bundle),
@@ -66,8 +74,25 @@ def build_scheduler_launch_packet(inputs: SchedulerLaunchPacketInputs) -> dict[s
         artifacts["position_review_queue"],
         warnings=warnings,
     )
+    provider_usage = _provider_usage_review(
+        artifacts["api_usage"],
+        artifacts["pipeline_summary"],
+        warnings=warnings,
+    )
+    research_queue = _research_queue_review(
+        artifacts["research_queue_summary"],
+        artifacts["portfolio_news_monitor"],
+        blockers=blockers,
+        warnings=warnings,
+    )
+    scheduler_soak = _scheduler_soak_review(artifacts["scheduler_soak_plan"], blockers=blockers, warnings=warnings)
     _check_optional_scheduler_run_artifacts(artifacts, blockers=blockers, warnings=warnings)
     status = "ready_for_no_submit_launch_review" if not blockers else "blocked"
+    registration_readiness = _registration_readiness(
+        artifacts["scheduler_task_registration"],
+        blockers=blockers,
+        packet_status=status,
+    )
     return {
         "schema_version": 1,
         "mode": "scheduler_launch_packet",
@@ -77,6 +102,10 @@ def build_scheduler_launch_packet(inputs: SchedulerLaunchPacketInputs) -> dict[s
         "sell_rebalance_review": sell_rebalance,
         "parking_review": parking,
         "panic_monitor": panic,
+        "provider_usage_review": provider_usage,
+        "research_queue_review": research_queue,
+        "scheduler_soak_review": scheduler_soak,
+        "registration_readiness": registration_readiness,
         "blockers": sorted(set(blockers)),
         "warnings": warnings,
         "artifact_paths": _artifact_paths(inputs),
@@ -119,6 +148,15 @@ def build_scheduler_launch_packet_markdown(packet: Mapping[str, Any]) -> str:
     warnings = packet.get("warnings") or []
     lines.extend(["", "## Warnings"])
     lines.extend([f"- {item}" for item in warnings] or ["- none"])
+    lines.extend(["", "## Readiness"])
+    for label, key in (
+        ("Provider usage", "provider_usage_review"),
+        ("Research queue", "research_queue_review"),
+        ("Scheduler soak", "scheduler_soak_review"),
+        ("Registration readiness", "registration_readiness"),
+    ):
+        section = packet.get(key) if isinstance(packet.get(key), Mapping) else {}
+        lines.append(f"- {label}: {section.get('status', 'unavailable')}")
     return "\n".join(lines) + "\n"
 
 
@@ -170,6 +208,7 @@ def _scheduler_chain(
     if not manifest:
         blockers.append("dashboard_manifest_missing")
     _check_submit_boundary(artifacts, blockers=blockers)
+    _check_protected_symbol_leakage(artifacts, blockers=blockers)
     if registration.get("registration_executed") is True:
         warnings.append("windows_task_already_registered_review_no_submit_only")
     return {"ready": not blockers, "steps": steps}
@@ -251,6 +290,179 @@ def _panic_monitor(
     }
 
 
+def _provider_usage_review(
+    api_usage: Mapping[str, Any],
+    pipeline_summary: Mapping[str, Any],
+    *,
+    warnings: list[str],
+) -> dict[str, Any]:
+    usage = api_usage or _usage_from_pipeline_summary(pipeline_summary)
+    if not usage:
+        warnings.append("api_usage_not_supplied_for_launch_packet")
+        return {
+            "status": "unavailable",
+            "providers": [],
+            "total_request_count": 0,
+            "estimated_total_cost_usd": 0.0,
+            "tier_tracking": {},
+            "next_safe_action": "review_api_usage_before_large_paid_enrichment_runs",
+        }
+    providers = _usage_providers(usage)
+    request_count = int(sum(_number(item.get("request_count")) for item in providers))
+    estimated_cost = round(sum(_number(item.get("estimated_cost_usd")) for item in providers), 4)
+    totals = usage.get("totals") if isinstance(usage.get("totals"), Mapping) else {}
+    if totals:
+        request_count = int(_number(totals.get("request_count")) or request_count)
+        estimated_cost = round(_number(totals.get("estimated_cost_usd")) or estimated_cost, 4)
+    tier_tracking = _tier_tracking(providers, usage)
+    return {
+        "status": "tracked",
+        "providers": [str(item.get("provider") or item.get("model_provider") or "unknown") for item in providers],
+        "total_request_count": request_count,
+        "estimated_total_cost_usd": estimated_cost,
+        "tier_tracking": tier_tracking,
+        "order_submission_enabled": False,
+        "next_safe_action": "review_provider_usage_and_tier_progress_before_large_runs",
+    }
+
+
+def _usage_from_pipeline_summary(pipeline_summary: Mapping[str, Any]) -> dict[str, Any]:
+    for key in ("api_usage", "research_model_usage"):
+        value = pipeline_summary.get(key)
+        if isinstance(value, Mapping):
+            return dict(value)
+    return {}
+
+
+def _usage_providers(usage: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    providers = usage.get("providers")
+    if isinstance(providers, list):
+        return [item for item in providers if isinstance(item, Mapping)]
+    if any(key in usage for key in ("provider", "model_provider", "request_count", "estimated_cost_usd")):
+        return [usage]
+    return []
+
+
+def _tier_tracking(providers: list[Mapping[str, Any]], usage: Mapping[str, Any]) -> dict[str, Any]:
+    candidates = [usage, *providers]
+    for item in candidates:
+        purchased = _number(item.get("credits_purchased_to_date_usd"))
+        threshold = _number(item.get("tier_1_threshold_usd") or item.get("tier1_threshold_usd"))
+        if threshold > 0:
+            return {
+                "credits_purchased_to_date_usd": purchased,
+                "tier_1_threshold_usd": threshold,
+                "remaining_to_tier_1_usd": round(max(threshold - purchased, 0.0), 4),
+            }
+    return {}
+
+
+def _research_queue_review(
+    research_queue_summary: Mapping[str, Any],
+    portfolio_news_monitor: Mapping[str, Any],
+    *,
+    blockers: list[str],
+    warnings: list[str],
+) -> dict[str, Any]:
+    news_followups = _followup_count(portfolio_news_monitor)
+    reviewed = int(_number(portfolio_news_monitor.get("followup_reviewed_count")))
+    high_impact_unreviewed = int(_number(portfolio_news_monitor.get("high_impact_unreviewed_count")))
+    if high_impact_unreviewed > 0:
+        blockers.append("portfolio_news_high_impact_followups_unreviewed")
+    if not research_queue_summary:
+        warnings.append("research_queue_summary_not_supplied_for_launch_packet")
+        return {
+            "status": "unavailable",
+            "selected_count": 0,
+            "ranked_all_count": 0,
+            "source_count": 0,
+            "top_symbols": [],
+            "portfolio_news_followup_count": news_followups,
+            "followup_reviewed_count": reviewed,
+            "high_impact_unreviewed_count": high_impact_unreviewed,
+            "next_safe_action": "run_research_queue_selection_or_confirm_existing_queue",
+        }
+    raw_status = str(research_queue_summary.get("status") or "unknown")
+    if raw_status.lower() in {"blocked", "failed", "error"}:
+        blockers.append("research_queue_summary_not_ready")
+    selected_count = int(_number(_first_present(research_queue_summary, "selected_count", "selection_count")))
+    ranked_all_count = int(_number(_first_present(research_queue_summary, "ranked_all_count", "ranked_count", "candidate_count")))
+    source_count = int(_number(_first_present(research_queue_summary, "source_count", "input_count", "universe_count")))
+    top_symbols = _top_symbols(research_queue_summary)
+    if selected_count <= 0 and top_symbols:
+        selected_count = len(top_symbols)
+    if selected_count <= 0:
+        warnings.append("research_queue_summary_empty")
+    return {
+        "status": "ready" if raw_status.lower() not in {"blocked", "failed", "error"} else "blocked",
+        "source_status": raw_status,
+        "selected_count": selected_count,
+        "ranked_all_count": ranked_all_count,
+        "source_count": source_count,
+        "top_symbols": top_symbols[:10],
+        "portfolio_news_followup_count": news_followups,
+        "followup_reviewed_count": reviewed,
+        "high_impact_unreviewed_count": high_impact_unreviewed,
+        "order_submission_enabled": False,
+        "next_safe_action": "review_queue_then_run_deeper_research_for_selected_names",
+    }
+
+
+def _scheduler_soak_review(
+    scheduler_soak_plan: Mapping[str, Any],
+    *,
+    blockers: list[str],
+    warnings: list[str],
+) -> dict[str, Any]:
+    if not scheduler_soak_plan:
+        warnings.append("scheduler_soak_plan_not_supplied_for_launch_packet")
+        return {
+            "status": "unavailable",
+            "preview_only": True,
+            "scheduler_executed": False,
+            "order_submission_enabled": False,
+            "next_safe_action": "generate_no_submit_scheduler_soak_plan",
+        }
+    status = str(scheduler_soak_plan.get("status") or "unknown")
+    if status != "ready_for_no_submit_soak_review":
+        blockers.append("scheduler_soak_plan_not_ready")
+    if bool(scheduler_soak_plan.get("scheduler_executed")):
+        warnings.append("scheduler_soak_plan_reports_scheduler_already_executed")
+    return {
+        "status": status,
+        "preview_only": not bool(scheduler_soak_plan.get("scheduler_executed")),
+        "scheduler_executed": bool(scheduler_soak_plan.get("scheduler_executed")),
+        "order_submission_enabled": bool(scheduler_soak_plan.get("order_submission_enabled")),
+        "next_safe_action": "review_no_submit_soak_plan_before_task_registration",
+    }
+
+
+def _registration_readiness(
+    registration: Mapping[str, Any],
+    *,
+    blockers: list[str],
+    packet_status: str,
+) -> dict[str, Any]:
+    if blockers or packet_status != "ready_for_no_submit_launch_review":
+        status = "blocked_by_launch_packet"
+        next_action = "resolve_no_submit_launch_packet_blockers_before_registration"
+    elif registration.get("registration_executed") is True or _registration_status(registration) == "registered":
+        status = "registered_no_submit_task"
+        next_action = "monitor_registered_no_submit_task_outputs"
+    else:
+        status = "ready_for_guarded_no_submit_registration"
+        next_action = "optionally_run_guarded_scheduler_registration_with_explicit_confirmation"
+    return {
+        "status": status,
+        "task_name": str(registration.get("task_name") or ""),
+        "registration_requested": bool(registration.get("registration_requested")),
+        "registration_executed": bool(registration.get("registration_executed")),
+        "autostart_scope": "no_submit_monitoring_and_research_only",
+        "order_submission_enabled": False,
+        "next_safe_action": next_action,
+    }
+
+
 def _check_optional_scheduler_run_artifacts(
     artifacts: Mapping[str, Mapping[str, Any]],
     *,
@@ -284,6 +496,14 @@ def _check_submit_boundary(artifacts: Mapping[str, Mapping[str, Any]], *, blocke
         text = json.dumps(payload, sort_keys=True)
         if "--submit-paper-orders" in text or "--confirm-paper-submit" in text:
             blockers.append(f"{name}_contains_submit_command_fragment")
+
+
+def _check_protected_symbol_leakage(artifacts: Mapping[str, Mapping[str, Any]], *, blockers: list[str]) -> None:
+    for name in ("action_plan", "stage6b_candidate_plan"):
+        for item in _intents(artifacts[name]):
+            symbol = _symbol(item)
+            if symbol == "FXAIX" and _intent_type(item) in {"BUY", "ADD", "SELL", "REDUCE", "REBALANCE"}:
+                blockers.append(f"{name}_contains_protected_symbol_intent")
 
 
 def _registration_status(registration: Mapping[str, Any]) -> str:
@@ -321,6 +541,50 @@ def _symbol(intent: Mapping[str, Any]) -> str:
     return str(intent.get("symbol") or "").upper().strip()
 
 
+def _first_present(payload: Mapping[str, Any], *keys: str) -> Any:
+    for key in keys:
+        value = payload.get(key)
+        if value not in (None, ""):
+            return value
+    return None
+
+
+def _top_symbols(payload: Mapping[str, Any]) -> list[str]:
+    symbols = payload.get("selected_symbols")
+    if isinstance(symbols, list):
+        return [str(item).upper().strip() for item in symbols if str(item).strip()]
+    for key in ("selected", "research_queue", "items", "candidates"):
+        rows = payload.get(key)
+        if not isinstance(rows, list):
+            continue
+        result = []
+        for row in rows:
+            if isinstance(row, Mapping):
+                symbol = str(row.get("symbol") or row.get("ticker") or "").upper().strip()
+                if symbol:
+                    result.append(symbol)
+            elif str(row).strip():
+                result.append(str(row).upper().strip())
+        if result:
+            return result
+    return []
+
+
+def _followup_count(payload: Mapping[str, Any]) -> int:
+    for key in (
+        "portfolio_news_followup_count",
+        "followup_count",
+        "queue_count",
+        "review_trigger_count",
+    ):
+        if key in payload:
+            return int(_number(payload.get(key)))
+    followups = payload.get("portfolio_news_followup_ideas")
+    if isinstance(followups, list):
+        return len(followups)
+    return 0
+
+
 def _load_json_optional(path: str | Path) -> dict[str, Any]:
     raw = str(path or "").strip()
     if not raw:
@@ -346,6 +610,10 @@ def _artifact_paths(inputs: SchedulerLaunchPacketInputs) -> dict[str, str]:
             "position_review_queue": inputs.position_review_queue,
             "market_regime": inputs.market_regime,
             "portfolio_news_monitor": inputs.portfolio_news_monitor,
+            "api_usage": inputs.api_usage,
+            "pipeline_summary": inputs.pipeline_summary,
+            "research_queue_summary": inputs.research_queue_summary,
+            "scheduler_soak_plan": inputs.scheduler_soak_plan,
             "pipeline_scheduler_summary": inputs.pipeline_scheduler_summary,
             "post_run_verification": inputs.post_run_verification,
             "scheduler_review_bundle": inputs.scheduler_review_bundle,
