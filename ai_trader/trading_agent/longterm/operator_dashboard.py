@@ -125,6 +125,7 @@ def build_operator_dashboard_site(
     scheduler_task_plan: Mapping[str, Any] | None = None,
     scheduler_handoff: Mapping[str, Any] | None = None,
     scheduler_task_registration: Mapping[str, Any] | None = None,
+    scheduler_chain: Mapping[str, Any] | None = None,
     position_review_queue: Mapping[str, Any] | None = None,
     paper_submit_mode_plan: Mapping[str, Any] | None = None,
 ) -> dict[str, str]:
@@ -151,6 +152,7 @@ def build_operator_dashboard_site(
             scheduler_task_plan=scheduler_task_plan or {},
             scheduler_handoff=scheduler_handoff or {},
             scheduler_task_registration=scheduler_task_registration or {},
+            scheduler_chain=scheduler_chain or {},
             position_review_queue=position_review_queue or {},
             paper_submit_mode_plan=paper_submit_mode_plan or {},
         )
@@ -417,6 +419,7 @@ def _site_index_html(
     scheduler_task_plan: Mapping[str, Any] | None = None,
     scheduler_handoff: Mapping[str, Any] | None = None,
     scheduler_task_registration: Mapping[str, Any] | None = None,
+    scheduler_chain: Mapping[str, Any] | None = None,
     position_review_queue: Mapping[str, Any] | None = None,
     paper_submit_mode_plan: Mapping[str, Any] | None = None,
 ) -> str:
@@ -588,6 +591,7 @@ def _site_index_html(
               {_scheduler_task_plan_panel(scheduler_task_plan or {})}
               {_scheduler_handoff_panel(scheduler_handoff or {})}
               {_scheduler_task_registration_panel(scheduler_task_registration or {})}
+              {_scheduler_chain_panel(scheduler_chain or {})}
               {_position_review_queue_panel(position_review_queue or {})}
               {_paper_submit_mode_plan_panel(paper_submit_mode_plan or {})}
               {_pipeline_health_panel()}
@@ -1566,6 +1570,39 @@ def _scheduler_task_registration_panel(registration: Mapping[str, Any]) -> str:
         "</div>"
         f"<p data-scheduler-registration-message>{escape(next_action)}</p>"
         f"<small>Review command: {escape(command_label)}. Dashboard is read-only; actual registration requires the guarded CLI confirmation.</small>"
+        "</div>"
+    )
+
+
+def _scheduler_chain_panel(chain: Mapping[str, Any]) -> str:
+    status = _display_label(chain.get("status") or "unavailable")
+    next_action = _display_label(chain.get("next_safe_action") or "build_scheduler_launch_packet")
+    rows = []
+    for step in chain.get("steps") or []:
+        if not isinstance(step, Mapping):
+            continue
+        rows.append(
+            "<li>"
+            f"<strong>{escape(_display_label(step.get('name') or 'step'))}</strong>"
+            f"<span>{escape(_display_label(step.get('status') or 'unknown'))}</span>"
+            "</li>"
+        )
+    if not rows:
+        rows.append("<li><strong>No chain</strong><span>unavailable</span></li>")
+    blockers = ", ".join(_display_label(item) for item in chain.get("blockers") or []) or "none"
+    return (
+        "<div class=\"scheduler-validation-card\" data-scheduler-chain>"
+        "<div class=\"section-heading compact-heading\">"
+        "<p class=\"eyebrow\">Scheduler Chain</p>"
+        "<h3>No-Submit Timeline</h3>"
+        "</div>"
+        "<div class=\"pipeline-health-grid\">"
+        f"<div><span>Status</span><strong data-scheduler-chain-status>{escape(status)}</strong></div>"
+        f"<div><span>Blockers</span><strong>{escape(blockers)}</strong></div>"
+        "</div>"
+        f"<ul class=\"compact-list\">{''.join(rows)}</ul>"
+        f"<p data-scheduler-chain-message>{escape(next_action)}</p>"
+        "<small>Timeline is read-only and never starts the scheduler or submits broker orders.</small>"
         "</div>"
     )
 

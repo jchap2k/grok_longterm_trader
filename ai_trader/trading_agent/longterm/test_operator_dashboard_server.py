@@ -13,6 +13,7 @@ from longterm.operator_dashboard_server import (
     build_position_review_queue_from_manifest,
     build_portfolio_summary_from_manifest,
     build_scheduler_handoff_from_manifest,
+    build_scheduler_chain_from_manifest,
     build_scheduler_task_registration_from_manifest,
     build_scheduler_task_plan_from_manifest,
     build_scheduler_config_validation_from_manifest,
@@ -48,6 +49,8 @@ def test_dashboard_manifest_records_traceability_and_rules_hash(tmp_path):
     assert manifest["scheduler_task_plan"] == ""
     assert manifest["scheduler_handoff"] == ""
     assert manifest["scheduler_task_registration"] == ""
+    assert manifest["scheduler_launch_packet"] == ""
+    assert manifest["scheduler_no_submit_smoke"] == ""
     assert manifest["position_review_queue"] == ""
     assert manifest["paper_submit_mode_plan"] == ""
     assert manifest["api_usage"] == ""
@@ -554,6 +557,73 @@ def test_dashboard_server_exposes_scheduler_task_registration_from_manifest(tmp_
     assert "Ready For Registration Review" in html
     assert "LongTermTraderNoSubmit" in html
     assert "Rerun With Confirm Register Only If Operator Approves Windows Task" in html
+
+
+def test_dashboard_server_exposes_scheduler_chain_from_launch_packet(tmp_path):
+    action_plan = tmp_path / "action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    launch_packet = tmp_path / "scheduler_launch_packet.json"
+    smoke = tmp_path / "scheduler_no_submit_smoke.json"
+    manifest_path = tmp_path / "dashboard_manifest.json"
+    action_plan.write_text(json.dumps({"intents": []}), encoding="utf-8")
+    portfolio.write_text(json.dumps({"holdings": []}), encoding="utf-8")
+    launch_packet.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "mode": "scheduler_launch_packet",
+                "status": "ready_for_no_submit_launch_review",
+                "chain": {
+                    "ready": True,
+                    "steps": [
+                        {"name": "scheduler_config_validation", "status": "ready", "present": True},
+                        {"name": "scheduler_task_registration", "status": "ready_for_registration_review", "present": True},
+                    ],
+                },
+                "next_safe_action": "review_no_submit_launch_packet_then_optionally_register_scheduler_task",
+                "order_submission_enabled": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    smoke.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "mode": "scheduler_no_submit_readiness_smoke",
+                "status": "ready_for_no_submit_launch_review",
+                "launch_packet": str(launch_packet),
+                "order_submission_enabled": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest_path.write_text(
+        json.dumps(
+            build_dashboard_manifest(
+                action_plan=action_plan,
+                portfolio_state=portfolio,
+                scheduler_launch_packet=launch_packet,
+                scheduler_no_submit_smoke=smoke,
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    chain = build_scheduler_chain_from_manifest(load_dashboard_manifest(manifest_path))
+    status, content_type, body = resolve_dashboard_request(manifest_path, "/api/scheduler-chain.json")
+    index_status, _, index_body = resolve_dashboard_request(manifest_path, "/")
+    api = json.loads(body.decode("utf-8"))
+    html = index_body.decode("utf-8")
+
+    assert chain["status"] == "ready_for_no_submit_launch_review"
+    assert chain["ready"] is True
+    assert status == 200
+    assert content_type == "application/json; charset=utf-8"
+    assert api["steps"][1]["name"] == "scheduler_task_registration"
+    assert index_status == 200
+    assert "Scheduler Chain" in html
+    assert "Ready For No Submit Launch Review" in html
 
 
 def test_dashboard_server_marks_missing_scheduler_task_registration_unavailable(tmp_path):

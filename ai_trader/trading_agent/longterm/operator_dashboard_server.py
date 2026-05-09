@@ -13,6 +13,7 @@ from urllib.parse import unquote, urlparse
 from longterm.operator_dashboard import build_operator_dashboard, build_operator_dashboard_site
 from longterm.pipeline_health_cli import build_pipeline_health_report
 from longterm.scheduler_config_validation import normalize_scheduler_config_validation
+from longterm.scheduler_launch_packet import SchedulerLaunchPacketInputs, build_scheduler_launch_packet
 
 
 DEFAULT_PROTECTED_SYMBOLS = {"FXAIX"}
@@ -33,6 +34,8 @@ def build_dashboard_manifest(
     scheduler_task_plan: str | Path = "",
     scheduler_handoff: str | Path = "",
     scheduler_task_registration: str | Path = "",
+    scheduler_launch_packet: str | Path = "",
+    scheduler_no_submit_smoke: str | Path = "",
     position_review_queue: str | Path = "",
     paper_submit_mode_plan: str | Path = "",
     scheduler_policy: str | Path = "",
@@ -62,6 +65,8 @@ def build_dashboard_manifest(
         "scheduler_task_plan": str(scheduler_task_plan or ""),
         "scheduler_handoff": str(scheduler_handoff or ""),
         "scheduler_task_registration": str(scheduler_task_registration or ""),
+        "scheduler_launch_packet": str(scheduler_launch_packet or ""),
+        "scheduler_no_submit_smoke": str(scheduler_no_submit_smoke or ""),
         "position_review_queue": str(position_review_queue or ""),
         "paper_submit_mode_plan": str(paper_submit_mode_plan or ""),
         "scheduler_policy": str(scheduler_policy or ""),
@@ -135,6 +140,7 @@ def build_dashboard_pages_from_manifest(manifest: Mapping[str, Any]) -> dict[str
     scheduler_task_plan = build_scheduler_task_plan_from_manifest(manifest)
     scheduler_handoff = build_scheduler_handoff_from_manifest(manifest)
     scheduler_task_registration = build_scheduler_task_registration_from_manifest(manifest)
+    scheduler_chain = build_scheduler_chain_from_manifest(manifest)
     position_review_queue = build_position_review_queue_from_manifest(manifest)
     paper_submit_mode_plan = build_paper_submit_mode_plan_from_manifest(manifest)
     api_usage = build_api_usage_from_manifest(manifest)
@@ -156,6 +162,7 @@ def build_dashboard_pages_from_manifest(manifest: Mapping[str, Any]) -> dict[str
         scheduler_task_plan=scheduler_task_plan,
         scheduler_handoff=scheduler_handoff,
         scheduler_task_registration=scheduler_task_registration,
+        scheduler_chain=scheduler_chain,
         position_review_queue=position_review_queue,
         paper_submit_mode_plan=paper_submit_mode_plan,
     )
@@ -173,6 +180,7 @@ def build_dashboard_summary_from_manifest(manifest: Mapping[str, Any]) -> dict[s
     scheduler_task_plan = build_scheduler_task_plan_from_manifest(manifest)
     scheduler_handoff = build_scheduler_handoff_from_manifest(manifest)
     scheduler_task_registration = build_scheduler_task_registration_from_manifest(manifest)
+    scheduler_chain = build_scheduler_chain_from_manifest(manifest)
     position_review_queue = build_position_review_queue_from_manifest(manifest)
     paper_submit_mode_plan = build_paper_submit_mode_plan_from_manifest(manifest)
     action_plan = _sanitize_action_plan_for_dashboard(action_plan, portfolio_state)
@@ -190,6 +198,7 @@ def build_dashboard_summary_from_manifest(manifest: Mapping[str, Any]) -> dict[s
         "scheduler_task_plan": scheduler_task_plan,
         "scheduler_handoff": scheduler_handoff,
         "scheduler_task_registration": scheduler_task_registration,
+        "scheduler_chain": scheduler_chain,
         "position_review_queue": position_review_queue,
         "paper_submit_mode_plan": paper_submit_mode_plan,
         "order_submission_enabled": False,
@@ -436,6 +445,48 @@ def build_scheduler_task_registration_from_manifest(manifest: Mapping[str, Any])
     return normalized
 
 
+def build_scheduler_chain_from_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
+    """Build a single scheduler chain/timeline from launch-packet or component artifacts."""
+    base_dir = Path(str(manifest.get("_manifest_path") or ".")).parent
+    launch_path = _resolve_manifest_path(base_dir, manifest.get("scheduler_launch_packet"))
+    smoke_path = _resolve_manifest_path(base_dir, manifest.get("scheduler_no_submit_smoke"))
+    smoke = _load_json_optional(smoke_path) if smoke_path else {}
+    launch = _load_json_optional(launch_path) if launch_path else {}
+    if not launch and isinstance(smoke.get("launch_packet"), str):
+        launch = _load_json_optional(smoke.get("launch_packet"))
+        if not launch_path and smoke.get("launch_packet"):
+            launch_path = Path(str(smoke.get("launch_packet"))).expanduser().resolve()
+    if not launch:
+        launch = build_scheduler_launch_packet(
+            SchedulerLaunchPacketInputs(
+                scheduler_config_validation=_manifest_path_value(manifest, "scheduler_config_validation"),
+                scheduler_task_plan=_manifest_path_value(manifest, "scheduler_task_plan"),
+                scheduler_handoff=_manifest_path_value(manifest, "scheduler_handoff"),
+                scheduler_task_registration=_manifest_path_value(manifest, "scheduler_task_registration"),
+                dashboard_manifest=str(manifest.get("_manifest_path") or ""),
+                action_plan=_manifest_path_value(manifest, "action_plan"),
+                stage6b_candidate_plan="",
+                position_review_queue=_manifest_path_value(manifest, "position_review_queue"),
+                market_regime=_manifest_path_value(manifest, "market_regime"),
+                pipeline_scheduler_summary=_manifest_path_value(manifest, "pipeline_scheduler_summary"),
+            )
+        )
+    chain = launch.get("chain") if isinstance(launch.get("chain"), Mapping) else {}
+    return {
+        "schema_version": 1,
+        "mode": "scheduler_chain",
+        "status": str(launch.get("status") or "unavailable"),
+        "ready": bool(chain.get("ready")),
+        "steps": [dict(item) for item in chain.get("steps") or [] if isinstance(item, Mapping)],
+        "blockers": [str(item) for item in launch.get("blockers") or []],
+        "warnings": [str(item) for item in (launch.get("warnings") or []) + (smoke.get("warnings") or [])],
+        "next_safe_action": str(launch.get("next_safe_action") or "build_scheduler_launch_packet"),
+        "launch_packet": str(launch_path or ""),
+        "no_submit_smoke": str(smoke_path or ""),
+        "order_submission_enabled": False,
+    }
+
+
 def build_position_review_queue_from_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
     """Load the no-submit position review queue artifact from the manifest."""
     base_dir = Path(str(manifest.get("_manifest_path") or ".")).parent
@@ -521,6 +572,8 @@ def resolve_dashboard_request(
         return 200, "application/json; charset=utf-8", _json_bytes(
             build_scheduler_task_registration_from_manifest(manifest)
         )
+    if parsed_path == "/api/scheduler-chain.json":
+        return 200, "application/json; charset=utf-8", _json_bytes(build_scheduler_chain_from_manifest(manifest))
     if parsed_path == "/api/position-review-queue.json":
         return 200, "application/json; charset=utf-8", _json_bytes(
             build_position_review_queue_from_manifest(manifest)
@@ -861,6 +914,15 @@ def _public_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in manifest.items() if not str(key).startswith("_")}
 
 
+def _manifest_path_value(manifest: Mapping[str, Any], key: str) -> str:
+    value = str(manifest.get(key) or "").strip()
+    if not value:
+        return ""
+    base_dir = Path(str(manifest.get("_manifest_path") or ".")).parent
+    resolved = _resolve_manifest_path(base_dir, value)
+    return str(resolved or value)
+
+
 def _sha256_file(path: str | Path) -> str:
     target = Path(path)
     if not target.exists():
@@ -933,6 +995,7 @@ __all__ = [
     "build_scheduler_config_validation_from_manifest",
     "build_scheduler_handoff_from_manifest",
     "build_scheduler_policy_from_manifest",
+    "build_scheduler_chain_from_manifest",
     "build_scheduler_task_registration_from_manifest",
     "build_scheduler_task_plan_from_manifest",
     "find_latest_dashboard_manifest",

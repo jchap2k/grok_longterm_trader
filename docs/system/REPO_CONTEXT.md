@@ -11,8 +11,8 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-08 by Codex after surfacing guarded scheduler task
-registration-review artifacts in the dashboard/operator APIs.
+Last updated: 2026-05-08 by Codex after adding no-submit scheduler launch,
+smoke, soak-plan, and dashboard chain artifacts.
 
 ## 1. Project Identity
 
@@ -420,6 +420,21 @@ Scheduler-readiness features now exist:
   registration review artifact. Actual registration requires both `--register`
   and `--confirm-register NO_SUBMIT_SCHEDULER_REGISTER`; even then it only
   registers the no-submit scheduler task and does not enable broker submission.
+- `longterm_scheduler_launch_packet.py` validates the reviewed no-submit chain
+  as one operator artifact: scheduler profile validation, task plan, handoff,
+  registration review, dashboard manifest, optional Stage 6B filtered plan,
+  parking intent context, sell/rebalance exclusion, market-regime snapshot,
+  portfolio-news monitor, and position-review queue. It is review-only and
+  never runs the scheduler, registers a task, calls an LLM, or submits orders.
+- `longterm_scheduler_no_submit_smoke.py` packages that launch packet and
+  markdown into a named smoke folder. This is the preferred pre-registration
+  sanity artifact when the operator wants a one-command readiness bundle from
+  already generated scheduler artifacts.
+- `longterm_scheduler_soak_plan.py` writes a one-cycle no-submit soak preview
+  from a reviewed run profile. It requires `preset=ongoing-no-submit`,
+  `max_cycles=1`, `run_interval_seconds=0`, and no submit-capable keys. It
+  prints/writes the preview command and expected artifacts but does not execute
+  the scheduler.
 - Dashboard manifests can point at `scheduler_task_registration`; the localhost
   server exposes `/api/scheduler-task-registration.json`, includes it in
   `/api/summary.json`, and renders a read-only Task Registration Review card.
@@ -494,6 +509,11 @@ Book-principle context:
   `/api/summary.json`, and renders the guarded registration-review artifact in
   Safety / Preflight. Missing artifacts display as unavailable and do not imply
   scheduler registration or broker authorization.
+- Dashboard manifests can point at `scheduler_launch_packet` and
+  `scheduler_no_submit_smoke`; the localhost server exposes
+  `/api/scheduler-chain.json`, includes the chain in `/api/summary.json`, and
+  renders a single Scheduler Chain timeline alongside the individual preflight
+  cards.
 - Dashboard manifests can point at `position_review_queue`; the localhost
   server exposes `/api/position-review-queue.json`, includes it in
   `/api/summary.json`, and renders a Position Review Queue card with advisory
