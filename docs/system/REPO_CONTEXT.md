@@ -11,9 +11,8 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-08 by Codex after hardening no-submit scheduler launch
-readiness with provider-usage, research-queue, soak-plan, and guarded
-registration sections.
+Last updated: 2026-05-08 by Codex after preparing the stable no-submit
+scheduler runtime bundle and cloning Kronos for later advisory experiments.
 
 ## 1. Project Identity
 
@@ -98,7 +97,8 @@ Grok 4.1 fast models are being deprecated on 2026-05-15. Current policy:
 - Keep paid enrichment capped, resumable, and tracked for cost/API usage.
 
 Future local model candidate:
-- Kronos is queued after scheduler readiness as an optional local
+- Kronos is cloned locally at `S:\LLM_files\other_github\Kronos` and queued
+  after scheduler readiness as an optional local
   market-language layer, not as a critical-path dependency.
 - It needs OHLCV bars from yfinance, Polygon, Alpaca read APIs, or cached
   artifacts; it does not require a paid LLM API.
@@ -449,6 +449,17 @@ Scheduler-readiness features now exist:
   read-only task-registration plus chain-readiness cards. The dashboard loader
   forces `order_submission_enabled=false` even if a saved artifact is malformed
   or unsafe.
+- Stable no-submit runtime artifacts now live outside `%TEMP%` at
+  `S:\LLM_files\grok_longterm_trader_runtime\no_submit_scheduler`.
+  `inputs/` contains the saved action plan, candidate plan, scheduler policy,
+  portfolio/operator snapshots, and latest successful scheduler summaries;
+  `data/` contains copied watch journal/ledger DBs; `registration_review/`
+  contains the reviewed no-submit profile, validation, task plan, handoff,
+  dry-run task-registration review, soak preview, launch packet, smoke packet,
+  and dashboard manifest. The latest stable launch packet is
+  `ready_for_no_submit_launch_review`, has no blockers, has
+  `registration_readiness.status=ready_for_guarded_no_submit_registration`,
+  and keeps `order_submission_enabled=false`.
 
 Book-principle context:
 - `knowledge_agent/sources/longterm_trader/books/The Intelligent Investor Third
