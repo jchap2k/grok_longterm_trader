@@ -32,6 +32,7 @@ def build_dashboard_manifest(
     scheduler_config_validation: str | Path = "",
     scheduler_task_plan: str | Path = "",
     scheduler_handoff: str | Path = "",
+    scheduler_task_registration: str | Path = "",
     position_review_queue: str | Path = "",
     paper_submit_mode_plan: str | Path = "",
     scheduler_policy: str | Path = "",
@@ -60,6 +61,7 @@ def build_dashboard_manifest(
         "scheduler_config_validation": str(scheduler_config_validation or ""),
         "scheduler_task_plan": str(scheduler_task_plan or ""),
         "scheduler_handoff": str(scheduler_handoff or ""),
+        "scheduler_task_registration": str(scheduler_task_registration or ""),
         "position_review_queue": str(position_review_queue or ""),
         "paper_submit_mode_plan": str(paper_submit_mode_plan or ""),
         "scheduler_policy": str(scheduler_policy or ""),
@@ -132,6 +134,7 @@ def build_dashboard_pages_from_manifest(manifest: Mapping[str, Any]) -> dict[str
     scheduler_config_validation = build_scheduler_config_validation_from_manifest(manifest)
     scheduler_task_plan = build_scheduler_task_plan_from_manifest(manifest)
     scheduler_handoff = build_scheduler_handoff_from_manifest(manifest)
+    scheduler_task_registration = build_scheduler_task_registration_from_manifest(manifest)
     position_review_queue = build_position_review_queue_from_manifest(manifest)
     paper_submit_mode_plan = build_paper_submit_mode_plan_from_manifest(manifest)
     api_usage = build_api_usage_from_manifest(manifest)
@@ -152,6 +155,7 @@ def build_dashboard_pages_from_manifest(manifest: Mapping[str, Any]) -> dict[str
         scheduler_config_validation=scheduler_config_validation,
         scheduler_task_plan=scheduler_task_plan,
         scheduler_handoff=scheduler_handoff,
+        scheduler_task_registration=scheduler_task_registration,
         position_review_queue=position_review_queue,
         paper_submit_mode_plan=paper_submit_mode_plan,
     )
@@ -168,6 +172,7 @@ def build_dashboard_summary_from_manifest(manifest: Mapping[str, Any]) -> dict[s
     scheduler_config_validation = build_scheduler_config_validation_from_manifest(manifest)
     scheduler_task_plan = build_scheduler_task_plan_from_manifest(manifest)
     scheduler_handoff = build_scheduler_handoff_from_manifest(manifest)
+    scheduler_task_registration = build_scheduler_task_registration_from_manifest(manifest)
     position_review_queue = build_position_review_queue_from_manifest(manifest)
     paper_submit_mode_plan = build_paper_submit_mode_plan_from_manifest(manifest)
     action_plan = _sanitize_action_plan_for_dashboard(action_plan, portfolio_state)
@@ -184,6 +189,7 @@ def build_dashboard_summary_from_manifest(manifest: Mapping[str, Any]) -> dict[s
         "scheduler_config_validation": scheduler_config_validation,
         "scheduler_task_plan": scheduler_task_plan,
         "scheduler_handoff": scheduler_handoff,
+        "scheduler_task_registration": scheduler_task_registration,
         "position_review_queue": position_review_queue,
         "paper_submit_mode_plan": paper_submit_mode_plan,
         "order_submission_enabled": False,
@@ -399,6 +405,37 @@ def build_scheduler_handoff_from_manifest(manifest: Mapping[str, Any]) -> dict[s
     return normalized
 
 
+def build_scheduler_task_registration_from_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
+    """Load the guarded Windows Task Scheduler registration-review artifact from the manifest."""
+    base_dir = Path(str(manifest.get("_manifest_path") or ".")).parent
+    registration_path = _resolve_manifest_path(base_dir, manifest.get("scheduler_task_registration"))
+    if not registration_path:
+        return _empty_scheduler_task_registration("scheduler_task_registration_artifact_missing")
+    payload = _load_json_optional(registration_path)
+    if not payload:
+        return _empty_scheduler_task_registration(
+            "scheduler_task_registration_artifact_unreadable",
+            source_path=registration_path,
+        )
+    normalized = dict(payload)
+    normalized.setdefault("schema_version", 1)
+    normalized.setdefault("mode", "windows_task_scheduler_registration_review")
+    normalized.setdefault("status", "unknown")
+    normalized.setdefault("task_name", "")
+    normalized.setdefault("registration_requested", False)
+    normalized.setdefault("registration_executed", False)
+    normalized.setdefault("registration_command", "")
+    normalized.setdefault("warnings", [])
+    normalized.setdefault("blockers", [])
+    normalized.setdefault(
+        "next_safe_action",
+        "run_scheduler_task_registration_review",
+    )
+    normalized["source_path"] = str(registration_path)
+    normalized["order_submission_enabled"] = False
+    return normalized
+
+
 def build_position_review_queue_from_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
     """Load the no-submit position review queue artifact from the manifest."""
     base_dir = Path(str(manifest.get("_manifest_path") or ".")).parent
@@ -480,6 +517,10 @@ def resolve_dashboard_request(
         return 200, "application/json; charset=utf-8", _json_bytes(build_scheduler_task_plan_from_manifest(manifest))
     if parsed_path == "/api/scheduler-handoff.json":
         return 200, "application/json; charset=utf-8", _json_bytes(build_scheduler_handoff_from_manifest(manifest))
+    if parsed_path == "/api/scheduler-task-registration.json":
+        return 200, "application/json; charset=utf-8", _json_bytes(
+            build_scheduler_task_registration_from_manifest(manifest)
+        )
     if parsed_path == "/api/position-review-queue.json":
         return 200, "application/json; charset=utf-8", _json_bytes(
             build_position_review_queue_from_manifest(manifest)
@@ -656,6 +697,23 @@ def _empty_scheduler_handoff(reason: str, *, source_path: Path | None = None) ->
         "blockers": [],
         "warnings": [reason],
         "next_safe_action": "generate_scheduler_handoff_check",
+        "order_submission_enabled": False,
+    }
+
+
+def _empty_scheduler_task_registration(reason: str, *, source_path: Path | None = None) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "mode": "windows_task_scheduler_registration_review",
+        "status": "unavailable",
+        "source_path": str(source_path or ""),
+        "task_name": "",
+        "registration_requested": False,
+        "registration_executed": False,
+        "registration_command": "",
+        "blockers": [],
+        "warnings": [reason],
+        "next_safe_action": "run_scheduler_task_registration_review",
         "order_submission_enabled": False,
     }
 
@@ -875,6 +933,8 @@ __all__ = [
     "build_scheduler_config_validation_from_manifest",
     "build_scheduler_handoff_from_manifest",
     "build_scheduler_policy_from_manifest",
+    "build_scheduler_task_registration_from_manifest",
+    "build_scheduler_task_plan_from_manifest",
     "find_latest_dashboard_manifest",
     "load_latest_dashboard_manifest",
     "load_dashboard_manifest",

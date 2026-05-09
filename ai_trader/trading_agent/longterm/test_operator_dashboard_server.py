@@ -13,6 +13,7 @@ from longterm.operator_dashboard_server import (
     build_position_review_queue_from_manifest,
     build_portfolio_summary_from_manifest,
     build_scheduler_handoff_from_manifest,
+    build_scheduler_task_registration_from_manifest,
     build_scheduler_task_plan_from_manifest,
     build_scheduler_config_validation_from_manifest,
     find_latest_dashboard_manifest,
@@ -46,6 +47,7 @@ def test_dashboard_manifest_records_traceability_and_rules_hash(tmp_path):
     assert manifest["scheduler_config_validation"] == ""
     assert manifest["scheduler_task_plan"] == ""
     assert manifest["scheduler_handoff"] == ""
+    assert manifest["scheduler_task_registration"] == ""
     assert manifest["position_review_queue"] == ""
     assert manifest["paper_submit_mode_plan"] == ""
     assert manifest["api_usage"] == ""
@@ -496,6 +498,89 @@ def test_dashboard_server_exposes_scheduler_handoff_from_manifest(tmp_path):
     assert "Review Task Plan Then Register Manually If Approved" in html
 
 
+def test_dashboard_server_exposes_scheduler_task_registration_from_manifest(tmp_path):
+    action_plan = tmp_path / "action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    registration = tmp_path / "scheduler_task_registration.json"
+    manifest_path = tmp_path / "dashboard_manifest.json"
+    action_plan.write_text(json.dumps({"intents": []}), encoding="utf-8")
+    portfolio.write_text(json.dumps({"holdings": []}), encoding="utf-8")
+    registration.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "mode": "windows_task_scheduler_registration_review",
+                "status": "ready_for_registration_review",
+                "task_name": "LongTermTraderNoSubmit",
+                "registration_requested": False,
+                "registration_executed": False,
+                "registration_command": "schtasks /Create /TN LongTermTraderNoSubmit ...",
+                "next_safe_action": "rerun_with_confirm_register_only_if_operator_approves_windows_task",
+                "order_submission_enabled": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest_path.write_text(
+        json.dumps(
+            build_dashboard_manifest(
+                action_plan=action_plan,
+                portfolio_state=portfolio,
+                scheduler_task_registration=registration,
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    summary = build_scheduler_task_registration_from_manifest(load_dashboard_manifest(manifest_path))
+    status, content_type, body = resolve_dashboard_request(manifest_path, "/api/scheduler-task-registration.json")
+    summary_status, _, summary_body = resolve_dashboard_request(manifest_path, "/api/summary.json")
+    index_status, _, index_body = resolve_dashboard_request(manifest_path, "/")
+    api = json.loads(body.decode("utf-8"))
+    dashboard_summary = json.loads(summary_body.decode("utf-8"))
+    html = index_body.decode("utf-8")
+
+    assert summary["status"] == "ready_for_registration_review"
+    assert summary["registration_executed"] is False
+    assert summary["order_submission_enabled"] is False
+    assert status == 200
+    assert content_type == "application/json; charset=utf-8"
+    assert api["mode"] == "windows_task_scheduler_registration_review"
+    assert api["order_submission_enabled"] is False
+    assert summary_status == 200
+    assert dashboard_summary["scheduler_task_registration"]["task_name"] == "LongTermTraderNoSubmit"
+    assert index_status == 200
+    assert "Task Registration Review" in html
+    assert "Ready For Registration Review" in html
+    assert "LongTermTraderNoSubmit" in html
+    assert "Rerun With Confirm Register Only If Operator Approves Windows Task" in html
+
+
+def test_dashboard_server_marks_missing_scheduler_task_registration_unavailable(tmp_path):
+    action_plan = tmp_path / "action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    manifest_path = tmp_path / "dashboard_manifest.json"
+    action_plan.write_text(json.dumps({"intents": []}), encoding="utf-8")
+    portfolio.write_text(json.dumps({"holdings": []}), encoding="utf-8")
+    manifest_path.write_text(
+        json.dumps(build_dashboard_manifest(action_plan=action_plan, portfolio_state=portfolio)),
+        encoding="utf-8",
+    )
+
+    summary = build_scheduler_task_registration_from_manifest(load_dashboard_manifest(manifest_path))
+    status, _, body = resolve_dashboard_request(manifest_path, "/api/scheduler-task-registration.json")
+    api = json.loads(body.decode("utf-8"))
+
+    assert summary["status"] == "unavailable"
+    assert summary["registration_requested"] is False
+    assert summary["registration_executed"] is False
+    assert summary["order_submission_enabled"] is False
+    assert "scheduler_task_registration_artifact_missing" in summary["warnings"]
+    assert status == 200
+    assert api["status"] == "unavailable"
+    assert api["order_submission_enabled"] is False
+
+
 def test_dashboard_server_exposes_position_review_queue_from_manifest(tmp_path):
     action_plan = tmp_path / "action_plan.json"
     portfolio = tmp_path / "portfolio.json"
@@ -818,6 +903,7 @@ def test_dashboard_server_cli_can_write_manifest_without_serving(tmp_path, capsy
     scheduler_config_validation = tmp_path / "scheduler_profile_validation.json"
     scheduler_task_plan = tmp_path / "scheduler_task_plan.json"
     scheduler_handoff = tmp_path / "scheduler_handoff.json"
+    scheduler_task_registration = tmp_path / "scheduler_task_registration.json"
     position_review_queue = tmp_path / "position_review_queue.json"
     paper_submit_mode_plan = tmp_path / "paper_submit_mode_plan.json"
     manifest = tmp_path / "dashboard_manifest.json"
@@ -828,6 +914,10 @@ def test_dashboard_server_cli_can_write_manifest_without_serving(tmp_path, capsy
     scheduler_config_validation.write_text(json.dumps({"status": "ready"}), encoding="utf-8")
     scheduler_task_plan.write_text(json.dumps({"status": "ready", "task_name": "LongTermTraderNoSubmit"}), encoding="utf-8")
     scheduler_handoff.write_text(json.dumps({"status": "ready", "mode": "scheduler_handoff_check"}), encoding="utf-8")
+    scheduler_task_registration.write_text(
+        json.dumps({"status": "ready_for_registration_review", "task_name": "LongTermTraderNoSubmit"}),
+        encoding="utf-8",
+    )
     position_review_queue.write_text(json.dumps({"status": "completed", "mode": "position_review_queue"}), encoding="utf-8")
     paper_submit_mode_plan.write_text(json.dumps({"status": "ready_for_manual_review", "mode": "paper_submit_mode_plan"}), encoding="utf-8")
 
@@ -852,6 +942,8 @@ def test_dashboard_server_cli_can_write_manifest_without_serving(tmp_path, capsy
                 str(scheduler_task_plan),
                 "--scheduler-handoff",
                 str(scheduler_handoff),
+                "--scheduler-task-registration",
+                str(scheduler_task_registration),
                 "--position-review-queue",
                 str(position_review_queue),
                 "--paper-submit-mode-plan",
@@ -874,6 +966,7 @@ def test_dashboard_server_cli_can_write_manifest_without_serving(tmp_path, capsy
     assert saved["scheduler_config_validation"] == str(scheduler_config_validation)
     assert saved["scheduler_task_plan"] == str(scheduler_task_plan)
     assert saved["scheduler_handoff"] == str(scheduler_handoff)
+    assert saved["scheduler_task_registration"] == str(scheduler_task_registration)
     assert saved["position_review_queue"] == str(position_review_queue)
     assert saved["paper_submit_mode_plan"] == str(paper_submit_mode_plan)
     assert saved["active_rules_hash"]

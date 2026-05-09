@@ -11,8 +11,8 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-08 by Codex after wiring recurring no-submit scheduler
-readiness into dashboard and handoff consumers.
+Last updated: 2026-05-08 by Codex after surfacing guarded scheduler task
+registration-review artifacts in the dashboard/operator APIs.
 
 ## 1. Project Identity
 
@@ -420,6 +420,11 @@ Scheduler-readiness features now exist:
   registration review artifact. Actual registration requires both `--register`
   and `--confirm-register NO_SUBMIT_SCHEDULER_REGISTER`; even then it only
   registers the no-submit scheduler task and does not enable broker submission.
+- Dashboard manifests can point at `scheduler_task_registration`; the localhost
+  server exposes `/api/scheduler-task-registration.json`, includes it in
+  `/api/summary.json`, and renders a read-only Task Registration Review card.
+  The dashboard loader forces `order_submission_enabled=false` even if a saved
+  artifact is malformed or unsafe.
 
 Book-principle context:
 - `knowledge_agent/sources/longterm_trader/books/The Intelligent Investor Third
@@ -484,6 +489,11 @@ Book-principle context:
 - Dashboard manifests can point at `scheduler_handoff`; the localhost server
   exposes `/api/scheduler-handoff.json`, includes it in `/api/summary.json`,
   and renders a Scheduler Handoff card in Safety / Preflight.
+- Dashboard manifests can point at `scheduler_task_registration`; the localhost
+  server exposes `/api/scheduler-task-registration.json`, includes it in
+  `/api/summary.json`, and renders the guarded registration-review artifact in
+  Safety / Preflight. Missing artifacts display as unavailable and do not imply
+  scheduler registration or broker authorization.
 - Dashboard manifests can point at `position_review_queue`; the localhost
   server exposes `/api/position-review-queue.json`, includes it in
   `/api/summary.json`, and renders a Position Review Queue card with advisory

@@ -39,6 +39,7 @@ def refresh_paper_account_artifacts(
     scheduler_config_validation_path: str | Path = "",
     scheduler_task_plan_path: str | Path = "",
     scheduler_handoff_path: str | Path = "",
+    scheduler_task_registration_path: str | Path = "",
     position_review_queue_path: str | Path = "",
     paper_submit_mode_plan_path: str | Path = "",
     scheduler_policy_path: str | Path = "",
@@ -80,6 +81,7 @@ def refresh_paper_account_artifacts(
     scheduler_config_validation = _load_json_optional(scheduler_config_validation_path)
     scheduler_task_plan = _load_json_optional(scheduler_task_plan_path)
     scheduler_handoff = _load_json_optional(scheduler_handoff_path)
+    scheduler_task_registration = _load_json_optional(scheduler_task_registration_path)
     position_review_queue = _load_json_optional(position_review_queue_path)
     paper_submit_mode_plan = _load_json_optional(paper_submit_mode_plan_path)
     committee_preset_policy = _load_json_optional(committee_preset_policy_path)
@@ -127,6 +129,7 @@ def refresh_paper_account_artifacts(
         scheduler_config_validation=scheduler_config_validation_path,
         scheduler_task_plan=scheduler_task_plan_path,
         scheduler_handoff=scheduler_handoff_path,
+        scheduler_task_registration=scheduler_task_registration_path,
         position_review_queue=position_review_queue_path,
         paper_submit_mode_plan=paper_submit_mode_plan_path,
         scheduler_policy=scheduler_policy_path,
@@ -149,6 +152,7 @@ def refresh_paper_account_artifacts(
             scheduler_config_validation=scheduler_config_validation,
             scheduler_task_plan=scheduler_task_plan,
             scheduler_handoff=scheduler_handoff,
+            scheduler_task_registration=scheduler_task_registration,
             position_review_queue=position_review_queue,
             paper_submit_mode_plan=paper_submit_mode_plan,
         )
@@ -189,6 +193,7 @@ def refresh_paper_account_artifacts(
             "scheduler_config_validation": _component(scheduler_config_validation_path),
             "scheduler_task_plan": _component(scheduler_task_plan_path),
             "scheduler_handoff": _component(scheduler_handoff_path),
+            "scheduler_task_registration": _component(scheduler_task_registration_path),
             "position_review_queue": _component(position_review_queue_path),
             "paper_submit_mode_plan": _component(paper_submit_mode_plan_path),
             "scheduler_policy": _component(scheduler_policy_path),

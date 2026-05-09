@@ -1070,6 +1070,11 @@ python scripts/longterm_scheduler_task_register.py --scheduler-handoff path\to\s
 The registration command validates that the handoff is ready, recurring
 no-submit readiness is explicit, and order submission is disabled. It registers
 only the no-submit scheduler task; it does not authorize paper or live orders.
+To show the registration review on the dashboard, pass
+`--scheduler-task-registration path\to\scheduler_task_registration_review.json`
+to the dashboard manifest writer or read-only account refresh. The dashboard
+normalizes the artifact with `order_submission_enabled=false` and renders it as
+review evidence only.
 
 The config file accepts an `args` object using the same argparse destination
 names as the CLI, for example `journal_db`, `action_plan`, and
@@ -1107,7 +1112,7 @@ validation JSON into the manifest writer or read-only account/dashboard refresh:
 
 ```powershell
 python scripts/longterm_operator_dashboard_server.py --manifest path\to\dashboard_manifest.json --write-manifest --write-manifest-only --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio_state.json --scheduler-config-validation path\to\scheduler_profile_validation.json --json
-python scripts/longterm_paper_account_refresh.py --profile-config path\to\roth_ira_profile.json --journal-db path\to\journal.db --action-plan path\to\account_action_plan.json --paper-ledger-db path\to\paper_ledger.db --output-dir path\to\account_refresh --scheduler-config-validation path\to\scheduler_profile_validation.json --scheduler-task-plan path\to\scheduler_task_plan.json --json
+python scripts/longterm_paper_account_refresh.py --profile-config path\to\roth_ira_profile.json --journal-db path\to\journal.db --action-plan path\to\account_action_plan.json --paper-ledger-db path\to\paper_ledger.db --output-dir path\to\account_refresh --scheduler-config-validation path\to\scheduler_profile_validation.json --scheduler-task-plan path\to\scheduler_task_plan.json --scheduler-handoff path\to\scheduler_handoff.json --scheduler-task-registration path\to\scheduler_task_registration_review.json --json
 ```
 
 The dashboard API and Safety / Preflight card normalize missing or legacy
@@ -1760,7 +1765,7 @@ Serve a read-only localhost dashboard from a manifest instead of regenerating
 static files after each artifact refresh:
 
 ```powershell
-python scripts/longterm_operator_dashboard_server.py --manifest path\to\dashboard_manifest.json --write-manifest --write-manifest-only --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --market-regime path\to\market_regime.json --operator-status path\to\operator_status_bundle.json --evidence-file path\to\research_queue_reconciled.json --price-history-file path\to\price_history.json --pipeline-summary path\to\pipeline_summary.json --scheduler-policy path\to\scheduler_policy.json --decision-journal path\to\journal.db --active-rules ai_trader\rules\active_rules.txt --campaign-id campaign_name --json
+python scripts/longterm_operator_dashboard_server.py --manifest path\to\dashboard_manifest.json --write-manifest --write-manifest-only --action-plan path\to\account_action_plan.json --portfolio-state path\to\portfolio.json --market-regime path\to\market_regime.json --operator-status path\to\operator_status_bundle.json --evidence-file path\to\research_queue_reconciled.json --price-history-file path\to\price_history.json --pipeline-summary path\to\pipeline_summary.json --scheduler-policy path\to\scheduler_policy.json --scheduler-config-validation path\to\scheduler_profile_validation.json --scheduler-task-plan path\to\scheduler_task_plan.json --scheduler-handoff path\to\scheduler_handoff.json --scheduler-task-registration path\to\scheduler_task_registration_review.json --decision-journal path\to\journal.db --active-rules ai_trader\rules\active_rules.txt --campaign-id campaign_name --json
 python scripts/longterm_operator_dashboard_server.py --manifest path\to\dashboard_manifest.json --host 127.0.0.1 --port 8765 --json
 python scripts/longterm_operator_dashboard_server.py --auto-manifest-root path\to\campaign_or_latest_artifact_root --host 127.0.0.1 --port 8765 --json
 ```
@@ -1769,8 +1774,11 @@ The manifest records artifact paths, campaign ID, decision-journal path, active
 rules path/hash, and `order_submission_enabled=false`. The server resolves
 `/`, `/tickers/<SYMBOL>.html`, `/api/summary.json`, `/api/manifest.json`,
 `/api/portfolio.json`, `/api/pipeline-health.json`,
-`/api/scheduler-policy.json`, and `/health` directly from the latest saved
-files. In `--auto-manifest-root` mode it recursively discovers
+`/api/scheduler-policy.json`, `/api/scheduler-config-validation.json`,
+`/api/scheduler-task-plan.json`, `/api/scheduler-handoff.json`,
+`/api/scheduler-task-registration.json`, `/api/position-review-queue.json`,
+`/api/paper-submit-mode-plan.json`, and `/health` directly from the latest
+saved files. In `--auto-manifest-root` mode it recursively discovers
 the newest valid dashboard manifest under the artifact root on each request, so
 scheduler refreshes can keep the dashboard current by writing the stable
 `latest_operator_surface` artifacts. It is an artifact viewer only: it does not

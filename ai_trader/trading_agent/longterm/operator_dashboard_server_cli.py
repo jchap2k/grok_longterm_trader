@@ -27,6 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scheduler-config-validation", default="")
     parser.add_argument("--scheduler-task-plan", default="")
     parser.add_argument("--scheduler-handoff", default="")
+    parser.add_argument("--scheduler-task-registration", default="")
     parser.add_argument("--position-review-queue", default="")
     parser.add_argument("--paper-submit-mode-plan", default="")
     parser.add_argument("--scheduler-policy", default="")
@@ -59,6 +60,7 @@ def run_cli(args: argparse.Namespace, *, server_func=serve_dashboard_manifest) -
             scheduler_config_validation=args.scheduler_config_validation,
             scheduler_task_plan=args.scheduler_task_plan,
             scheduler_handoff=args.scheduler_handoff,
+            scheduler_task_registration=args.scheduler_task_registration,
             position_review_queue=args.position_review_queue,
             paper_submit_mode_plan=args.paper_submit_mode_plan,
             scheduler_policy=args.scheduler_policy,

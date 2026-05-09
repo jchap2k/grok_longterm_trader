@@ -124,6 +124,7 @@ def build_operator_dashboard_site(
     scheduler_config_validation: Mapping[str, Any] | None = None,
     scheduler_task_plan: Mapping[str, Any] | None = None,
     scheduler_handoff: Mapping[str, Any] | None = None,
+    scheduler_task_registration: Mapping[str, Any] | None = None,
     position_review_queue: Mapping[str, Any] | None = None,
     paper_submit_mode_plan: Mapping[str, Any] | None = None,
 ) -> dict[str, str]:
@@ -146,12 +147,13 @@ def build_operator_dashboard_site(
             evidence_by_symbol=evidence_by_symbol,
             price_history_by_symbol=price_history_by_symbol,
             api_usage=api_usage or {},
-        scheduler_config_validation=scheduler_config_validation or {},
-        scheduler_task_plan=scheduler_task_plan or {},
-        scheduler_handoff=scheduler_handoff or {},
-        position_review_queue=position_review_queue or {},
-        paper_submit_mode_plan=paper_submit_mode_plan or {},
-    )
+            scheduler_config_validation=scheduler_config_validation or {},
+            scheduler_task_plan=scheduler_task_plan or {},
+            scheduler_handoff=scheduler_handoff or {},
+            scheduler_task_registration=scheduler_task_registration or {},
+            position_review_queue=position_review_queue or {},
+            paper_submit_mode_plan=paper_submit_mode_plan or {},
+        )
     }
     for symbol in symbols:
         intent = _intent_for_symbol(action_plan, symbol)
@@ -414,6 +416,7 @@ def _site_index_html(
     scheduler_config_validation: Mapping[str, Any] | None = None,
     scheduler_task_plan: Mapping[str, Any] | None = None,
     scheduler_handoff: Mapping[str, Any] | None = None,
+    scheduler_task_registration: Mapping[str, Any] | None = None,
     position_review_queue: Mapping[str, Any] | None = None,
     paper_submit_mode_plan: Mapping[str, Any] | None = None,
 ) -> str:
@@ -584,6 +587,7 @@ def _site_index_html(
               {_scheduler_config_validation_panel(scheduler_config_validation or {})}
               {_scheduler_task_plan_panel(scheduler_task_plan or {})}
               {_scheduler_handoff_panel(scheduler_handoff or {})}
+              {_scheduler_task_registration_panel(scheduler_task_registration or {})}
               {_position_review_queue_panel(position_review_queue or {})}
               {_paper_submit_mode_plan_panel(paper_submit_mode_plan or {})}
               {_pipeline_health_panel()}
@@ -1536,6 +1540,32 @@ def _scheduler_handoff_panel(handoff: Mapping[str, Any]) -> str:
         "</div>"
         f"<p data-scheduler-handoff-message>{escape(next_action)}</p>"
         "<small>Handoff is advisory and read-only; recurring task registration remains a separate operator action.</small>"
+        "</div>"
+    )
+
+
+def _scheduler_task_registration_panel(registration: Mapping[str, Any]) -> str:
+    status = _display_label(registration.get("status") or "unavailable")
+    task_name = str(registration.get("task_name") or "No registration artifact").strip()
+    requested = "Yes" if bool(registration.get("registration_requested")) else "No"
+    executed = "Yes" if bool(registration.get("registration_executed")) else "No"
+    command = str(registration.get("registration_command") or "").strip()
+    command_label = command if command else "n/a"
+    next_action = _display_label(registration.get("next_safe_action") or "run_scheduler_task_registration_review")
+    return (
+        "<div class=\"scheduler-validation-card\" data-scheduler-task-registration>"
+        "<div class=\"section-heading compact-heading\">"
+        "<p class=\"eyebrow\">Task Registration Review</p>"
+        "<h3>Guarded Register Step</h3>"
+        "</div>"
+        "<div class=\"pipeline-health-grid\">"
+        f"<div><span>Status</span><strong data-scheduler-registration-status>{escape(status)}</strong></div>"
+        f"<div><span>Task</span><strong data-scheduler-registration-task>{escape(task_name)}</strong></div>"
+        f"<div><span>Requested</span><strong>{escape(requested)}</strong></div>"
+        f"<div><span>Executed</span><strong>{escape(executed)}</strong></div>"
+        "</div>"
+        f"<p data-scheduler-registration-message>{escape(next_action)}</p>"
+        f"<small>Review command: {escape(command_label)}. Dashboard is read-only; actual registration requires the guarded CLI confirmation.</small>"
         "</div>"
     )
 
