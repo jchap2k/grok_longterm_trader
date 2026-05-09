@@ -3,16 +3,24 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
+import os
 from typing import Any
 
 from longterm.idle_cash_policy import MarketRegimeSnapshot
 
 
 HistoryFetcher = Callable[[str, str], list[Mapping[str, Any]]]
+FredHistoryFetcher = Callable[[str, str | None], list[Mapping[str, Any]]]
 
 DEFAULT_VIX_SYMBOL = "^VIX"
 DEFAULT_SPY_SYMBOL = "SPY"
 DEFAULT_TEN_YEAR_YIELD_SYMBOL = "^TNX"
+DEFAULT_FRED_VIX_SERIES = "VIXCLS"
+DEFAULT_FRED_SP500_SERIES = "SP500"
+DEFAULT_FRED_TEN_YEAR_SERIES = "DGS10"
+DEFAULT_FRED_CPI_SERIES = "CPIAUCSL"
+DEFAULT_FRED_YIELD_CURVE_SERIES = "T10Y2Y"
+DEFAULT_FRED_CREDIT_SPREAD_SERIES = "BAMLH0A0HYM2"
 
 
 def build_market_regime_snapshot(
@@ -59,6 +67,107 @@ def build_market_regime_snapshot_from_histories(
     )
 
 
+def build_market_regime_snapshot_from_fred_histories(
+    *,
+    fred_histories: Mapping[str, Iterable[Mapping[str, Any]]],
+    vix_series: str = DEFAULT_FRED_VIX_SERIES,
+    sp500_series: str = DEFAULT_FRED_SP500_SERIES,
+    ten_year_series: str = DEFAULT_FRED_TEN_YEAR_SERIES,
+    cpi_series: str = DEFAULT_FRED_CPI_SERIES,
+    yield_curve_series: str = DEFAULT_FRED_YIELD_CURVE_SERIES,
+    credit_spread_series: str = DEFAULT_FRED_CREDIT_SPREAD_SERIES,
+) -> MarketRegimeSnapshot:
+    """Classify market regime from FRED histories and macro stress signals."""
+    vix_rows = list(fred_histories.get(vix_series) or [])
+    sp500_rows = list(fred_histories.get(sp500_series) or [])
+    ten_year_rows = list(fred_histories.get(ten_year_series) or [])
+    cpi_rows = list(fred_histories.get(cpi_series) or [])
+    yield_curve_rows = list(fred_histories.get(yield_curve_series) or [])
+    credit_spread_rows = list(fred_histories.get(credit_spread_series) or [])
+
+    vix_level = _last_close(vix_rows)
+    sp500_closes = _closes(sp500_rows)
+    sp500_above_200d = (
+        sp500_closes[-1] > _simple_average(sp500_closes[-200:]) if len(sp500_closes) >= 200 else None
+    )
+    yield_trend = _yield_trend(ten_year_rows)
+    inflation_pressure = _inflation_pressure(cpi_rows)
+    yield_curve_spread = _last_close(yield_curve_rows)
+    credit_spread = _last_close(credit_spread_rows)
+
+    base = MarketRegimeSnapshot.from_signals(
+        vix_level=vix_level,
+        spy_above_200d=sp500_above_200d,
+        ten_year_yield_trend=yield_trend,
+        inflation_pressure=inflation_pressure,
+    )
+    macro_signals = {
+        "fred_series": {
+            "vix": vix_series,
+            "equity_index": sp500_series,
+            "ten_year_yield": ten_year_series,
+            "inflation": cpi_series,
+            "yield_curve": yield_curve_series,
+            "credit_spread": credit_spread_series,
+        },
+        "inflation_pressure": inflation_pressure,
+        "yield_curve_inverted": yield_curve_spread is not None and yield_curve_spread < 0,
+        "credit_spread_elevated": credit_spread is not None and credit_spread >= 5.0,
+    }
+    reason = " ".join(
+        [
+            _reason(base, vix_level=vix_level, spy_above_200d=sp500_above_200d, yield_trend=yield_trend),
+            f"FRED inflation pressure={inflation_pressure}.",
+            f"Yield curve spread={yield_curve_spread if yield_curve_spread is not None else 'unknown'}.",
+            f"High-yield credit spread={credit_spread if credit_spread is not None else 'unknown'}.",
+        ]
+    )
+    return MarketRegimeSnapshot(
+        risk_regime=base.risk_regime,
+        vix_level=vix_level,
+        spy_above_200d=sp500_above_200d,
+        ten_year_yield_trend=yield_trend,
+        reason=reason,
+        inflation_pressure=inflation_pressure,
+        yield_curve_spread=yield_curve_spread,
+        credit_spread=credit_spread,
+        macro_signals=macro_signals,
+    )
+
+
+def build_fred_market_regime_snapshot(
+    *,
+    fetch_fred_history: FredHistoryFetcher | None = None,
+    api_key: str | None = None,
+    vix_series: str = DEFAULT_FRED_VIX_SERIES,
+    sp500_series: str = DEFAULT_FRED_SP500_SERIES,
+    ten_year_series: str = DEFAULT_FRED_TEN_YEAR_SERIES,
+    cpi_series: str = DEFAULT_FRED_CPI_SERIES,
+    yield_curve_series: str = DEFAULT_FRED_YIELD_CURVE_SERIES,
+    credit_spread_series: str = DEFAULT_FRED_CREDIT_SPREAD_SERIES,
+) -> MarketRegimeSnapshot:
+    """Fetch FRED series through fredapi and classify the macro regime."""
+    fetcher = fetch_fred_history or fetch_fredapi_history
+    series_ids = [
+        vix_series,
+        sp500_series,
+        ten_year_series,
+        cpi_series,
+        yield_curve_series,
+        credit_spread_series,
+    ]
+    histories = {series_id: fetcher(series_id, api_key) for series_id in series_ids}
+    return build_market_regime_snapshot_from_fred_histories(
+        fred_histories=histories,
+        vix_series=vix_series,
+        sp500_series=sp500_series,
+        ten_year_series=ten_year_series,
+        cpi_series=cpi_series,
+        yield_curve_series=yield_curve_series,
+        credit_spread_series=credit_spread_series,
+    )
+
+
 def fetch_yfinance_history(symbol: str, period: str = "1y") -> list[dict[str, Any]]:
     """Fetch daily close history from yfinance for a symbol."""
     try:
@@ -78,9 +187,31 @@ def fetch_yfinance_history(symbol: str, period: str = "1y") -> list[dict[str, An
     return rows
 
 
+def fetch_fredapi_history(series_id: str, api_key: str | None = None) -> list[dict[str, Any]]:
+    """Fetch an observation history from FRED through the optional fredapi package."""
+    key = api_key or os.environ.get("FRED_API_KEY")
+    if not key:
+        raise RuntimeError("Set FRED_API_KEY to build FRED market-regime snapshots.")
+    try:
+        from fredapi import Fred
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise RuntimeError("Install fredapi to build FRED market-regime snapshots.") from exc
+
+    series = Fred(api_key=key).get_series(series_id)
+    rows: list[dict[str, Any]] = []
+    if series is None:
+        return rows
+    for index, value in series.dropna().items():
+        try:
+            rows.append({"date": str(index)[:10], "close": float(value)})
+        except (TypeError, ValueError):
+            continue
+    return rows
+
+
 def market_regime_to_dict(snapshot: MarketRegimeSnapshot) -> dict[str, Any]:
     """Serialize a snapshot to the JSON format consumed by run_longterm_cycle."""
-    return {
+    payload = {
         "risk_regime": snapshot.risk_regime,
         "vix_level": snapshot.vix_level,
         "spy_above_200d": snapshot.spy_above_200d,
@@ -89,6 +220,22 @@ def market_regime_to_dict(snapshot: MarketRegimeSnapshot) -> dict[str, Any]:
         "source_type": "market_regime_snapshot",
         "schema_version": 1,
     }
+    if (
+        snapshot.inflation_pressure
+        or snapshot.yield_curve_spread is not None
+        or snapshot.credit_spread is not None
+        or snapshot.macro_signals
+    ):
+        payload.update(
+            {
+                "source_type": "fredapi_market_regime_snapshot",
+                "inflation_pressure": snapshot.inflation_pressure,
+                "yield_curve_spread": snapshot.yield_curve_spread,
+                "credit_spread": snapshot.credit_spread,
+                "macro_signals": snapshot.macro_signals or {},
+            }
+        )
+    return payload
 
 
 def _last_close(rows: list[Mapping[str, Any]]) -> float | None:
@@ -130,6 +277,18 @@ def _yield_trend(rows: list[Mapping[str, Any]], *, lookback: int = 20, flat_thre
     return "stable"
 
 
+def _inflation_pressure(rows: list[Mapping[str, Any]], *, months: int = 6, annualized_threshold_pct: float = 4.0) -> bool:
+    closes = _closes(rows)
+    if len(closes) <= months:
+        return False
+    start = closes[-months - 1]
+    end = closes[-1]
+    if start <= 0:
+        return False
+    annualized = (((end / start) ** (12 / months)) - 1) * 100
+    return annualized >= annualized_threshold_pct
+
+
 def _reason(
     base: MarketRegimeSnapshot,
     *,
@@ -147,11 +306,20 @@ def _reason(
 
 
 __all__ = [
+    "DEFAULT_FRED_CPI_SERIES",
+    "DEFAULT_FRED_CREDIT_SPREAD_SERIES",
+    "DEFAULT_FRED_SP500_SERIES",
+    "DEFAULT_FRED_TEN_YEAR_SERIES",
+    "DEFAULT_FRED_VIX_SERIES",
+    "DEFAULT_FRED_YIELD_CURVE_SERIES",
     "DEFAULT_SPY_SYMBOL",
     "DEFAULT_TEN_YEAR_YIELD_SYMBOL",
     "DEFAULT_VIX_SYMBOL",
+    "build_fred_market_regime_snapshot",
     "build_market_regime_snapshot",
+    "build_market_regime_snapshot_from_fred_histories",
     "build_market_regime_snapshot_from_histories",
+    "fetch_fredapi_history",
     "fetch_yfinance_history",
     "market_regime_to_dict",
 ]

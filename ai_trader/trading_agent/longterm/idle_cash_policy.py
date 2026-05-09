@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
-from typing import Mapping
+from typing import Any, Mapping
 
 from portfolio.portfolio_profile import PortfolioProfile
 
@@ -19,6 +19,10 @@ class MarketRegimeSnapshot:
     spy_above_200d: bool | None = None
     ten_year_yield_trend: str = ""
     reason: str = ""
+    inflation_pressure: bool = False
+    yield_curve_spread: float | None = None
+    credit_spread: float | None = None
+    macro_signals: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "risk_regime", _normalize_regime(self.risk_regime))
@@ -89,6 +93,10 @@ def load_market_regime_snapshot(path: str | Path) -> MarketRegimeSnapshot:
             spy_above_200d=payload.get("spy_above_200d"),
             ten_year_yield_trend=str(payload.get("ten_year_yield_trend") or ""),
             reason=str(payload.get("reason") or ""),
+            inflation_pressure=bool(payload.get("inflation_pressure") or False),
+            yield_curve_spread=payload.get("yield_curve_spread"),
+            credit_spread=payload.get("credit_spread"),
+            macro_signals=dict(payload.get("macro_signals") or {}),
         )
     return MarketRegimeSnapshot.from_signals(
         vix_level=payload.get("vix_level"),

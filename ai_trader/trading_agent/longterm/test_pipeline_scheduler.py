@@ -1755,6 +1755,55 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_safe_commands(t
     assert controls["bounded"] is True
 
 
+def test_pipeline_scheduler_cli_ongoing_no_submit_preset_can_generate_fred_market_regime(tmp_path, capsys):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--preset",
+                "ongoing-no-submit",
+                "--output-dir",
+                str(tmp_path / "scheduler"),
+                "--rules-path",
+                str(rules_path),
+                "--journal-db",
+                str(tmp_path / "journal.db"),
+                "--ledger-db",
+                str(tmp_path / "paper_ledger.db"),
+                "--action-plan",
+                str(tmp_path / "account_action_plan.json"),
+                "--auto-market-regime-snapshot",
+                "--market-regime-provider",
+                "fredapi",
+                "--print-plan-only",
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    run = printed["runs"][0]
+    all_commands = "\n".join(
+        [
+            run["market_regime_command"],
+            run["pipeline_command"],
+            run["scheduler_policy_command"],
+            run["account_refresh_command"],
+        ]
+    )
+
+    assert code == 0
+    assert "longterm_market_regime_snapshot.py" in run["market_regime_command"]
+    assert "--provider fredapi" in run["market_regime_command"]
+    assert "--output" in run["market_regime_command"]
+    assert "market_regime.json" in all_commands
+    assert "--market-regime-file" in run["pipeline_command"]
+    assert "--market-regime" in run["scheduler_policy_command"]
+    assert "--market-regime" in run["account_refresh_command"]
+
+
 def test_pipeline_scheduler_cli_ongoing_no_submit_preset_uses_absolute_script_paths(tmp_path, capsys):
     rules_path = tmp_path / "active_rules.txt"
     rules_path.write_text("<rules />", encoding="utf-8")

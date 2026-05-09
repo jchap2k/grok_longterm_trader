@@ -281,11 +281,12 @@ Defines the dry-run cadence model for daily, weekly, and as-needed operator rout
 
 `longterm/pipeline_scheduler.py`
 Runs bounded no-submit command chains into isolated scheduler run folders. It
-can refresh the paper account snapshot, run the research-to-paper pipeline,
-execute deterministic portfolio-news monitoring, run capped generated or
-portfolio-news follow-up committee batches, refresh read-only dashboard/account
-artifacts, and invoke the cadence verifier. Its resource-control summary marks
-paid provider and committee caps visible before any recurring run is trusted.
+can refresh the paper account snapshot, generate a per-run market-regime
+snapshot, run the research-to-paper pipeline, execute deterministic
+portfolio-news monitoring, run capped generated or portfolio-news follow-up
+committee batches, refresh read-only dashboard/account artifacts, and invoke
+the cadence verifier. Its resource-control summary marks paid provider and
+committee caps visible before any recurring run is trusted.
 
 `agent/configs/longterm_trading_agent_specs.json`
 Defines the long-term CGH domain roles and presets:
@@ -360,6 +361,16 @@ Builds deterministic dry-run risk reviews for account-action intents. Reviews ch
 
 `longterm/idle_cash_policy.py`
 Classifies a supplied market-regime snapshot and chooses where leftover active-sleeve cash should wait after approved stock picks are sized. Normal regimes park in the configured equity index parking symbol such as `SPY`; elevated uncertainty splits parking between equity index exposure and short-duration Treasury exposure such as `SGOV`; inflation/rate-shock volatility defaults to low-risk parking; and classic equity panic with falling yields permits a capped duration hedge such as `TLT`. VIX alone is not treated as permission to buy long-duration bonds.
+
+`longterm/market_regime_snapshot.py`
+Builds the market-regime artifact consumed by idle-cash parking, scheduler
+policy, account refresh, and the dashboard. The original yfinance path remains
+available, and the recurring no-submit profile can now generate the snapshot
+through `fredapi` using `FRED_API_KEY`. The FRED path reads only public macro
+series such as `VIXCLS`, `SP500`, `DGS10`, `CPIAUCSL`, `T10Y2Y`, and
+`BAMLH0A0HYM2`, then annotates the snapshot with inflation pressure, yield
+curve spread, and high-yield credit spread. The artifact is advisory and does
+not submit orders.
 
 `longterm/live_readiness.py`
 Builds a dry-run live-readiness checklist. It reports unmet gates such as benchmark proof, paper trading, broker-capability match, protected-symbol enforcement, manual approval, kill switch, audit logs, broker-read reconciliation, explicit live-mode config, and secrets hygiene. The broker-capability gate prevents Alpaca paper notional/fractional behavior from being treated as proof that a future live broker supports the same sizing model. It does not enable live execution.

@@ -8,9 +8,16 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from longterm.market_regime_snapshot import (
+    DEFAULT_FRED_CPI_SERIES,
+    DEFAULT_FRED_CREDIT_SPREAD_SERIES,
+    DEFAULT_FRED_SP500_SERIES,
+    DEFAULT_FRED_TEN_YEAR_SERIES,
+    DEFAULT_FRED_VIX_SERIES,
+    DEFAULT_FRED_YIELD_CURVE_SERIES,
     DEFAULT_SPY_SYMBOL,
     DEFAULT_TEN_YEAR_YIELD_SYMBOL,
     DEFAULT_VIX_SYMBOL,
+    build_fred_market_regime_snapshot,
     build_market_regime_snapshot,
     build_market_regime_snapshot_from_histories,
     fetch_yfinance_history,
@@ -22,16 +29,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build a market-regime JSON snapshot for long-term parking policy.")
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--snapshot-file", default="", help="Offline JSON with vix, spy, and ten_year_yield histories.")
-    source.add_argument("--provider", choices=["yfinance"], default="")
+    source.add_argument("--provider", choices=["yfinance", "fredapi"], default="")
     parser.add_argument("--output", required=True)
     parser.add_argument("--period", default="1y")
     parser.add_argument("--vix-symbol", default=DEFAULT_VIX_SYMBOL)
     parser.add_argument("--spy-symbol", default=DEFAULT_SPY_SYMBOL)
     parser.add_argument("--ten-year-yield-symbol", default=DEFAULT_TEN_YEAR_YIELD_SYMBOL)
+    parser.add_argument("--fred-api-key-env", default="FRED_API_KEY")
+    parser.add_argument("--fred-vix-series", default=DEFAULT_FRED_VIX_SERIES)
+    parser.add_argument("--fred-sp500-series", default=DEFAULT_FRED_SP500_SERIES)
+    parser.add_argument("--fred-ten-year-series", default=DEFAULT_FRED_TEN_YEAR_SERIES)
+    parser.add_argument("--fred-cpi-series", default=DEFAULT_FRED_CPI_SERIES)
+    parser.add_argument("--fred-yield-curve-series", default=DEFAULT_FRED_YIELD_CURVE_SERIES)
+    parser.add_argument("--fred-credit-spread-series", default=DEFAULT_FRED_CREDIT_SPREAD_SERIES)
     return parser
 
 
-def run_cli(args: argparse.Namespace) -> int:
+def run_cli(args: argparse.Namespace, *, fred_fetcher=None) -> int:
     if args.snapshot_file:
         payload = _load_snapshot_file(args.snapshot_file)
         snapshot = build_market_regime_snapshot_from_histories(
@@ -40,6 +54,20 @@ def run_cli(args: argparse.Namespace) -> int:
             ten_year_yield_history=payload.get("ten_year_yield") or [],
         )
         mode = "snapshot_file"
+    elif args.provider == "fredapi":
+        import os
+
+        snapshot = build_fred_market_regime_snapshot(
+            fetch_fred_history=fred_fetcher,
+            api_key=os.environ.get(args.fred_api_key_env),
+            vix_series=args.fred_vix_series,
+            sp500_series=args.fred_sp500_series,
+            ten_year_series=args.fred_ten_year_series,
+            cpi_series=args.fred_cpi_series,
+            yield_curve_series=args.fred_yield_curve_series,
+            credit_spread_series=args.fred_credit_spread_series,
+        )
+        mode = args.provider
     else:
         snapshot = build_market_regime_snapshot(
             fetch_history=fetch_yfinance_history,

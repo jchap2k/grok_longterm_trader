@@ -39,6 +39,7 @@ class PipelineSchedulerInputs:
     pipeline_command_template: str
     rules_path: str | Path
     pre_pipeline_refresh_command_template: str = ""
+    market_regime_command_template: str = ""
     portfolio_news_monitor_command_template: str = ""
     position_review_queue_command_template: str = ""
     committee_preset_policy_command_template: str = ""
@@ -77,6 +78,11 @@ class PipelineSchedulerRunRecord:
     pre_pipeline_refresh_exit_code: int | None = None
     pre_pipeline_refresh_stdout_path: str = ""
     pre_pipeline_refresh_stderr_path: str = ""
+    market_regime_path: str = ""
+    market_regime_command: str = ""
+    market_regime_exit_code: int | None = None
+    market_regime_stdout_path: str = ""
+    market_regime_stderr_path: str = ""
     portfolio_news_monitor_path: str = ""
     portfolio_news_monitor_command: str = ""
     portfolio_news_monitor_exit_code: int | None = None
@@ -164,6 +170,12 @@ def run_pipeline_scheduler(
         validate_scheduler_command_template(
             inputs.pre_pipeline_refresh_command_template,
             command_kind="pre_pipeline_refresh",
+            rules_path=rules_path,
+        )
+    if inputs.market_regime_command_template:
+        validate_scheduler_command_template(
+            inputs.market_regime_command_template,
+            command_kind="market_regime",
             rules_path=rules_path,
         )
     if inputs.portfolio_news_monitor_command_template:
@@ -331,6 +343,10 @@ def validate_scheduler_command_template(
         if "longterm_alpaca_paper_snapshot.py" not in lowered:
             raise ValueError("Pre-pipeline refresh command must call scripts/longterm_alpaca_paper_snapshot.py.")
         _require_flag(command_template, "--portfolio-state-output")
+    elif command_kind == "market_regime":
+        if "longterm_market_regime_snapshot.py" not in lowered:
+            raise ValueError("Market regime command must call scripts/longterm_market_regime_snapshot.py.")
+        _require_flag(command_template, "--output")
     elif command_kind == "portfolio_news_monitor":
         if "longterm_portfolio_news_monitor.py" not in lowered:
             raise ValueError("Portfolio news monitor command must call scripts/longterm_portfolio_news_monitor.py.")
@@ -383,6 +399,7 @@ def _run_one_scheduler_cycle(
     pipeline_summary_path = run_dir / "pipeline_summary.json"
     pipeline_health_path = run_dir / "pipeline_artifact_health.json"
     portfolio_state_path = run_dir / "paper_portfolio_state.json"
+    market_regime_path = run_dir / "market_regime.json"
     portfolio_news_monitor_path = run_dir / "portfolio_news_monitor.json"
     position_review_queue_path = run_dir / "position_review_queue.json"
     committee_preset_policy_path = run_dir / "committee_preset_policy.json"
@@ -401,6 +418,7 @@ def _run_one_scheduler_cycle(
         pipeline_summary_path=pipeline_summary_path,
         pipeline_health_path=pipeline_health_path,
         portfolio_state_path=portfolio_state_path,
+        market_regime_path=market_regime_path,
         portfolio_news_monitor_path=portfolio_news_monitor_path,
         position_review_queue_path=position_review_queue_path,
         committee_preset_policy_path=committee_preset_policy_path,
@@ -423,6 +441,18 @@ def _run_one_scheduler_cycle(
         if inputs.pre_pipeline_refresh_command_template
         else ""
     )
+    market_regime_command = (
+        _render_command(inputs.market_regime_command_template, context)
+        if inputs.market_regime_command_template
+        else ""
+    )
+    market_regime_fields = {
+        "market_regime_path": str(market_regime_path) if market_regime_command else "",
+        "market_regime_command": market_regime_command,
+        "market_regime_exit_code": None,
+        "market_regime_stdout_path": "",
+        "market_regime_stderr_path": "",
+    }
     portfolio_news_monitor_command = (
         _render_command(inputs.portfolio_news_monitor_command_template, context)
         if inputs.portfolio_news_monitor_command_template
@@ -503,6 +533,7 @@ def _run_one_scheduler_cycle(
             pipeline_summary_path=str(pipeline_summary_path),
             pipeline_health_path=str(pipeline_health_path),
             pre_pipeline_refresh_command=pre_pipeline_refresh_command,
+            **market_regime_fields,
             **monitor_fields,
             **position_review_fields,
             pipeline_command=pipeline_command,
@@ -543,6 +574,7 @@ def _run_one_scheduler_cycle(
                 pre_pipeline_refresh_exit_code=pre_refresh_exit_code,
                 pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
                 pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
+                **market_regime_fields,
                 **monitor_fields,
                 **position_review_fields,
                 pipeline_command=pipeline_command,
@@ -553,6 +585,48 @@ def _run_one_scheduler_cycle(
                 account_refresh_command=refresh_command,
                 **scheduler_review_bundle_fields,
                 blocker="pre_pipeline_refresh_command_failed",
+                resource_controls=resource_controls,
+            )
+
+    if market_regime_command:
+        market_regime_stdout = run_dir / "market_regime_stdout.txt"
+        market_regime_stderr = run_dir / "market_regime_stderr.txt"
+        market_regime_exit_code, stdout, stderr = command_runner(market_regime_command)
+        _write_text(market_regime_stdout, stdout)
+        _write_text(market_regime_stderr, stderr)
+        market_regime_fields = {
+            "market_regime_path": str(market_regime_path),
+            "market_regime_command": market_regime_command,
+            "market_regime_exit_code": market_regime_exit_code,
+            "market_regime_stdout_path": str(market_regime_stdout),
+            "market_regime_stderr_path": str(market_regime_stderr),
+        }
+        if market_regime_exit_code != 0:
+            return PipelineSchedulerRunRecord(
+                run_number=run_number,
+                scheduler_run_id=scheduler_run_id,
+                started_at=_format_timestamp(started),
+                finished_at=_format_timestamp(now_func()),
+                status="failed",
+                run_dir=str(run_dir),
+                pipeline_output_dir=str(pipeline_output_dir),
+                pipeline_summary_path=str(pipeline_summary_path),
+                pipeline_health_path=str(pipeline_health_path),
+                pre_pipeline_refresh_command=pre_pipeline_refresh_command,
+                pre_pipeline_refresh_exit_code=pre_refresh_exit_code,
+                pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
+                pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
+                **market_regime_fields,
+                **monitor_fields,
+                **position_review_fields,
+                pipeline_command=pipeline_command,
+                committee_preset_policy_path=str(committee_preset_policy_path) if committee_command else "",
+                committee_preset_policy_command=committee_command,
+                scheduler_policy_path=str(scheduler_policy_path) if policy_command else "",
+                scheduler_policy_command=policy_command,
+                account_refresh_command=refresh_command,
+                **scheduler_review_bundle_fields,
+                blocker="market_regime_command_failed",
                 resource_controls=resource_controls,
             )
 
@@ -584,6 +658,7 @@ def _run_one_scheduler_cycle(
                 pre_pipeline_refresh_exit_code=pre_refresh_exit_code,
                 pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
                 pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
+                **market_regime_fields,
                 **monitor_fields,
                 pipeline_command=pipeline_command,
                 committee_preset_policy_path=str(committee_preset_policy_path) if committee_command else "",
@@ -624,6 +699,7 @@ def _run_one_scheduler_cycle(
                 pre_pipeline_refresh_exit_code=pre_refresh_exit_code,
                 pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
                 pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
+                **market_regime_fields,
                 **monitor_fields,
                 **position_review_fields,
                 pipeline_command=pipeline_command,
@@ -659,6 +735,7 @@ def _run_one_scheduler_cycle(
             pre_pipeline_refresh_exit_code=pre_refresh_exit_code,
             pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
             pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
+            **market_regime_fields,
             **monitor_fields,
             **position_review_fields,
             pipeline_command=pipeline_command,
@@ -701,6 +778,7 @@ def _run_one_scheduler_cycle(
                 pre_pipeline_refresh_exit_code=pre_refresh_exit_code,
                 pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
                 pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
+                **market_regime_fields,
                 **monitor_fields,
                 **position_review_fields,
                 pipeline_command=pipeline_command,
@@ -746,6 +824,7 @@ def _run_one_scheduler_cycle(
                 pre_pipeline_refresh_exit_code=pre_refresh_exit_code,
                 pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
                 pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
+                **market_regime_fields,
                 **monitor_fields,
                 **position_review_fields,
                 pipeline_command=pipeline_command,
@@ -794,6 +873,7 @@ def _run_one_scheduler_cycle(
                 pre_pipeline_refresh_exit_code=pre_refresh_exit_code,
                 pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
                 pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
+                **market_regime_fields,
                 **monitor_fields,
                 **position_review_fields,
                 pipeline_command=pipeline_command,
@@ -833,6 +913,7 @@ def _run_one_scheduler_cycle(
         pre_pipeline_refresh_exit_code=pre_refresh_exit_code,
         pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
         pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
+        **market_regime_fields,
         **monitor_fields,
         **position_review_fields,
         pipeline_command=pipeline_command,
@@ -1014,6 +1095,7 @@ def _render_context(
     pipeline_summary_path: Path,
     pipeline_health_path: Path,
     portfolio_state_path: Path,
+    market_regime_path: Path,
     portfolio_news_monitor_path: Path,
     position_review_queue_path: Path,
     committee_preset_policy_path: Path,
@@ -1037,6 +1119,7 @@ def _render_context(
         "pipeline_summary": _quote(pipeline_summary_path),
         "pipeline_health": _quote(pipeline_health_path),
         "portfolio_state": _quote(portfolio_state_path),
+        "market_regime": _quote(market_regime_path),
         "portfolio_news_monitor": _quote(portfolio_news_monitor_path),
         "position_review_queue": _quote(position_review_queue_path),
         "committee_preset_policy": _quote(committee_preset_policy_path),

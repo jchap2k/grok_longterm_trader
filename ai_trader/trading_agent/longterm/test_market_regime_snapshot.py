@@ -5,8 +5,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from longterm.market_regime_snapshot import (
+    build_market_regime_snapshot_from_fred_histories,
     build_market_regime_snapshot,
     build_market_regime_snapshot_from_histories,
+    market_regime_to_dict,
 )
 from longterm.market_regime_snapshot_cli import build_parser, run_cli
 
@@ -97,3 +99,58 @@ def test_market_regime_snapshot_accepts_injected_fetcher():
     result = build_market_regime_snapshot(fetch_history=fetcher)
 
     assert result.risk_regime == "elevated_uncertainty"
+
+
+def test_fred_snapshot_uses_inflation_pressure_to_avoid_false_duration_hedge():
+    result = build_market_regime_snapshot_from_fred_histories(
+        fred_histories={
+            "VIXCLS": _series([22, 28, 36]),
+            "SP500": _series([5000] * 200 + [4600]),
+            "DGS10": _series([4.8, 4.6, 4.4, 4.2]),
+            "CPIAUCSL": _series([300, 302, 304, 306, 309, 312, 315]),
+            "T10Y2Y": _series([-0.5, -0.4, -0.2]),
+            "BAMLH0A0HYM2": _series([3.2, 3.4, 3.8]),
+        }
+    )
+
+    payload = market_regime_to_dict(result)
+
+    assert result.risk_regime == "inflation_rate_shock"
+    assert result.ten_year_yield_trend == "falling"
+    assert payload["source_type"] == "fredapi_market_regime_snapshot"
+    assert payload["inflation_pressure"] is True
+    assert payload["yield_curve_spread"] == -0.2
+    assert payload["credit_spread"] == 3.8
+    assert "inflation pressure=True" in payload["reason"]
+
+
+def test_market_regime_snapshot_cli_supports_fredapi_provider_with_injected_fetcher(tmp_path, capsys):
+    output = tmp_path / "market_regime.json"
+
+    def fetcher(series_id, _api_key=None):
+        histories = {
+            "VIXCLS": _series([18, 19, 20]),
+            "SP500": _series([4500] * 200 + [5000]),
+            "DGS10": _series([4.0, 4.01, 4.02]),
+        }
+        return histories.get(series_id, [])
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--provider",
+                "fredapi",
+                "--output",
+                str(output),
+            ]
+        ),
+        fred_fetcher=fetcher,
+    )
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    printed = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert payload["risk_regime"] == "normal"
+    assert payload["source_type"] == "fredapi_market_regime_snapshot"
+    assert printed["mode"] == "fredapi"

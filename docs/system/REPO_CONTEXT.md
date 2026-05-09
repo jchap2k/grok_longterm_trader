@@ -643,8 +643,19 @@ Idle/parking policy:
 - Inflation/rate-shock volatility: prefer `SGOV`/`BIL` or cash-like parking.
 - Do not blindly buy `TLT` on VIX spikes alone.
 
+Current regime source:
+- The no-submit scheduler profile now generates a per-run
+  `market_regime.json` before the research-to-paper pipeline. The default local
+  profile uses `longterm_market_regime_snapshot.py --provider fredapi`, reading
+  `FRED_API_KEY` from the user environment.
+- The FRED snapshot is read-only public macro data. It currently includes VIX,
+  S&P 500 trend, 10-year yield trend, CPI inflation pressure, 10Y-2Y yield
+  curve spread, and high-yield credit spread. It is consumed by account action
+  planning, scheduler policy, paper-account refresh, and the dashboard.
+
 Open point:
-- Scheduler should refresh market regime and parking prices, not just `SPY`.
+- Scheduler should refresh parking prices for the chosen parking symbols, not
+  just rely on existing action-plan pricing.
 - Panic indicators should trigger decision/review logic, not direct broad sells.
 - If a downturn exit is made, redeployment should preserve the prior high-quality
   buy list and consider re-buying stronger versions of exited names after risk

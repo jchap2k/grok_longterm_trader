@@ -48,6 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--pre-pipeline-refresh-command-template", default="")
     parser.add_argument("--pipeline-command-template", default="")
+    parser.add_argument("--market-regime-command-template", default="")
     parser.add_argument("--committee-preset-policy-command-template", default="")
     parser.add_argument("--scheduler-policy-command-template", default="")
     parser.add_argument("--account-refresh-command-template", default="")
@@ -59,6 +60,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--action-plan", default="")
     parser.add_argument("--profile-config", default=str(DEFAULT_PROFILE_PATH))
     parser.add_argument("--market-regime-file", default="")
+    parser.add_argument("--auto-market-regime-snapshot", action="store_true")
+    parser.add_argument("--market-regime-provider", choices=["yfinance", "fredapi"], default="yfinance")
+    parser.add_argument("--fred-api-key-env", default="FRED_API_KEY")
     parser.add_argument("--price-map", default="")
     parser.add_argument("--scheduler-config-validation", default="")
     parser.add_argument("--scheduler-task-plan", default="")
@@ -324,6 +328,8 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
     action_plan = _require_preset_path(args, "action_plan", "--action-plan")
     profile_config = _normalize_path_arg(args.profile_config or str(DEFAULT_PROFILE_PATH))
     _validate_ongoing_no_submit_research_bounds(args)
+    if args.market_regime_file and args.auto_market_regime_snapshot:
+        raise ValueError("Use either --market-regime-file or --auto-market-regime-snapshot, not both.")
 
     pre_refresh = " ".join(
         [
@@ -335,6 +341,19 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
             "{portfolio_state}",
         ]
     )
+    market_regime_path = "{market_regime}" if args.auto_market_regime_snapshot else args.market_regime_file
+    market_regime_command_parts: list[str] = []
+    if args.auto_market_regime_snapshot:
+        market_regime_command_parts = [
+            "python",
+            _script_path("longterm_market_regime_snapshot.py"),
+            "--provider",
+            args.market_regime_provider,
+            "--output",
+            "{market_regime}",
+        ]
+        if args.market_regime_provider == "fredapi":
+            _append_optional_value(market_regime_command_parts, "--fred-api-key-env", args.fred_api_key_env)
 
     pipeline_parts = [
         "python",
@@ -435,7 +454,7 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
         args.generated_committee_max_batches,
     )
     _append_optional_path(pipeline_parts, "--committee-batch-dir", args.committee_batch_dir)
-    _append_optional_path(pipeline_parts, "--market-regime-file", args.market_regime_file)
+    _append_optional_path(pipeline_parts, "--market-regime-file", market_regime_path)
     _append_optional_path(pipeline_parts, "--price-map", args.price_map)
     _append_optional_flag(pipeline_parts, "--skip-price-map", args.skip_price_map)
     _append_optional_flag(
@@ -551,7 +570,7 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
         "{scheduler_policy}",
         "--json",
     ]
-    _append_optional_path(scheduler_policy_parts, "--market-regime", args.market_regime_file)
+    _append_optional_path(scheduler_policy_parts, "--market-regime", market_regime_path)
 
     account_refresh_parts = [
         "python",
@@ -576,7 +595,7 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
         "{dashboard_site_output_dir}",
         "--json",
     ]
-    _append_optional_path(account_refresh_parts, "--market-regime", args.market_regime_file)
+    _append_optional_path(account_refresh_parts, "--market-regime", market_regime_path)
     _append_optional_path(account_refresh_parts, "--scheduler-config-validation", args.scheduler_config_validation)
     _append_optional_path(account_refresh_parts, "--scheduler-task-plan", args.scheduler_task_plan)
     _append_optional_path(account_refresh_parts, "--scheduler-handoff", args.scheduler_handoff)
@@ -666,6 +685,7 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
 
     return {
         "pre_pipeline_refresh": pre_refresh,
+        "market_regime": " ".join(market_regime_command_parts),
         "portfolio_news_monitor": " ".join(portfolio_news_monitor_parts),
         "position_review_queue": " ".join(position_review_queue_parts),
         "pipeline": " ".join(pipeline_parts),
@@ -679,6 +699,7 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
 def _resolve_command_templates(args: argparse.Namespace) -> dict[str, str]:
     explicit_templates = [
         args.pre_pipeline_refresh_command_template,
+        args.market_regime_command_template,
         args.pipeline_command_template,
         args.committee_preset_policy_command_template,
         args.scheduler_policy_command_template,
@@ -695,6 +716,7 @@ def _resolve_command_templates(args: argparse.Namespace) -> dict[str, str]:
         raise ValueError("--pipeline-command-template is required unless --preset ongoing-no-submit is used.")
     return {
         "pre_pipeline_refresh": args.pre_pipeline_refresh_command_template,
+        "market_regime": args.market_regime_command_template,
         "portfolio_news_monitor": args.portfolio_news_monitor_command_template,
         "pipeline": args.pipeline_command_template,
         "committee_preset_policy": args.committee_preset_policy_command_template,
@@ -716,6 +738,7 @@ def validate_resolved_scheduler_config(args: argparse.Namespace) -> dict[str, ob
     )
     command_kinds = [
         ("pre_pipeline_refresh", "pre_pipeline_refresh"),
+        ("market_regime", "market_regime"),
         ("portfolio_news_monitor", "portfolio_news_monitor"),
         ("position_review_queue", "position_review_queue"),
         ("committee_preset_policy", "committee_preset_policy"),
@@ -768,6 +791,7 @@ def _build_operating_mode_summary(
     )
     stage_flags = {
         "pre_pipeline_refresh": bool(commands.get("pre_pipeline_refresh")),
+        "market_regime": bool(commands.get("market_regime")),
         "portfolio_news_monitor": bool(commands.get("portfolio_news_monitor")),
         "position_review_queue": bool(commands.get("position_review_queue")),
         "research_pipeline": bool(commands.get("pipeline")),
@@ -833,6 +857,7 @@ def run_cli(args: argparse.Namespace) -> int:
         PipelineSchedulerInputs(
             output_dir=args.output_dir,
             pre_pipeline_refresh_command_template=templates.get("pre_pipeline_refresh", ""),
+            market_regime_command_template=templates.get("market_regime", ""),
             portfolio_news_monitor_command_template=templates.get("portfolio_news_monitor", ""),
             position_review_queue_command_template=templates.get("position_review_queue", ""),
             pipeline_command_template=templates["pipeline"],
