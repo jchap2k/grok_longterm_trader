@@ -9,6 +9,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from longterm.macro_regime_interpreter import interpret_macro_regime
+
 
 PAPER_EXECUTABLE_INTENTS = {"BUY"}
 PARKING_INTENTS = {"PARK_IDLE_CASH", "PARK_DEFENSIVE_CASH"}
@@ -516,6 +518,7 @@ def _site_index_html(
                 {_scheduler_policy_tile(policy)}
               </div>
             </section>
+            {_macro_regime_section(regime)}
             {_scheduler_readiness_section(
                 scheduler_config_validation=scheduler_config_validation or {},
                 scheduler_task_plan=scheduler_task_plan or {},
@@ -1567,6 +1570,33 @@ def _scheduler_readiness_section(
         f"{_scheduler_task_plan_panel(scheduler_task_plan)}"
         f"{_scheduler_handoff_panel(scheduler_handoff)}"
         f"{_scheduler_task_registration_panel(scheduler_task_registration)}"
+        "</div>"
+        "</section>"
+    )
+
+
+def _macro_regime_section(regime: Mapping[str, Any]) -> str:
+    interpretation = regime.get("macro_regime_interpretation")
+    if not isinstance(interpretation, Mapping):
+        interpretation = interpret_macro_regime(regime)
+    reasons = [str(item) for item in (interpretation.get("reasons") or []) if str(item).strip()]
+    reason_text = ", ".join(_display_label(item) for item in reasons) or "None"
+    provider_status = str(regime.get("provider_status") or interpretation.get("provider_status") or "unknown")
+    provider_mode = str(regime.get("provider_mode") or interpretation.get("provider_mode") or "unknown")
+    return (
+        "<section class=\"panel macro-regime-panel\" id=\"macro-regime\">"
+        "<div class=\"section-heading\">"
+        "<p class=\"eyebrow\">Macro Regime</p>"
+        "<h2>FRED Provider And Advisory Signals</h2>"
+        "</div>"
+        "<p>Macro data is advisory context for review cadence, sizing caution, and parking posture. It never authorizes broker orders.</p>"
+        "<div class=\"pipeline-health-grid\">"
+        f"{_status_tile('FRED Provider', _display_label(provider_status), provider_mode)}"
+        f"{_status_tile('Regime Label', _display_label(interpretation.get('macro_regime_label') or regime.get('macro_regime_label') or regime.get('risk_regime') or 'unknown'), interpretation.get('severity') or 'unknown')}"
+        f"{_status_tile('VIX', regime.get('vix_level') if regime.get('vix_level') is not None else 'unknown', 'Volatility context')}"
+        f"{_status_tile('Yield Curve', regime.get('yield_curve_spread') if regime.get('yield_curve_spread') is not None else 'unknown', '10Y minus 2Y spread')}"
+        f"{_status_tile('Credit Spread', regime.get('credit_spread') if regime.get('credit_spread') is not None else 'unknown', 'High-yield OAS stress proxy')}"
+        f"{_status_tile('Review Trigger', 'Yes' if interpretation.get('review_trigger') else 'No', reason_text)}"
         "</div>"
         "</section>"
     )

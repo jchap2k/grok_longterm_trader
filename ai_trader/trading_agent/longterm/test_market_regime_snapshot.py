@@ -125,6 +125,9 @@ def test_fred_snapshot_uses_inflation_pressure_to_avoid_false_duration_hedge():
     assert payload["yield_curve_spread"] == -0.2
     assert payload["credit_spread"] == 3.8
     assert payload["macro_signals"]["thresholds"]["credit_spread_elevated_pct"] == 5.0
+    assert payload["macro_signals"]["observations"]["VIXCLS"]["last_observation_date"] == "2026-01-03"
+    assert payload["macro_regime_interpretation"]["macro_regime_label"] == "inflation_rate_shock"
+    assert payload["macro_regime_interpretation"]["sizing_caution"] == "tighten_new_buy_sizing"
     assert payload["macro_signals"]["interpretation"]["VIXCLS"]["allowed_uses"] == [
         "volatility stress context",
         "review cadence",

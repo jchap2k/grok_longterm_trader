@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+from longterm.macro_regime_interpreter import interpret_macro_regime
 from research.research_packet import ResearchPacket
 
 
@@ -56,6 +57,8 @@ class ThesisMonitor:
             for condition in packet.invalidation_conditions
             if condition and condition.lower() in evidence_text
         ]
+        macro = interpret_macro_regime(packet.macro_regime_context)
+        macro_reasons = [str(item) for item in macro.get("reasons") or []]
         weakening_matches = [
             signal for signal in self.WEAKENING_SIGNALS if signal in evidence_text
         ]
@@ -67,6 +70,10 @@ class ThesisMonitor:
             thesis_state = "weakening"
             matched_conditions = weakening_matches
             reason = "Current evidence contains thesis-weakening risk language."
+        elif macro.get("review_trigger"):
+            thesis_state = "regime_pressure"
+            matched_conditions = macro_reasons
+            reason = "Macro regime pressure requires an off-cadence thesis and sizing review."
         elif days_since >= cadence_days:
             thesis_state = "stale"
             matched_conditions = []
@@ -76,7 +83,7 @@ class ThesisMonitor:
             matched_conditions = []
             reason = "No invalidation or weakening condition matched current evidence."
         return ThesisStatus(
-            review_due=days_since >= cadence_days,
+            review_due=days_since >= cadence_days or bool(macro.get("review_trigger")),
             days_since_review=days_since,
             thesis_state=thesis_state,
             matched_invalidation_conditions=matched_conditions,

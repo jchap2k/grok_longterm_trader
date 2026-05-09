@@ -179,6 +179,34 @@ def test_thesis_monitor_detects_weakening_evidence_before_break():
     assert "margin pressure" in status.matched_invalidation_conditions
 
 
+def test_thesis_monitor_queues_review_for_macro_regime_pressure():
+    monitor = ThesisMonitor(today=date(2026, 4, 29))
+    packet = create_research_packet_from_idea(
+        {
+            "symbol": "MSFT",
+            "review_cadence": "quarterly",
+            "invalidation_conditions": ["Cloud growth materially slows"],
+            "macro_regime_context": {
+                "provider_status": "ok",
+                "provider_mode": "fredapi",
+                "risk_regime": "normal",
+                "yield_curve_spread": -0.15,
+                "credit_spread": 5.6,
+            },
+        }
+    )
+
+    status = monitor.evaluate(
+        packet,
+        last_review_date=date(2026, 4, 20),
+        current_evidence=["No company-specific thesis break."],
+    )
+
+    assert status.review_due is True
+    assert status.thesis_state == "regime_pressure"
+    assert "credit_spread_elevated" in status.matched_invalidation_conditions
+
+
 def test_action_planner_cli_outputs_dry_run_json(tmp_path, capsys):
     portfolio_path = tmp_path / "portfolio.json"
     portfolio_path.write_text(

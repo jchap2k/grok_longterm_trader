@@ -1791,6 +1791,7 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_can_generate_fred_marke
             run["pipeline_command"],
             run["scheduler_policy_command"],
             run["account_refresh_command"],
+            run["post_run_verification_command"],
         ]
     )
 
@@ -1802,6 +1803,7 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_can_generate_fred_marke
     assert "--market-regime-file" in run["pipeline_command"]
     assert "--market-regime" in run["scheduler_policy_command"]
     assert "--market-regime" in run["account_refresh_command"]
+    assert "--require-fred-provider" in run["post_run_verification_command"]
 
 
 def test_pipeline_scheduler_cli_ongoing_no_submit_preset_uses_absolute_script_paths(tmp_path, capsys):
@@ -2076,9 +2078,10 @@ def test_pipeline_scheduler_cli_validate_config_only_reports_unattended_no_submi
         "research_pipeline": True,
         "scheduler_policy": True,
         "account_refresh": True,
-        "post_run_verification": True,
-        "scheduler_review_bundle": True,
-        "portfolio_news_followup_batches": True,
+            "post_run_verification": True,
+            "scheduler_review_bundle": True,
+            "market_regime": False,
+            "portfolio_news_followup_batches": True,
         "portfolio_news_followup_committee_batches": True,
         "generated_committee_batches": False,
         "final_planning_refresh": False,

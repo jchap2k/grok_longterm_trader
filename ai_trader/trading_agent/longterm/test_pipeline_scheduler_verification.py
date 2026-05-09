@@ -29,6 +29,14 @@ def _ready_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
         },
     )
     (run_dir / "dashboard_manifest.json").write_text("{}", encoding="utf-8")
+    market_regime = _write_json(
+        run_dir / "market_regime.json",
+        {
+            "risk_regime": "normal",
+            "provider_status": "ok",
+            "provider_mode": "fredapi",
+        },
+    )
     scheduler_summary = _write_json(
         tmp_path / "pipeline_scheduler_summary.json",
         {
@@ -52,6 +60,8 @@ def _ready_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
                     "position_review_queue_command": "python scripts/longterm_position_review_queue.py",
                     "position_review_queue_exit_code": 0,
                     "pipeline_summary_path": str(pipeline_summary),
+                    "market_regime_path": str(market_regime),
+                    "market_regime_exit_code": 0,
                     "scheduler_policy_command": "python scripts/longterm_pipeline_scheduler_policy.py",
                     "scheduler_policy_exit_code": 0,
                     "account_refresh_command": "python scripts/longterm_paper_account_refresh.py",
@@ -233,3 +243,36 @@ def test_scheduler_verification_requires_policy_timestamps(tmp_path, capsys):
     printed = json.loads(capsys.readouterr().out)
     assert code == 1
     assert "policy_timestamp_missing:last_full_research_at" in printed["blockers"]
+
+
+def test_scheduler_verification_can_require_true_fred_provider(tmp_path, capsys):
+    scheduler_summary, _, policy_state = _ready_fixture(tmp_path)
+    payload = json.loads(scheduler_summary.read_text(encoding="utf-8"))
+    market_regime = Path(payload["runs"][0]["market_regime_path"])
+    market_regime.write_text(
+        json.dumps(
+            {
+                "risk_regime": "normal",
+                "provider_status": "degraded_fallback",
+                "provider_mode": "fredapi_fallback_yfinance",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--pipeline-scheduler-summary",
+                str(scheduler_summary),
+                "--policy-state",
+                str(policy_state),
+                "--require-fred-provider",
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    assert code == 1
+    assert "market_regime_provider_not_fredapi_ok" in printed["blockers"]

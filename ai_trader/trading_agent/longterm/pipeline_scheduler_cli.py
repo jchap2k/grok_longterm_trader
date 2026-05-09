@@ -619,6 +619,8 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
         "{post_run_verification}",
         "--json",
     ]
+    if args.auto_market_regime_snapshot and args.market_regime_provider == "fredapi":
+        post_run_verification_parts.append("--require-fred-provider")
     if args.final_planning_refresh:
         post_run_verification_parts.extend(
             [

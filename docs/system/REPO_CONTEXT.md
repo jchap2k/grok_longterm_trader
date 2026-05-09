@@ -659,11 +659,29 @@ Current regime source:
   `macro_signals`. Current thresholds are VIX 22/30, CPI annualized pressure
   4%, high-yield spread 5%, yield-curve inversion below 0, and S&P trend vs.
   the 200-day average.
+- `longterm/macro_regime_interpreter.py` turns raw macro fields into an
+  advisory label/severity/reason set. `credit_stress`, `late_cycle_caution`,
+  `inflation_rate_shock`, and related labels may tighten sizing, shorten review
+  cadence, and inform the CGH context, but they do not create direct trade
+  authority.
+- `MacroRegimeReviewer` is part of deterministic research-runner context. If no
+  macro context is supplied it stays neutral; if FRED-backed macro stress is
+  present it adds explicit objections such as stronger margin-of-safety and
+  staged-entry requirements.
 - During `run_longterm_cycle`, the current market-regime snapshot is copied
   into each `ResearchPacket.macro_regime_context`, persisted in the decision
   journal `packet_json`, and summarized into the `macro_regime` context passed
   to the decision runner. This preserves the point-in-time macro backdrop for
   later review while keeping the signal advisory.
+- Account action planning can halve new BUY trade values under high/severe
+  macro pressure, while keeping the intent advisory and still subject to
+  promotion, risk, benchmark, tax, and paper-execution gates.
+- The dashboard now shows a dedicated Macro Regime panel with provider health,
+  FRED mode, interpreted label, VIX, yield curve, credit spread, and review
+  trigger state.
+- Scheduler verification supports `--require-fred-provider`; the
+  `ongoing-no-submit` preset adds it when it auto-generates a FRED snapshot, so
+  degraded fallback is visible as a blocker instead of a quiet pass.
 - FRED is advisory, not a scheduler hard dependency. If FRED returns a transient
   server/API failure, the market-regime CLI falls back to yfinance; if all
   providers are unavailable, it writes `risk_regime=market_data_unavailable`

@@ -83,6 +83,37 @@ def test_operator_dashboard_html_renders_human_control_surface():
     assert "data-pipeline-followup-next-step" in html
 
 
+def test_operator_dashboard_site_surfaces_macro_regime_provider_health():
+    dashboard = build_operator_dashboard(
+        action_plan={"intents": []},
+        market_regime={
+            "risk_regime": "normal",
+            "macro_regime_label": "credit_stress",
+            "provider_status": "ok",
+            "provider_mode": "fredapi",
+            "vix_level": 24.1,
+            "yield_curve_spread": -0.2,
+            "credit_spread": 5.6,
+            "macro_regime_interpretation": {
+                "macro_regime_label": "credit_stress",
+                "severity": "high",
+                "review_trigger": True,
+                "sizing_caution": "tighten_new_buy_sizing",
+                "reasons": ["yield_curve_inverted", "credit_spread_elevated"],
+            },
+        },
+        operator_status={"agent_next_step": {"state": "collect_preflight_artifacts"}},
+    )
+
+    site = build_operator_dashboard_site(dashboard=dashboard, action_plan={"intents": []})
+    html = site["index.html"]
+
+    assert 'id="macro-regime"' in html
+    assert "FRED Provider" in html
+    assert "credit stress" in html.lower()
+    assert "yield curve inverted" in html.lower()
+
+
 def test_operator_dashboard_svg_logo_uses_rail_contrast_variant():
     data_uri = _logo_data_uri()
     assert data_uri.startswith("data:image/svg+xml;base64,")

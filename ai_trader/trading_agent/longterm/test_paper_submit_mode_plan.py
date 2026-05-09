@@ -18,7 +18,8 @@ def _write_json(path: Path, payload: dict) -> Path:
     return path
 
 
-def _ready_artifacts(tmp_path: Path, *, generated_at: str = "2026-05-08T15:00:00Z") -> tuple[Path, Path, Path]:
+def _ready_artifacts(tmp_path: Path, *, generated_at: str | None = None) -> tuple[Path, Path, Path]:
+    generated_at = generated_at or datetime.now(UTC).isoformat().replace("+00:00", "Z")
     handoff = _write_json(
         tmp_path / "scheduler_handoff.json",
         {

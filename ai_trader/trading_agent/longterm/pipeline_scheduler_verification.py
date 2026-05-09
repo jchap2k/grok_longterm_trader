@@ -28,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-runs", type=int, default=1)
     parser.add_argument("--require-resource-bounded", action="store_true")
     parser.add_argument("--require-final-planning-bound", action="store_true")
+    parser.add_argument("--require-fred-provider", action="store_true")
     parser.add_argument(
         "--require-policy-timestamp",
         action="append",
@@ -49,6 +50,7 @@ def run_cli(args: argparse.Namespace) -> int:
         min_runs=args.min_runs,
         require_resource_bounded=args.require_resource_bounded,
         require_final_planning_bound=args.require_final_planning_bound,
+        require_fred_provider=args.require_fred_provider,
         required_policy_timestamps=args.require_policy_timestamp,
     )
     if args.report_output:
@@ -72,6 +74,7 @@ def build_scheduler_cadence_verification_report(
     min_runs: int = 1,
     require_resource_bounded: bool = False,
     require_final_planning_bound: bool = False,
+    require_fred_provider: bool = False,
     required_policy_timestamps: list[str] | None = None,
 ) -> dict[str, Any]:
     scheduler_summary_path = Path(pipeline_scheduler_summary)
@@ -97,6 +100,14 @@ def build_scheduler_cadence_verification_report(
         resource_controls=resource_controls,
         require_resource_bounded=require_resource_bounded,
         require_final_planning_bound=require_final_planning_bound,
+        blockers=blockers,
+        warnings=warnings,
+    )
+    market_regime_path = _market_regime_path(latest_run) if latest_run else None
+    market_regime = _read_json_object(market_regime_path) if market_regime_path else {}
+    _check_market_regime(
+        market_regime=market_regime,
+        require_fred_provider=require_fred_provider,
         blockers=blockers,
         warnings=warnings,
     )
@@ -144,10 +155,17 @@ def build_scheduler_cadence_verification_report(
             "account_refresh_exit_code": latest_run.get("account_refresh_exit_code"),
             "post_run_verification_exit_code": latest_run.get("post_run_verification_exit_code"),
             "scheduler_review_bundle_exit_code": latest_run.get("scheduler_review_bundle_exit_code"),
+            "market_regime_exit_code": latest_run.get("market_regime_exit_code"),
             "blocker": latest_run.get("blocker", ""),
         }
         if latest_run
         else {},
+        "market_regime": {
+            "risk_regime": market_regime.get("risk_regime", ""),
+            "provider_status": market_regime.get("provider_status", ""),
+            "provider_mode": market_regime.get("provider_mode", ""),
+            "macro_regime_label": market_regime.get("macro_regime_label", ""),
+        },
         "resource_controls": resource_controls,
         "policy_state_timestamps": {
             key: policy.get(key, "")
@@ -201,6 +219,7 @@ def _check_latest_run(*, latest_run: dict[str, Any], blockers: list[str]) -> Non
         blockers.append("latest_run_blocker_present")
     for key in (
         "pre_pipeline_refresh_exit_code",
+        "market_regime_exit_code",
         "position_review_queue_exit_code",
         "pipeline_exit_code",
         "scheduler_policy_exit_code",
@@ -275,6 +294,25 @@ def _check_pipeline_summary(*, pipeline: dict[str, Any], blockers: list[str]) ->
         blockers.append("workflow_smoke_submitted_count_nonzero")
 
 
+def _check_market_regime(
+    *,
+    market_regime: dict[str, Any],
+    require_fred_provider: bool,
+    blockers: list[str],
+    warnings: list[str],
+) -> None:
+    if not market_regime:
+        if require_fred_provider:
+            blockers.append("market_regime_missing")
+        else:
+            warnings.append("market_regime_missing")
+        return
+    if not require_fred_provider:
+        return
+    if market_regime.get("provider_status") != "ok" or market_regime.get("provider_mode") != "fredapi":
+        blockers.append("market_regime_provider_not_fredapi_ok")
+
+
 def _check_policy_state(
     *,
     policy_state: dict[str, Any],
@@ -309,6 +347,13 @@ def _default_policy_state_path(scheduler_summary_path: Path) -> Path:
 def _latest_run_path(latest_run: dict[str, Any], filename: str) -> Path | None:
     run_dir = latest_run.get("run_dir") if latest_run else ""
     return Path(run_dir) / filename if str(run_dir or "").strip() else None
+
+
+def _market_regime_path(latest_run: dict[str, Any]) -> Path | None:
+    explicit = latest_run.get("market_regime_path") if latest_run else ""
+    if str(explicit or "").strip():
+        return Path(explicit)
+    return _latest_run_path(latest_run, "market_regime.json")
 
 
 def _read_json_object(path: Path) -> dict[str, Any]:

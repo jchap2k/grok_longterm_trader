@@ -473,3 +473,34 @@ def test_account_action_plan_caps_tlt_when_equity_panic_has_falling_yields(tmp_p
         ("SGOV", 2905.0),
         ("TLT", 1245.0),
     ]
+
+
+def test_account_action_plan_tightens_new_buy_size_under_macro_pressure(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    _record(journal, "MSFT", recommendation="BUY", confidence=82, size=6.0)
+    profile = PortfolioProfile(
+        account_strategy_mode="roth_ira",
+        tradable_capital=50000,
+        protected_symbols=["FXAIX"],
+        defensive_parking_symbol="SPY",
+        low_risk_parking_symbol="SGOV",
+    )
+    state = PortfolioState(cash=10000, protected_symbols=["FXAIX"])
+    regime = MarketRegimeSnapshot(
+        risk_regime="normal",
+        provider_status="ok",
+        provider_mode="fredapi",
+        yield_curve_spread=-0.2,
+        credit_spread=5.5,
+    )
+
+    plan = AccountActionPlanBuilder(market_regime=regime).build(
+        journal,
+        profile=profile,
+        portfolio_state=state,
+    )
+
+    buy = [intent for intent in plan.intents if intent.symbol == "MSFT" and intent.intent_type == "BUY"][0]
+    assert buy.trade_value == 1500.0
+    assert "macro regime caution" in buy.reason.lower()
+    assert buy.risk_review["macro_regime"]["sizing_caution"] == "tighten_new_buy_sizing"

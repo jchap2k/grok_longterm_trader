@@ -19,6 +19,7 @@ def _write_json(path: Path, payload: dict) -> Path:
 
 
 def _ready_inputs(tmp_path: Path) -> SchedulerReviewBundleInputs:
+    generated_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     action_plan = _write_json(tmp_path / "action_plan.json", {"intents": []})
     portfolio = _write_json(tmp_path / "portfolio_state.json", {"cash": 1000, "holdings": []})
     scheduler_policy = _write_json(
@@ -44,7 +45,7 @@ def _ready_inputs(tmp_path: Path) -> SchedulerReviewBundleInputs:
             "mode": "scheduler_handoff_check",
             "status": "ready",
             "ready": True,
-            "generated_at": "2026-05-08T15:00:00Z",
+            "generated_at": generated_at,
             "checks": {"order_submission_boundary": "ready"},
             "order_submission_enabled": False,
             "blockers": [],

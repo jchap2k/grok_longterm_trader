@@ -15,6 +15,7 @@ from longterm.reviewers import (
     BalanceSheetReviewer,
     BusinessStoryReviewer,
     MarginOfSafetyReviewer,
+    MacroRegimeReviewer,
     QualityDurabilityReviewer,
     QualityAtReasonablePriceReviewer,
     ReviewResult,
@@ -59,6 +60,7 @@ class LongTermResearchRunner:
             QualityDurabilityReviewer().review(packet),
             QualityAtReasonablePriceReviewer().review(packet),
             MarginOfSafetyReviewer().review(packet),
+            MacroRegimeReviewer().review(packet),
         ]
 
     @staticmethod

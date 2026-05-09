@@ -7,6 +7,7 @@ import os
 from typing import Any
 
 from longterm.idle_cash_policy import MarketRegimeSnapshot
+from longterm.macro_regime_interpreter import interpret_macro_regime
 
 
 HistoryFetcher = Callable[[str, str], list[Mapping[str, Any]]]
@@ -114,6 +115,16 @@ def build_market_regime_snapshot_from_fred_histories(
             "yield_curve": yield_curve_series,
             "credit_spread": credit_spread_series,
         },
+        "observations": _fred_observation_metadata(
+            {
+                vix_series: vix_rows,
+                sp500_series: sp500_rows,
+                ten_year_series: ten_year_rows,
+                cpi_series: cpi_rows,
+                yield_curve_series: yield_curve_rows,
+                credit_spread_series: credit_spread_rows,
+            }
+        ),
         "interpretation": _fred_interpretation_metadata(
             vix_series=vix_series,
             sp500_series=sp500_series,
@@ -130,6 +141,21 @@ def build_market_regime_snapshot_from_fred_histories(
             credit_spread is not None and credit_spread >= CREDIT_SPREAD_ELEVATED_THRESHOLD_PCT
         ),
     }
+    interpretation = interpret_macro_regime(
+        {
+            "risk_regime": base.risk_regime,
+            "provider_status": "ok",
+            "provider_mode": "fredapi",
+            "vix_level": vix_level,
+            "spy_above_200d": sp500_above_200d,
+            "ten_year_yield_trend": yield_trend,
+            "inflation_pressure": inflation_pressure,
+            "yield_curve_spread": yield_curve_spread,
+            "credit_spread": credit_spread,
+            "macro_signals": macro_signals,
+        }
+    )
+    macro_signals["regime_interpretation"] = interpretation
     reason = " ".join(
         [
             _reason(base, vix_level=vix_level, spy_above_200d=sp500_above_200d, yield_trend=yield_trend),
@@ -148,11 +174,7 @@ def build_market_regime_snapshot_from_fred_histories(
         yield_curve_spread=yield_curve_spread,
         credit_spread=credit_spread,
         macro_signals=macro_signals,
-        macro_regime_label=_macro_regime_label(
-            risk_regime=base.risk_regime,
-            yield_curve_spread=yield_curve_spread,
-            credit_spread=credit_spread,
-        ),
+        macro_regime_label=interpretation["macro_regime_label"],
         provider_status="ok",
         provider_mode="fredapi",
     )
@@ -260,6 +282,21 @@ def market_regime_to_dict(snapshot: MarketRegimeSnapshot) -> dict[str, Any]:
                 "yield_curve_spread": snapshot.yield_curve_spread,
                 "credit_spread": snapshot.credit_spread,
                 "macro_signals": snapshot.macro_signals or {},
+                "macro_regime_interpretation": interpret_macro_regime(
+                    {
+                        "risk_regime": snapshot.risk_regime,
+                        "vix_level": snapshot.vix_level,
+                        "spy_above_200d": snapshot.spy_above_200d,
+                        "ten_year_yield_trend": snapshot.ten_year_yield_trend,
+                        "inflation_pressure": snapshot.inflation_pressure,
+                        "yield_curve_spread": snapshot.yield_curve_spread,
+                        "credit_spread": snapshot.credit_spread,
+                        "provider_status": snapshot.provider_status or "ok",
+                        "provider_mode": snapshot.provider_mode or "",
+                        "provider_warning": snapshot.provider_warning or "",
+                        "macro_signals": snapshot.macro_signals or {},
+                    }
+                ),
             }
         )
     return payload
@@ -368,6 +405,24 @@ def _fred_interpretation_metadata(
             "not_allowed": ["standalone broad sell trigger"],
         },
     }
+
+
+def _fred_observation_metadata(histories: Mapping[str, list[Mapping[str, Any]]]) -> dict[str, dict[str, Any]]:
+    observations: dict[str, dict[str, Any]] = {}
+    for series_id, rows in histories.items():
+        observations[series_id] = {
+            "last_observation_date": _last_date(rows),
+            "observation_count": len(rows),
+        }
+    return observations
+
+
+def _last_date(rows: list[Mapping[str, Any]]) -> str:
+    for row in reversed(rows):
+        value = row.get("date") if isinstance(row, Mapping) else None
+        if value:
+            return str(value)
+    return ""
 
 
 def _macro_regime_label(

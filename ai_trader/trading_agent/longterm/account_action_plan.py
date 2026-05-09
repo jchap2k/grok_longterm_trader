@@ -14,6 +14,7 @@ from longterm.buy_promotion import BuyPromotionReview, BuyPromotionReviewer
 from longterm.capital_alert import _capital_request_suppression_reason
 from longterm.decision_journal import LongTermDecisionJournal
 from longterm.idle_cash_policy import IdleCashDeploymentPolicy, MarketRegimeSnapshot
+from longterm.macro_regime_interpreter import interpret_macro_regime
 from longterm.portfolio_state import PortfolioState
 from longterm.rebalance_planner import RebalancePlanner
 from longterm.report_builder import RecommendationTableBuilder
@@ -238,13 +239,21 @@ class AccountActionPlanBuilder:
                         trade_value = staged["trade_value"]
                         cash_shortfall = staged["cash_shortfall"]
                         planned_reason = f"{planned.reason} {staged['reason']}"
+                buy_risk_payload = _risk_with_promotion(risk_review.to_dict(), promotion_review)
+                macro_caution = _macro_buy_caution(self.market_regime)
+                if macro_caution and trade_value > 0:
+                    trade_value = round(trade_value * float(macro_caution["trade_multiplier"]), 2)
+                    target_value = round(portfolio_state.holding_value(symbol) + trade_value, 2)
+                    cash_shortfall = round(max(0.0, trade_value - float(portfolio_state.cash or 0.0)), 2)
+                    planned_reason = f"{planned_reason} {macro_caution['reason']}"
+                    buy_risk_payload["macro_regime"] = macro_caution["interpretation"]
                 if not risk_review.allowed:
                     reason = "; ".join(risk_review.veto_reasons) or guard_result.reason
                     intents.append(
                         _blocked_intent(
                             row,
                             reason,
-                            risk_review=_risk_with_promotion(risk_review.to_dict(), promotion_review),
+                            risk_review=buy_risk_payload,
                             promotion_review=promotion_review,
                         )
                     )
@@ -256,7 +265,7 @@ class AccountActionPlanBuilder:
                             _blocked_intent(
                                 row,
                                 suppression_reason,
-                                risk_review=_risk_with_promotion(risk_review.to_dict(), promotion_review),
+                                risk_review=buy_risk_payload,
                                 promotion_review=promotion_review,
                             )
                         )
@@ -275,7 +284,7 @@ class AccountActionPlanBuilder:
                                     "additional active-sleeve cash."
                                 ),
                                 decision_id=str(row.get("decision_id") or ""),
-                                risk_review=_risk_with_promotion(risk_review.to_dict(), promotion_review),
+                                risk_review=buy_risk_payload,
                                 promotion_review=_promotion_dict(promotion_review),
                             )
                         )
@@ -292,7 +301,7 @@ class AccountActionPlanBuilder:
                             allowed=True,
                             reason="Staged-entry target is already satisfied; review before adding more.",
                             decision_id=str(row.get("decision_id") or ""),
-                            risk_review=_risk_with_promotion(risk_review.to_dict(), promotion_review),
+                            risk_review=buy_risk_payload,
                             promotion_review=_promotion_dict(promotion_review),
                         )
                     )
@@ -307,7 +316,7 @@ class AccountActionPlanBuilder:
                         allowed=planned.allowed,
                         reason=planned_reason,
                         decision_id=str(row.get("decision_id") or ""),
-                        risk_review=_risk_with_promotion(risk_review.to_dict(), promotion_review),
+                        risk_review=buy_risk_payload,
                         promotion_review=_promotion_dict(promotion_review),
                     )
                 )
@@ -437,6 +446,36 @@ def _risk_with_promotion(risk_review: dict, promotion_review: BuyPromotionReview
 
 def _is_actionable_promotion(review: BuyPromotionReview | None) -> bool:
     return bool(review and review.promotion_decision == "ACTIONABLE_BUY")
+
+
+def _macro_buy_caution(market_regime: MarketRegimeSnapshot | None) -> dict[str, Any] | None:
+    if market_regime is None:
+        return None
+    interpretation = interpret_macro_regime(
+        {
+            "risk_regime": market_regime.risk_regime,
+            "vix_level": market_regime.vix_level,
+            "spy_above_200d": market_regime.spy_above_200d,
+            "ten_year_yield_trend": market_regime.ten_year_yield_trend,
+            "inflation_pressure": market_regime.inflation_pressure,
+            "yield_curve_spread": market_regime.yield_curve_spread,
+            "credit_spread": market_regime.credit_spread,
+            "provider_status": market_regime.provider_status,
+            "provider_mode": market_regime.provider_mode,
+            "provider_warning": market_regime.provider_warning,
+            "macro_signals": market_regime.macro_signals or {},
+        }
+    )
+    if interpretation["sizing_caution"] != "tighten_new_buy_sizing":
+        return None
+    return {
+        "trade_multiplier": 0.5,
+        "interpretation": interpretation,
+        "reason": (
+            "Macro regime caution halves the new-buy trade value; "
+            f"label={interpretation['macro_regime_label']}."
+        ),
+    }
 
 
 def _promotion_reason(review: BuyPromotionReview) -> str:

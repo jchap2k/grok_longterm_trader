@@ -85,6 +85,63 @@ def test_longterm_decision_journal_persists_macro_regime_context_in_packet_json(
     assert packet_payload["macro_regime_context"]["provider_mode"] == "fredapi"
 
 
+def test_longterm_research_runner_includes_macro_regime_reviewer_context():
+    from longterm.research_runner import LongTermResearchRunner
+
+    class FakeClient:
+        captured_context = {}
+
+        def call_with_context(self, _task_prompt, context_sections):
+            self.captured_context = context_sections
+            return '{"recommendation":"PASS","confidence":55}'
+
+    runner = LongTermResearchRunner.__new__(LongTermResearchRunner)
+    runner._client = FakeClient()
+    runner.book_principles_provider = type("P", (), {"recall": lambda self, _query: ""})()
+    runner.active_rules_provider = type("R", (), {"load": lambda self: ""})()
+    runner.review_cadence_policy = type(
+        "C",
+        (),
+        {
+            "assign": lambda self, _packet: type(
+                "Cadence",
+                (),
+                {
+                    "review_cadence": "monthly",
+                    "expected_hold_horizon": "multi_year",
+                    "reason": "default",
+                },
+            )()
+        },
+    )()
+
+    packet = create_research_packet_from_idea(
+        {
+            "symbol": "AAPL",
+            "company_name": "Apple",
+            "idea_source": "manual_watchlist",
+            "business_summary": "Apple has a durable ecosystem with recurring services revenue.",
+            "thesis_summary": "Services, installed base, and pricing power can compound over years.",
+            "primary_growth_driver": "Services growth",
+            "balance_sheet_assessment": "Cash rich with strong free cash flow.",
+            "quality_score": 88,
+            "valuation_score": 65,
+            "macro_regime_context": {
+                "provider_status": "ok",
+                "provider_mode": "fredapi",
+                "risk_regime": "normal",
+                "yield_curve_spread": -0.2,
+                "credit_spread": 5.3,
+            },
+        }
+    )
+
+    context = runner._build_context_sections(packet)
+
+    assert "MacroRegimeReviewer" in context["deterministic_reviews"]
+    assert "credit_spread_elevated" in context["deterministic_reviews"]
+
+
 def test_longterm_decision_journal_updates_outcome_vs_benchmark(tmp_path):
     db_path = tmp_path / "longterm_decisions.db"
     journal = LongTermDecisionJournal(db_path)

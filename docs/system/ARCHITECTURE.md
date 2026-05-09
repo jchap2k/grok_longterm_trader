@@ -366,6 +366,14 @@ Builds deterministic dry-run risk reviews for account-action intents. Reviews ch
 `longterm/idle_cash_policy.py`
 Classifies a supplied market-regime snapshot and chooses where leftover active-sleeve cash should wait after approved stock picks are sized. Normal regimes park in the configured equity index parking symbol such as `SPY`; elevated uncertainty splits parking between equity index exposure and short-duration Treasury exposure such as `SGOV`; inflation/rate-shock volatility defaults to low-risk parking; and classic equity panic with falling yields permits a capped duration hedge such as `TLT`. VIX alone is not treated as permission to buy long-duration bonds.
 
+`longterm/macro_regime_interpreter.py`
+Converts raw FRED/yfinance regime fields into an advisory macro label, severity,
+reasons, review-trigger flag, new-buy posture, and sizing-caution flag. The
+interpreter is deliberately non-authoritative: it can tighten sizing, shorten
+review cadence, inform parking posture, and give the committee a macro caution
+surface, but it cannot authorize broker orders or override thesis/benchmark
+rules.
+
 `longterm/market_regime_snapshot.py`
 Builds the market-regime artifact consumed by idle-cash parking, scheduler
 policy, account refresh, and the dashboard. The original yfinance path remains
@@ -379,7 +387,9 @@ interpretation notes. Every snapshot includes `provider_status` and
 a degraded fallback. If FRED is temporarily unavailable, the CLI falls back to
 the yfinance regime source and, if all providers are down, writes a safe
 `market_data_unavailable` snapshot instead of failing the no-submit scheduler.
-The artifact is advisory and does not submit orders.
+FRED snapshots also include latest observation dates and a
+`macro_regime_interpretation` payload. The artifact is advisory and does not
+submit orders.
 
 `longterm/live_readiness.py`
 Builds a dry-run live-readiness checklist. It reports unmet gates such as benchmark proof, paper trading, broker-capability match, protected-symbol enforcement, manual approval, kill switch, audit logs, broker-read reconciliation, explicit live-mode config, and secrets hygiene. The broker-capability gate prevents Alpaca paper notional/fractional behavior from being treated as proof that a future live broker supports the same sizing model. It does not enable live execution.

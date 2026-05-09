@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from longterm.macro_regime_interpreter import interpret_macro_regime
 from research.research_packet import ResearchPacket
 
 
@@ -287,6 +288,56 @@ class QualityDurabilityReviewer:
             reviewer="QualityDurabilityReviewer",
             score=max(0.0, min(score, 100.0)),
             passed=score >= 70 and bool(support),
+            support=support,
+            objections=objections,
+        )
+
+
+class MacroRegimeReviewer:
+    """Translate advisory macro context into reviewer objections/support."""
+
+    def review(self, packet: ResearchPacket) -> ReviewResult:
+        interpretation = interpret_macro_regime(packet.macro_regime_context)
+        severity = interpretation["severity"]
+        reasons = [str(item) for item in interpretation.get("reasons") or []]
+        support: list[str] = []
+        objections: list[str] = []
+        score = 80.0
+
+        if interpretation["macro_regime_label"] == "not_supplied":
+            return ReviewResult(
+                reviewer="MacroRegimeReviewer",
+                score=70.0,
+                passed=True,
+                support=["Macro regime context was not supplied for this packet."],
+                objections=[],
+            )
+
+        if interpretation.get("provider_healthy"):
+            support.append("FRED provider health is clean for macro context.")
+        else:
+            objections.append("Macro provider is degraded or unavailable; treat regime context cautiously.")
+            score -= 10
+
+        if interpretation.get("review_trigger"):
+            objections.append(
+                "Macro regime pressure should shorten review cadence and require stronger margin of safety."
+            )
+            score -= 25
+        elif severity == "medium":
+            objections.append("Macro regime is cautionary; prefer smaller staged entries.")
+            score -= 12
+        else:
+            support.append("Macro regime does not require extra caution beyond normal discipline.")
+
+        for reason in reasons:
+            target = objections if reason != "provider_status_ok" else support
+            target.append(f"Macro signal: {reason}.")
+
+        return ReviewResult(
+            reviewer="MacroRegimeReviewer",
+            score=max(0.0, min(score, 100.0)),
+            passed=severity not in {"high", "severe"},
             support=support,
             objections=objections,
         )
