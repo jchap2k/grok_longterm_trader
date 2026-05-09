@@ -3288,6 +3288,46 @@ def _html_shell(*, title: str, body: str) -> str:
       -webkit-line-clamp: 4;
     }}
     .ticker-card small {{ display: block; margin-top: 18px; color: var(--accent); font-weight: 800; }}
+    .dashboard-main > .panel,
+    .dashboard-main > .overview-panel,
+    .dashboard-main > #research-board,
+    .dashboard-main > #scheduler-readiness {{
+      color: var(--ink) !important;
+      background:
+        radial-gradient(circle at 96% 0%, rgba(15,107,86,.08), transparent 18rem),
+        linear-gradient(145deg, rgba(255,250,240,.96), rgba(237,224,198,.68)) !important;
+    }}
+    .dashboard-main > .panel .section-heading h2,
+    .dashboard-main > .panel .section-heading h3 {{
+      color: var(--ink) !important;
+      opacity: 1 !important;
+    }}
+    .dashboard-main > .panel .eyebrow {{
+      color: var(--accent-2) !important;
+      opacity: 1 !important;
+    }}
+    .dashboard-main .ticker-card,
+    .dashboard-main .ticker-card:link,
+    .dashboard-main .ticker-card:visited {{
+      color: var(--ink) !important;
+      opacity: 1 !important;
+      background:
+        radial-gradient(circle at 94% 6%, rgba(15,107,86,.08), transparent 8rem),
+        linear-gradient(145deg, rgba(255,250,240,.98), rgba(237,224,198,.78)) !important;
+    }}
+    .dashboard-main .ticker-card span,
+    .dashboard-main .ticker-card em {{
+      color: var(--muted) !important;
+      opacity: 1 !important;
+    }}
+    .dashboard-main .ticker-card strong {{
+      color: var(--ink) !important;
+      opacity: 1 !important;
+    }}
+    .dashboard-main .ticker-card small {{
+      color: var(--accent) !important;
+      opacity: 1 !important;
+    }}
     .ticker-hero {{ display: grid; grid-template-columns: 1fr minmax(220px, 320px); gap: 24px; align-items: end; }}
     .top-nav {{ display: flex; justify-content: space-between; padding: 16px 4px; color: var(--muted); }}
     .price-chart svg {{ width: 100%; height: auto; display: block; }}
