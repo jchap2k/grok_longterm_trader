@@ -11,8 +11,8 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-08 by Codex after preparing the stable no-submit
-scheduler runtime bundle and cloning Kronos for later advisory experiments.
+Last updated: 2026-05-08 by Codex after registering the no-submit scheduler
+and adding a separate read-only dashboard startup launcher.
 
 ## 1. Project Identity
 
@@ -176,6 +176,18 @@ Perplexity state:
 
 Scheduler-readiness features now exist:
 - Pipeline scheduler can run no-submit research/paper refresh chains.
+- The recurring no-submit Windows task is `LongTermTraderNoSubmit`. It remains
+  separate from dashboard startup and keeps `order_submission_enabled=false`.
+- The local dashboard startup path is separate: a per-user Startup shortcut
+  launches
+  `S:\LLM_files\grok_longterm_trader_runtime\no_submit_scheduler\dashboard_server\start_longterm_dashboard.ps1`
+  at logon. That launcher starts only the localhost dashboard server on
+  `127.0.0.1:8765`, exits without starting a duplicate if the port is already
+  listening, and does not run scheduler cycles, broker calls, or LLM calls.
+- A true `LongTermTraderDashboard` Windows Scheduled Task was prepared but the
+  current non-elevated shell was denied registration by Windows; the elevated
+  retry command is saved in
+  `S:\LLM_files\grok_longterm_trader_runtime\no_submit_scheduler\registration_review\dashboard_startup_registration_review.json`.
 - `longterm_pipeline_scheduler.py --preset ongoing-no-submit` builds the
   standard safe chain from core paths: fresh Alpaca paper snapshot, no-submit
   research-to-paper pipeline, advisory scheduler policy, and read-only
