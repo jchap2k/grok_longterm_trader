@@ -30,6 +30,8 @@ def run_cli(args: argparse.Namespace) -> int:
     profile = _load_profile(profile_path)
     profile_args = _profile_args(profile)
     _validate_no_submit_soak_profile(profile_args)
+    max_runs = _max_runs(profile_args)
+    interval_seconds = _interval_seconds(profile_args)
     scheduler_script = working_dir / "scripts" / "longterm_pipeline_scheduler.py"
     preview_command = " ".join(
         [
@@ -54,8 +56,8 @@ def run_cli(args: argparse.Namespace) -> int:
             "output_dir": output_dir,
         },
         "resource_controls": {
-            "max_cycles": int(profile_args.get("max_cycles") or 1),
-            "run_interval_seconds": int(profile_args.get("run_interval_seconds") or 0),
+            "max_runs": max_runs,
+            "interval_seconds": interval_seconds,
             "bounded": True,
         },
         "scheduler_executed": False,
@@ -100,13 +102,21 @@ def _validate_no_submit_soak_profile(profile_args: dict[str, Any]) -> None:
         raise ValueError("Soak preview requires a no-submit run profile, not a validation-only profile.")
     if str(profile_args.get("preset") or "") != "ongoing-no-submit":
         raise ValueError("Soak preview requires preset='ongoing-no-submit'.")
-    if int(profile_args.get("max_cycles") or 0) != 1:
-        raise ValueError("Soak preview requires max_cycles=1.")
-    if int(profile_args.get("run_interval_seconds") or 0) != 0:
-        raise ValueError("Soak preview requires run_interval_seconds=0.")
+    if _max_runs(profile_args) != 1:
+        raise ValueError("Soak preview requires max_runs=1.")
     for key in ("output_dir", "journal_db", "ledger_db", "action_plan"):
         if not str(profile_args.get(key) or "").strip():
             raise ValueError(f"Soak profile is missing required arg: {key}")
+
+
+def _max_runs(profile_args: dict[str, Any]) -> int:
+    return int(profile_args.get("max_runs") or profile_args.get("max_cycles") or 0)
+
+
+def _interval_seconds(profile_args: dict[str, Any]) -> float:
+    if profile_args.get("interval_seconds") is not None:
+        return float(profile_args.get("interval_seconds") or 0)
+    return float(profile_args.get("run_interval_seconds") or 0)
 
 
 def main(argv: list[str] | None = None) -> int:

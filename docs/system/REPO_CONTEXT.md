@@ -437,9 +437,10 @@ Scheduler-readiness features now exist:
   already generated scheduler artifacts.
 - `longterm_scheduler_soak_plan.py` writes a one-cycle no-submit soak preview
   from a reviewed run profile. It requires `preset=ongoing-no-submit`,
-  `max_cycles=1`, `run_interval_seconds=0`, and no submit-capable keys. It
-  prints/writes the preview command and expected artifacts but does not execute
-  the scheduler.
+  scheduler `max_runs=1` (legacy `max_cycles=1` is still accepted), and no
+  submit-capable keys. It prints/writes the preview command and expected
+  artifacts but does not execute the scheduler. `interval_seconds` is reported
+  but does not block a one-run soak because no second cycle can sleep.
 - Dashboard manifests can point at `scheduler_task_registration`,
   `scheduler_launch_packet`, `scheduler_no_submit_smoke`,
   `research_queue_summary`, and `scheduler_soak_plan`; the localhost server

@@ -1109,6 +1109,12 @@ command and expected artifacts; it does not execute the scheduler:
 python scripts/longterm_scheduler_soak_plan.py --profile-file path\to\ongoing_no_submit_scheduler.run.json --output path\to\scheduler_soak_plan.json --json
 ```
 
+The soak preview validates the real scheduler profile controls
+(`max_runs=1`, with legacy `max_cycles=1` still accepted) and rejects any
+submit-capable keys. `interval_seconds` is reported for review, but it is not a
+blocker when `max_runs=1` because the previewed run cannot enter a second-cycle
+sleep.
+
 The config file accepts an `args` object using the same argparse destination
 names as the CLI, for example `journal_db`, `action_plan`, and
 `allow_existing_paper_positions`. Unknown config keys fail closed so typos do
