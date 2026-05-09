@@ -3497,6 +3497,37 @@ def _html_shell(*, title: str, body: str) -> str:
       background: var(--accent);
       border-radius: 999px;
     }}
+    .dashboard-main .compact-list {{
+      display: grid;
+      gap: 8px;
+      margin: 18px 0 0;
+      padding: 0;
+      list-style: none;
+    }}
+    .dashboard-main .compact-list li {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 10px 12px;
+      border: 1px solid rgba(15,107,86,.14);
+      border-radius: 14px;
+      background: rgba(255,250,240,.68) !important;
+      color: var(--ink) !important;
+    }}
+    .dashboard-main .compact-list strong,
+    .dashboard-main .compact-list span,
+    .dashboard-main .compact-list em {{
+      color: var(--ink) !important;
+      opacity: 1 !important;
+      background: transparent !important;
+    }}
+    .dashboard-main .compact-list span,
+    .dashboard-main .compact-list em {{
+      flex: 0 0 auto;
+      color: var(--accent) !important;
+      font-weight: 900;
+    }}
     .section-heading {{ display: flex; justify-content: space-between; gap: 16px; align-items: end; }}
     .safety-strip {{
       padding: 18px 22px;
