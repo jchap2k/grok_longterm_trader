@@ -175,6 +175,10 @@ flowchart LR
 
 `research/research_packet.py`
 Defines the canonical `ResearchPacket` and Lynch-style company categories.
+Research packets can carry a compact `macro_regime_context` copied from the
+current market-regime snapshot. That context is persisted in `packet_json` for
+point-in-time decision traceability and is passed into the decision runner as
+advisory macro context.
 
 `research/intake.py`
 Normalizes raw idea dictionaries into research packets and applies portfolio profile defaults.

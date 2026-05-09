@@ -1,3 +1,4 @@
+import json
 import sqlite3
 import sys
 from pathlib import Path
@@ -53,6 +54,35 @@ def test_longterm_decision_journal_records_decision_with_benchmark_context(tmp_p
     assert row["benchmark_price_at_decision"] == 165.0
     assert row["candidate_price_at_decision"] == 180.0
     assert row["idea_source"] == "manual_watchlist"
+
+
+def test_longterm_decision_journal_persists_macro_regime_context_in_packet_json(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "longterm_decisions.db")
+    packet = create_research_packet_from_idea(
+        {
+            "symbol": "AAPL",
+            "company_name": "Apple",
+            "idea_source": "manual_watchlist",
+            "thesis_summary": "Services and ecosystem durability.",
+            "macro_regime_context": {
+                "risk_regime": "normal",
+                "provider_status": "ok",
+                "provider_mode": "fredapi",
+                "macro_regime_label": "normal",
+            },
+        }
+    )
+
+    decision_id = journal.record_decision(
+        packet,
+        decision={"recommendation": "BUY", "confidence": 82},
+    )
+
+    row = journal.get_decision(decision_id)
+    packet_payload = json.loads(row["packet_json"])
+
+    assert packet_payload["macro_regime_context"]["provider_status"] == "ok"
+    assert packet_payload["macro_regime_context"]["provider_mode"] == "fredapi"
 
 
 def test_longterm_decision_journal_updates_outcome_vs_benchmark(tmp_path):

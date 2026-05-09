@@ -14,6 +14,7 @@ from longterm.decision_journal import LongTermDecisionJournal
 from longterm.benchmark_guard import BenchmarkGuard
 from longterm.discovery import DiscoveryEngine
 from longterm.idle_cash_policy import MarketRegimeSnapshot
+from longterm.market_regime_snapshot import market_regime_to_dict
 from longterm.motley_fool_capture import capture_motley_fool_ideas
 from longterm.motley_fool_settings import (
     MotleyFoolCaptureSettings,
@@ -184,6 +185,8 @@ def run_longterm_cycle(
         packet_idea = {
             key: value for key, value in enriched_idea.items() if not str(key).startswith("_")
         }
+        if market_regime is not None:
+            packet_idea.setdefault("macro_regime_context", market_regime_to_dict(market_regime))
         packet = create_research_packet_from_idea(
             packet_idea,
             profile=profile,
@@ -213,6 +216,7 @@ def run_longterm_cycle(
                 packet,
                 journal_db_path=journal_db_path,
                 portfolio_state=portfolio_state,
+                macro_regime=_format_macro_regime_context(packet.macro_regime_context),
             )
         )
 
@@ -394,6 +398,41 @@ def _missing_fields_from_warnings(warnings: list[str]) -> list[str]:
         elif "missing research context" in warning:
             missing_fields.append("research_context")
     return missing_fields
+
+
+def _format_macro_regime_context(context: Mapping[str, Any] | None) -> str:
+    if not context:
+        return ""
+
+    pieces = [
+        f"risk_regime={context.get('risk_regime') or 'unknown'}",
+        f"macro_regime_label={context.get('macro_regime_label') or context.get('risk_regime') or 'unknown'}",
+        f"provider_status={context.get('provider_status') or 'unknown'}",
+        f"provider_mode={context.get('provider_mode') or 'unknown'}",
+    ]
+    for key in (
+        "vix_level",
+        "ten_year_yield_trend",
+        "inflation_pressure",
+        "yield_curve_spread",
+        "credit_spread",
+    ):
+        value = context.get(key)
+        if value is not None and value != "":
+            pieces.append(f"{key}={value}")
+
+    warning = str(context.get("provider_warning") or "").strip()
+    if warning:
+        pieces.append(f"provider_warning={warning}")
+
+    macro_signals = context.get("macro_signals") or {}
+    policy_boundary = ""
+    if isinstance(macro_signals, Mapping):
+        policy_boundary = str(macro_signals.get("policy_boundary") or "").strip()
+    if policy_boundary:
+        pieces.append(f"policy_boundary={policy_boundary}")
+
+    return "Macro regime snapshot: " + "; ".join(pieces)
 
 
 def _supported_next_actions_kwargs(builder: Callable[..., str], **kwargs: Any) -> dict[str, Any]:

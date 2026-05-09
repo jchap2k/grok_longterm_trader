@@ -1,3 +1,4 @@
+import json
 import sys
 from pathlib import Path
 
@@ -864,6 +865,81 @@ def test_cycle_uses_market_regime_for_idle_cash_parking(tmp_path):
         ("AMZN", "BUY", 850.0),
         ("SPY", "PARK_IDLE_CASH", 4150.0),
     ]
+
+
+def test_cycle_attaches_market_regime_context_to_research_packet_and_runner(tmp_path):
+    class RecordingRunner:
+        def __init__(self):
+            self.packets = []
+            self.macro_contexts = []
+
+        def run_and_record(self, packet, **kwargs):
+            self.packets.append(packet)
+            self.macro_contexts.append(kwargs.get("macro_regime"))
+            return LongTermDecisionJournal(kwargs["journal_db_path"]).record_decision(
+                packet,
+                decision={
+                    "recommendation": "BUY",
+                    "confidence": 78,
+                    "suggested_size_pct": 2.5,
+                    "key_thesis": "AWS and advertising durability.",
+                },
+            )
+
+    runner = RecordingRunner()
+    market_regime = MarketRegimeSnapshot(
+        risk_regime="normal",
+        vix_level=17.08,
+        spy_above_200d=True,
+        ten_year_yield_trend="rising",
+        inflation_pressure=True,
+        yield_curve_spread=0.48,
+        credit_spread=2.79,
+        macro_regime_label="normal",
+        provider_status="ok",
+        provider_mode="fredapi",
+    )
+
+    result = run_longterm_cycle(
+        profile=PortfolioProfile(
+            account_strategy_mode="roth_ira",
+            tradable_capital=34000,
+            protected_symbols=["FXAIX"],
+            benchmark_symbol="FXAIX",
+            defensive_parking_symbol="SPY",
+        ),
+        manual_ideas=[
+            {
+                "symbol": "AMZN",
+                "company_name": "Amazon",
+                "idea_source": "manual",
+                "thesis_summary": "AWS and advertising durability.",
+                "evidence_brief": (
+                    "research_evidence_brief_v1 | AMZN\n"
+                    "Fundamentals: durable growth and acceptable leverage.\n"
+                    "Article evidence: primary-company article (source Reuters, confidence 0.8, basis snippet_grounded).\n"
+                    "Grok catalyst synthesis: AWS and advertising durability."
+                ),
+            }
+        ],
+        motley_fool_settings=MotleyFoolCaptureSettings(enabled=False, cookie_ready=False),
+        runner=runner,
+        journal_db_path=tmp_path / "journal.db",
+        portfolio_state=PortfolioState(cash=5000, protected_symbols=["FXAIX"]),
+        market_regime=market_regime,
+        report_builder_func=lambda journal, *, limit: "",
+        next_actions_builder_func=lambda journal, *, profile, portfolio_state, limit: "",
+    )
+
+    packet_context = runner.packets[0].macro_regime_context
+    row = LongTermDecisionJournal(tmp_path / "journal.db").get_decision(result.decision_ids[0])
+    packet_payload = json.loads(row["packet_json"])
+
+    assert packet_context["provider_status"] == "ok"
+    assert packet_context["provider_mode"] == "fredapi"
+    assert packet_context["vix_level"] == 17.08
+    assert "provider_status=ok" in runner.macro_contexts[0]
+    assert packet_payload["macro_regime_context"]["provider_mode"] == "fredapi"
 
 
 def test_cycle_passes_account_action_plan_into_next_actions_markdown(tmp_path):

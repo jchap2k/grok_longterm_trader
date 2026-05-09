@@ -11,8 +11,8 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-08 by Codex after registering the no-submit scheduler
-and adding a separate read-only dashboard startup launcher.
+Last updated: 2026-05-09 by Codex after adding FRED provider health and
+persisting macro-regime context with research decisions.
 
 ## 1. Project Identity
 
@@ -659,6 +659,11 @@ Current regime source:
   `macro_signals`. Current thresholds are VIX 22/30, CPI annualized pressure
   4%, high-yield spread 5%, yield-curve inversion below 0, and S&P trend vs.
   the 200-day average.
+- During `run_longterm_cycle`, the current market-regime snapshot is copied
+  into each `ResearchPacket.macro_regime_context`, persisted in the decision
+  journal `packet_json`, and summarized into the `macro_regime` context passed
+  to the decision runner. This preserves the point-in-time macro backdrop for
+  later review while keeping the signal advisory.
 - FRED is advisory, not a scheduler hard dependency. If FRED returns a transient
   server/API failure, the market-regime CLI falls back to yfinance; if all
   providers are unavailable, it writes `risk_regime=market_data_unavailable`
