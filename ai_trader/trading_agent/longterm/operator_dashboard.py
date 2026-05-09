@@ -516,6 +516,13 @@ def _site_index_html(
                 {_scheduler_policy_tile(policy)}
               </div>
             </section>
+            {_scheduler_readiness_section(
+                scheduler_config_validation=scheduler_config_validation or {},
+                scheduler_task_plan=scheduler_task_plan or {},
+                scheduler_handoff=scheduler_handoff or {},
+                scheduler_task_registration=scheduler_task_registration or {},
+                scheduler_chain=scheduler_chain or {},
+            )}
             {_api_usage_panel(api_usage or {})}
             <section class="panel" id="coverage">
               <div class="section-heading">
@@ -587,11 +594,7 @@ def _site_index_html(
                 {_safety_chip("Rebalance submit", "hard-blocked")}
               </div>
               {_tax_mode_suppressions_panel(dashboard.get("suppressed_reasons") or [])}
-              {_scheduler_config_validation_panel(scheduler_config_validation or {})}
-              {_scheduler_task_plan_panel(scheduler_task_plan or {})}
-              {_scheduler_handoff_panel(scheduler_handoff or {})}
-              {_scheduler_task_registration_panel(scheduler_task_registration or {})}
-              {_scheduler_chain_panel(scheduler_chain or {})}
+              <p class="safety-note">Scheduler launch evidence is tracked in the dedicated <a href="#scheduler-readiness">Scheduler Readiness</a> section above.</p>
               {_position_review_queue_panel(position_review_queue or {})}
               {_paper_submit_mode_plan_panel(paper_submit_mode_plan or {})}
               {_pipeline_health_panel()}
@@ -640,6 +643,7 @@ def _dashboard_rail() -> str:
         ("scorecards", "Scorecards", "#scorecards"),
         ("evidence-gaps", "Evidence Gaps", "#evidence-gaps"),
         ("portfolio", "Portfolio", "#portfolio"),
+        ("scheduler", "Scheduler", "#scheduler-readiness"),
         ("api-usage", "API Usage", "#api-usage"),
         ("safety", "Safety", "#safety"),
         ("settings", "Settings", "#settings"),
@@ -697,6 +701,13 @@ def _nav_icon(name: str) -> str:
             '<circle cx="12" cy="10" r="1.6"/>'
             '<path d="M7.3 11.2h2"/>'
             '<path d="M14.7 11.2h2"/>'
+        ),
+        "scheduler": (
+            '<rect x="4.5" y="5" width="15" height="13.5" rx="2.2"/>'
+            '<path d="M8 3.8v3.4"/>'
+            '<path d="M16 3.8v3.4"/>'
+            '<path d="M4.8 9h14.4"/>'
+            '<path d="m8 14 2.3 2.2 5.7-5.5"/>'
         ),
         "evidence-gaps": (
             '<circle cx="10.5" cy="10.5" r="5.5"/>'
@@ -1514,6 +1525,48 @@ def _review_simulation_intents_panel(items: list[Mapping[str, Any]]) -> str:
         "</div>"
         "<p>Sell and rebalance candidates remain visible for operator review but are never Stage 6B V1 paper-submit candidates.</p>"
         f"{_intent_rows(visible, empty_label='No review/simulation intents.')}"
+        "</section>"
+    )
+
+
+def _scheduler_readiness_section(
+    *,
+    scheduler_config_validation: Mapping[str, Any],
+    scheduler_task_plan: Mapping[str, Any],
+    scheduler_handoff: Mapping[str, Any],
+    scheduler_task_registration: Mapping[str, Any],
+    scheduler_chain: Mapping[str, Any],
+) -> str:
+    chain_status = _display_label(scheduler_chain.get("status") or "unavailable")
+    registration = (
+        scheduler_chain.get("registration_readiness")
+        if isinstance(scheduler_chain.get("registration_readiness"), Mapping)
+        else {}
+    )
+    registration_status = _display_label(registration.get("status") or scheduler_task_registration.get("status") or "unavailable")
+    blockers = [str(item) for item in (scheduler_chain.get("blockers") or []) if str(item).strip()]
+    blocker_label = ", ".join(_display_label(item) for item in blockers) or "none"
+    submit_label = "off" if scheduler_chain.get("order_submission_enabled") is False else "unknown"
+    return (
+        "<section class=\"panel scheduler-readiness-panel\" id=\"scheduler-readiness\">"
+        "<div class=\"section-heading\">"
+        "<p class=\"eyebrow\">Scheduler Readiness</p>"
+        "<h2>No-Submit Launch Review</h2>"
+        "</div>"
+        "<p>This is the operator checkpoint for unattended monitoring/research. It is separate from broker authorization and keeps order submission disabled.</p>"
+        "<div class=\"scheduler-readiness-strip\">"
+        f"<div><span>Launch Packet</span><strong>{escape(chain_status)}</strong></div>"
+        f"<div><span>Registration</span><strong>{escape(registration_status)}</strong></div>"
+        f"<div><span>Blockers</span><strong>{escape(blocker_label)}</strong></div>"
+        f"<div><span>Broker Submit</span><strong>{escape(submit_label)}</strong></div>"
+        "</div>"
+        "<div class=\"scheduler-card-stack\">"
+        f"{_scheduler_chain_panel(scheduler_chain)}"
+        f"{_scheduler_config_validation_panel(scheduler_config_validation)}"
+        f"{_scheduler_task_plan_panel(scheduler_task_plan)}"
+        f"{_scheduler_handoff_panel(scheduler_handoff)}"
+        f"{_scheduler_task_registration_panel(scheduler_task_registration)}"
+        "</div>"
         "</section>"
     )
 
@@ -2726,6 +2779,56 @@ def _html_shell(*, title: str, body: str) -> str:
       margin-top: 10px;
       color: var(--muted);
       line-height: 1.35;
+    }}
+    .scheduler-readiness-panel {{
+      border-color: rgba(15,107,86,.28);
+      background:
+        radial-gradient(circle at 96% 0%, rgba(125,240,208,.22), transparent 18rem),
+        linear-gradient(145deg, rgba(255,250,240,.88), rgba(237,224,198,.72));
+    }}
+    .scheduler-readiness-strip {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 12px;
+      margin: 20px 0 4px;
+    }}
+    .scheduler-readiness-strip div {{
+      padding: 16px;
+      border: 1px solid rgba(15,107,86,.22);
+      border-radius: 18px;
+      background: rgba(255,250,240,.78);
+    }}
+    .scheduler-readiness-strip span {{
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      font-weight: 900;
+    }}
+    .scheduler-readiness-strip strong {{
+      display: block;
+      margin-top: 8px;
+      font-size: 22px;
+      line-height: 1.1;
+      overflow-wrap: anywhere;
+    }}
+    .scheduler-card-stack {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 14px;
+      margin-top: 18px;
+    }}
+    .scheduler-card-stack .scheduler-validation-card {{
+      margin-top: 0;
+    }}
+    .safety-note {{
+      margin-top: 18px;
+      color: var(--muted);
+    }}
+    .safety-note a {{
+      color: var(--accent);
+      font-weight: 800;
     }}
     .intent-list {{
       display: grid;
