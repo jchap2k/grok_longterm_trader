@@ -178,12 +178,31 @@ Scheduler-readiness features now exist:
 - Pipeline scheduler can run no-submit research/paper refresh chains.
 - The recurring no-submit Windows task is `LongTermTraderNoSubmit`. It remains
   separate from dashboard startup and keeps `order_submission_enabled=false`.
+- First registered-task verification is complete. The original same-day trigger
+  did not backfill because the task was registered after 09:30, so Codex
+  manually started `LongTermTraderNoSubmit` once. Windows reported
+  `LastTaskResult=0`; the launcher wrote `scheduler_runs\run_001`; the scheduler
+  summary completed with `error_count=0`, `success_count=1`, and
+  `order_submission_enabled=false`; and the cadence verifier reported
+  `status=ready` with no blockers.
+- The task action now calls
+  `S:\LLM_files\grok_longterm_trader_runtime\no_submit_scheduler\start_longterm_no_submit_scheduler.ps1`
+  instead of directly calling Python. That runtime launcher sets the
+  trading-agent working directory, writes stdout/stderr/status logs, and runs
+  `refresh_latest_operator_surface.ps1` after successful runs.
+- The latest operator dashboard surface is
+  `S:\LLM_files\grok_longterm_trader_runtime\no_submit_scheduler\scheduler_runs\latest_operator_surface\dashboard_manifest.json`.
+  It merges fresh run artifacts with stable scheduler registration/launch
+  evidence so the live dashboard can show both current run health and
+  no-submit registration readiness. The writer must emit UTF-8 without BOM
+  because the Python dashboard loader rejects BOM-prefixed JSON.
 - The local dashboard startup path is separate: a per-user Startup shortcut
   launches
   `S:\LLM_files\grok_longterm_trader_runtime\no_submit_scheduler\dashboard_server\start_longterm_dashboard.ps1`
   at logon. That launcher starts only the localhost dashboard server on
-  `127.0.0.1:8765`, exits without starting a duplicate if the port is already
-  listening, and does not run scheduler cycles, broker calls, or LLM calls.
+  `127.0.0.1:8765`, uses `--auto-manifest-root` pointed at `scheduler_runs`,
+  exits without starting a duplicate if the port is already listening, and does
+  not run scheduler cycles, broker calls, or LLM calls.
 - A true `LongTermTraderDashboard` Windows Scheduled Task was prepared but the
   current non-elevated shell was denied registration by Windows; the elevated
   retry command is saved in
