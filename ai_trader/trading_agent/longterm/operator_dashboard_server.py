@@ -758,10 +758,11 @@ def _load_json_list_optional(path: Path | None) -> list[dict[str, Any]]:
 
 
 def _empty_api_usage(reason: str, *, source_path: Path | None = None) -> dict[str, Any]:
+    generated_at = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     return {
         "schema_version": 1,
         "mode": "api_usage_summary",
-        "generated_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "generated_at": generated_at,
         "status": "unavailable",
         "source_path": str(source_path or ""),
         "providers": [],
@@ -772,6 +773,7 @@ def _empty_api_usage(reason: str, *, source_path: Path | None = None) -> dict[st
             "total_tokens": 0,
             "estimated_total_cost_usd": 0.0,
         },
+        "cost_history": _api_usage_cost_history([], generated_at=generated_at),
         "tier_tracking": {},
         "warnings": [reason],
         "next_safe_action": "run_or_select_enrichment_artifact_with_usage_summary",
@@ -882,6 +884,10 @@ def _normalize_api_usage_summary_payload(payload: Mapping[str, Any], *, source_p
     providers = _usage_providers_from_payload(payload)
     totals = _api_usage_totals_from_providers(providers)
     raw_totals = payload.get("totals") if isinstance(payload.get("totals"), Mapping) else {}
+    generated_at = str(
+        payload.get("generated_at")
+        or datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    )
     if raw_totals:
         totals = {
             "request_count": int(_number(_first_present(raw_totals.get("request_count"), totals["request_count"]))),
@@ -925,14 +931,12 @@ def _normalize_api_usage_summary_payload(payload: Mapping[str, Any], *, source_p
     return {
         "schema_version": int(_number(payload.get("schema_version")) or 1),
         "mode": "api_usage_summary",
-        "generated_at": str(
-            payload.get("generated_at")
-            or datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-        ),
+        "generated_at": generated_at,
         "status": str(payload.get("status") or "available"),
         "source_path": str(payload.get("source_path") or source_path),
         "providers": providers,
         "totals": totals,
+        "cost_history": _api_usage_cost_history(providers, generated_at=generated_at),
         "tier_tracking": tier_tracking,
         "warnings": [str(item) for item in payload.get("warnings") or []],
         "next_safe_action": str(
@@ -943,6 +947,7 @@ def _normalize_api_usage_summary_payload(payload: Mapping[str, Any], *, source_p
 
 
 def _api_usage_summary_from_providers(providers: list[dict[str, Any]], *, source_path: Path) -> dict[str, Any]:
+    generated_at = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     totals = {
         **_api_usage_totals_from_providers(providers),
     }
@@ -950,11 +955,12 @@ def _api_usage_summary_from_providers(providers: list[dict[str, Any]], *, source
     return {
         "schema_version": 1,
         "mode": "api_usage_summary",
-        "generated_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "generated_at": generated_at,
         "status": "available",
         "source_path": str(source_path),
         "providers": providers,
         "totals": totals,
+        "cost_history": _api_usage_cost_history(providers, generated_at=generated_at),
         "tier_tracking": tier_tracking,
         "warnings": [],
         "next_safe_action": "review_usage_before_large_paid_enrichment_runs",
@@ -979,6 +985,58 @@ def _api_usage_totals_from_providers(providers: list[Mapping[str, Any]]) -> dict
     }
 
 
+def _api_usage_cost_history(
+    providers: list[Mapping[str, Any]],
+    *,
+    generated_at: str,
+) -> dict[str, Any]:
+    """Build UTC month spend history from normalized provider usage rows."""
+    current_month = _usage_month_key(generated_at) or datetime.now(UTC).strftime("%Y-%m")
+    monthly: dict[str, float] = {}
+    unknown_spend = 0.0
+    for provider in providers:
+        cost = float(_number(provider.get("estimated_total_cost_usd")))
+        if cost <= 0.0:
+            continue
+        month = _usage_month_key(str(provider.get("occurred_at") or "")) or current_month
+        monthly[month] = round(monthly.get(month, 0.0) + cost, 6)
+    total_spend = round(sum(monthly.values()) + unknown_spend, 6)
+    completed = {
+        month: amount
+        for month, amount in monthly.items()
+        if month < current_month
+    }
+    completed_count = len(completed)
+    completed_total = round(sum(completed.values()), 6)
+    average = round(completed_total / completed_count, 6) if completed_count else None
+    return {
+        "current_month": current_month,
+        "current_month_spend_usd": round(monthly.get(current_month, 0.0), 6),
+        "total_spend_usd": total_spend,
+        "completed_month_count": completed_count,
+        "completed_month_total_spend_usd": completed_total,
+        "average_completed_month_spend_usd": average,
+        "average_status": "available" if completed_count else "pending_first_completed_month",
+        "monthly_spend": {month: monthly[month] for month in sorted(monthly)},
+        "unknown_date_spend_usd": round(unknown_spend, 6),
+    }
+
+
+def _usage_month_key(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if len(text) >= 7 and text[4] == "-" and text[:4].isdigit() and text[5:7].isdigit():
+        return text[:7]
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return ""
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC).strftime("%Y-%m")
+
+
 def _usage_providers_from_payload(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
     raw_values: list[Any] = []
     if isinstance(payload.get("research_model_usage"), Mapping):
@@ -991,12 +1049,20 @@ def _usage_providers_from_payload(payload: Mapping[str, Any]) -> list[dict[str, 
     for raw in raw_values:
         if not isinstance(raw, Mapping):
             continue
-        provider = str(raw.get("provider") or raw.get("client") or raw.get("source") or "unknown").strip()
+        provider = str(
+            raw.get("provider")
+            or raw.get("client")
+            or raw.get("source")
+            or raw.get("api_backend")
+            or "unknown"
+        ).strip()
         model = str(raw.get("model") or raw.get("model_name") or "").strip()
         if not provider and not model:
             continue
-        prompt_tokens = int(_number(raw.get("prompt_tokens")))
-        completion_tokens = int(_number(raw.get("completion_tokens")))
+        prompt_tokens = int(_number(_first_present(raw.get("prompt_tokens"), raw.get("total_input_tokens"))))
+        completion_tokens = int(
+            _number(_first_present(raw.get("completion_tokens"), raw.get("total_output_tokens")))
+        )
         total_tokens = int(_number(raw.get("total_tokens"))) or prompt_tokens + completion_tokens
         request_fees = round(
             float(_number(_first_present(raw.get("request_fees_usd"), raw.get("request_fee_usd")))),
@@ -1014,6 +1080,7 @@ def _usage_providers_from_payload(payload: Mapping[str, Any]) -> list[dict[str, 
             _number(
                 _first_present(
                     raw.get("web_search_call_count"),
+                    raw.get("total_web_search_call_count"),
                     raw.get("web_search_calls"),
                     raw.get("web_search_invocation_count"),
                     raw.get("web_search_invocations"),
@@ -1026,12 +1093,16 @@ def _usage_providers_from_payload(payload: Mapping[str, Any]) -> list[dict[str, 
         )
         if web_search_cost <= 0.0 and web_search_call_count:
             web_search_cost = _tool_invocation_cost_usd("web_search", web_search_call_count)
-        tool_invocation_count = int(_number(raw.get("tool_invocation_count"))) or web_search_call_count
+        tool_invocation_count = (
+            int(_number(_first_present(raw.get("tool_invocation_count"), raw.get("total_tool_invocation_count"))))
+            or web_search_call_count
+        )
         tool_cost = round(
             float(
                 _number(
                     _first_present(
                         raw.get("tool_cost_usd"),
+                        raw.get("total_tool_cost_usd"),
                         raw.get("tool_invocation_cost_usd"),
                         raw.get("server_side_tool_cost_usd"),
                     )
@@ -1042,7 +1113,12 @@ def _usage_providers_from_payload(payload: Mapping[str, Any]) -> list[dict[str, 
         if tool_cost <= 0.0:
             tool_cost = web_search_cost
         explicit_total_cost = _optional_number(
-            _first_present(raw.get("estimated_total_cost_usd"), raw.get("estimated_cost_usd"))
+            _first_present(
+                raw.get("grand_total_cost_usd"),
+                raw.get("provider_reported_cost_usd"),
+                raw.get("estimated_total_cost_usd"),
+                raw.get("estimated_cost_usd"),
+            )
         )
         component_total_cost = round(request_fees + input_token_cost + output_token_cost + tool_cost, 6)
         estimated_total_cost = (
@@ -1067,6 +1143,16 @@ def _usage_providers_from_payload(payload: Mapping[str, Any]) -> list[dict[str, 
                 "tool_cost_usd": tool_cost,
                 "web_search_cost_usd": web_search_cost,
                 "estimated_total_cost_usd": estimated_total_cost,
+                "occurred_at": str(
+                    _first_present(
+                        raw.get("occurred_at"),
+                        raw.get("timestamp"),
+                        raw.get("created_at"),
+                        raw.get("completed_at"),
+                        raw.get("date"),
+                    )
+                    or ""
+                ),
                 "credits_purchased_to_date_usd": _optional_number(raw.get("credits_purchased_to_date_usd")),
                 "tier_1_credit_target_usd": _optional_number(raw.get("tier_1_credit_target_usd")),
                 "estimated_progress_to_tier_1_usd": _optional_number(raw.get("estimated_progress_to_tier_1_usd")),

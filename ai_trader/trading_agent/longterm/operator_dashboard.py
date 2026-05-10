@@ -1810,6 +1810,7 @@ def _api_usage_panel(api_usage: Mapping[str, Any] | None) -> str:
     providers = [dict(item) for item in usage.get("providers") or [] if isinstance(item, Mapping)]
     totals = usage.get("totals") if isinstance(usage.get("totals"), Mapping) else {}
     tier = usage.get("tier_tracking") if isinstance(usage.get("tier_tracking"), Mapping) else {}
+    cost_history = usage.get("cost_history") if isinstance(usage.get("cost_history"), Mapping) else {}
     usage_available = _api_usage_is_available(usage, providers=providers)
     if not providers:
         empty_label = "No Paid Usage Yet" if usage_available else "Usage Unavailable"
@@ -1834,6 +1835,14 @@ def _api_usage_panel(api_usage: Mapping[str, Any] | None) -> str:
     cost_text = _money_cents(totals.get("estimated_total_cost_usd")) if usage_available else "n/a"
     request_text = str(int(_number(totals.get("request_count")))) if usage_available else "n/a"
     token_text = f"{int(_number(totals.get('total_tokens'))):,}" if usage_available else "n/a"
+    current_month_spend = _money_cents(cost_history.get("current_month_spend_usd")) if usage_available else "n/a"
+    total_spend = _money_cents(cost_history.get("total_spend_usd")) if usage_available else "n/a"
+    average_spend_value = cost_history.get("average_completed_month_spend_usd")
+    average_spend = (
+        _money_cents(average_spend_value)
+        if usage_available and average_spend_value not in (None, "")
+        else "pending"
+    )
     return (
         "<section class=\"panel\" id=\"api-usage\">"
         "<div class=\"section-heading\">"
@@ -1847,6 +1856,11 @@ def _api_usage_panel(api_usage: Mapping[str, Any] | None) -> str:
         f"<div><span>Requests</span><strong data-api-usage-total=\"request_count\">{escape(request_text)}</strong></div>"
         f"<div><span>Tokens</span><strong data-api-usage-total=\"total_tokens\">{escape(token_text)}</strong></div>"
         f"<div><span>Tier 1 Remaining</span><strong data-api-usage-tier=\"remaining\">{escape(remaining_text)}</strong></div>"
+        "</div>"
+        "<div class=\"api-usage-total-grid api-usage-history-grid\">"
+        f"<div><span>Current Month Spend</span><strong data-api-usage-history=\"current_month_spend_usd\">{escape(current_month_spend)}</strong></div>"
+        f"<div><span>Total Tracked Spend</span><strong data-api-usage-history=\"total_spend_usd\">{escape(total_spend)}</strong></div>"
+        f"<div><span>Avg Completed Month</span><strong data-api-usage-history=\"average_completed_month_spend_usd\">{escape(average_spend)}</strong></div>"
         "</div>"
         f"<div class=\"usage-progress\" aria-label=\"Perplexity tier progress\"><i data-api-usage-progress style=\"width:{progress:.1f}%\"></i></div>"
         "<div class=\"usage-provider-grid\" data-api-usage-providers>"
@@ -2267,6 +2281,9 @@ def _api_usage_refresh_script() -> str:
   const requestCount = card.querySelector('[data-api-usage-total="request_count"]');
   const totalTokens = card.querySelector('[data-api-usage-total="total_tokens"]');
   const remaining = card.querySelector('[data-api-usage-tier="remaining"]');
+  const currentMonthSpend = card.querySelector('[data-api-usage-history="current_month_spend_usd"]');
+  const totalTrackedSpend = card.querySelector('[data-api-usage-history="total_spend_usd"]');
+  const averageCompletedMonthSpend = card.querySelector('[data-api-usage-history="average_completed_month_spend_usd"]');
   const progress = card.querySelector("[data-api-usage-progress]");
   const providerGrid = card.querySelector("[data-api-usage-providers]");
   const updated = card.querySelector("[data-api-usage-updated]");
@@ -2294,12 +2311,20 @@ def _api_usage_refresh_script() -> str:
   function render(payload) {
     const totals = payload.totals || {};
     const tier = payload.tier_tracking || {};
+    const costHistory = payload.cost_history || {};
     const providers = Array.isArray(payload.providers) ? payload.providers : [];
     const usageAvailable = payload.status === "available" || providers.length > 0;
     if (totalCost) totalCost.textContent = usageAvailable ? money(totals.estimated_total_cost_usd) : "n/a";
     if (requestCount) requestCount.textContent = usageAvailable ? String(totals.request_count || 0) : "n/a";
     if (totalTokens) totalTokens.textContent = usageAvailable ? Number(totals.total_tokens || 0).toLocaleString() : "n/a";
     if (remaining) remaining.textContent = tier.estimated_remaining_to_tier_1_usd == null ? "n/a" : money(tier.estimated_remaining_to_tier_1_usd);
+    if (currentMonthSpend) currentMonthSpend.textContent = usageAvailable ? money(costHistory.current_month_spend_usd) : "n/a";
+    if (totalTrackedSpend) totalTrackedSpend.textContent = usageAvailable ? money(costHistory.total_spend_usd) : "n/a";
+    if (averageCompletedMonthSpend) {
+      averageCompletedMonthSpend.textContent = usageAvailable && costHistory.average_completed_month_spend_usd != null
+        ? money(costHistory.average_completed_month_spend_usd)
+        : "pending";
+    }
     if (progress) progress.style.width = `${Math.max(0, Math.min(100, Number(tier.progress_percent || 0)))}%`;
     if (providerGrid) {
       providerGrid.innerHTML = providers.length ? providers.map(providerCard).join("") : (

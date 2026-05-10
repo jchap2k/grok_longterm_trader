@@ -12,6 +12,15 @@ from typing import Any, Mapping
 from research.research_packet import ResearchPacket
 
 
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+    """Add a SQLite column when opening an existing DB created by older code."""
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    existing = {str(row[1]) for row in rows}
+    if column in existing:
+        return
+    conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
 class LongTermDecisionJournal:
     """Persist long-term decisions and later compare them against a benchmark."""
 
@@ -52,10 +61,12 @@ class LongTermDecisionJournal:
                     outcome_notes TEXT,
                     packet_json TEXT NOT NULL,
                     decision_json TEXT NOT NULL,
-                    raw_response TEXT
+                    raw_response TEXT,
+                    usage_json TEXT
                 )
                 """
             )
+            _ensure_column(conn, "longterm_decision_journal", "usage_json", "TEXT")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS longterm_action_plan_journal (
@@ -183,6 +194,7 @@ class LongTermDecisionJournal:
         candidate_price: float | None = None,
         benchmark_price: float | None = None,
         raw_response: str = "",
+        usage: Mapping[str, Any] | None = None,
     ) -> str:
         """Record one long-term research decision."""
         decision_id = str(uuid.uuid4())
@@ -200,8 +212,8 @@ class LongTermDecisionJournal:
                     recommendation, confidence, suggested_size_pct, key_thesis,
                     benchmark_symbol, candidate_price_at_decision,
                     benchmark_price_at_decision, packet_json, decision_json,
-                    raw_response
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    raw_response, usage_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     decision_id,
@@ -219,6 +231,7 @@ class LongTermDecisionJournal:
                     json.dumps(packet.to_dict(), sort_keys=True),
                     json.dumps(dict(decision), sort_keys=True),
                     raw_response,
+                    json.dumps(dict(usage), sort_keys=True) if usage else None,
                 ),
             )
             conn.commit()
@@ -297,7 +310,8 @@ class LongTermDecisionJournal:
                        recommendation, confidence, suggested_size_pct, key_thesis,
                        benchmark_symbol, candidate_price_at_decision,
                        benchmark_price_at_decision, candidate_return_pct,
-                       benchmark_return_pct, excess_return_pct, outcome_updated_at
+                       benchmark_return_pct, excess_return_pct, outcome_updated_at,
+                       usage_json
                 FROM longterm_decision_journal
                 ORDER BY timestamp DESC
                 LIMIT ?
@@ -412,7 +426,7 @@ class LongTermDecisionJournal:
                 """
                 SELECT decision_id, timestamp, symbol, company_name, recommendation,
                        confidence, key_thesis, packet_json, decision_json,
-                       outcome_updated_at
+                       outcome_updated_at, usage_json
                 FROM longterm_decision_journal
                 ORDER BY timestamp DESC
                 LIMIT ?
@@ -1017,7 +1031,7 @@ class LongTermDecisionJournal:
                 f"""
                 SELECT rowid, decision_id, timestamp, symbol, company_name,
                        recommendation, confidence, suggested_size_pct,
-                       key_thesis, packet_json, decision_json
+                       key_thesis, packet_json, decision_json, usage_json
                 FROM longterm_decision_journal
                 WHERE recommendation IN ('BUY', 'ADD', 'HOLD')
                 {where_symbol}

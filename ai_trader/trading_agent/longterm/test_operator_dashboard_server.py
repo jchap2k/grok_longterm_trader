@@ -276,6 +276,58 @@ def test_dashboard_server_normalizes_api_usage_cost_aliases(tmp_path):
     assert 'data-api-usage-total="estimated_total_cost_usd">$0.02' in html
 
 
+def test_dashboard_server_normalizes_cgh_last_usage_shape(tmp_path):
+    action_plan = tmp_path / "action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    api_usage = tmp_path / "api_usage.json"
+    manifest_path = tmp_path / "dashboard_manifest.json"
+    action_plan.write_text(json.dumps({"intents": []}), encoding="utf-8")
+    portfolio.write_text(json.dumps({"holdings": []}), encoding="utf-8")
+    api_usage.write_text(
+        json.dumps(
+            {
+                "mode": "api_usage_summary",
+                "providers": [
+                    {
+                        "api_backend": "xai_sdk",
+                        "model": "grok-4.3",
+                        "request_count": 5,
+                        "total_input_tokens": 1200,
+                        "total_output_tokens": 350,
+                        "total_web_search_call_count": 2,
+                        "total_tool_cost_usd": 0.01,
+                        "grand_total_cost_usd": 0.0245,
+                        "occurred_at": "2026-05-10T09:35:00Z",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest_path.write_text(
+        json.dumps(
+            build_dashboard_manifest(
+                action_plan=action_plan,
+                portfolio_state=portfolio,
+                api_usage=api_usage,
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    usage = build_api_usage_from_manifest(load_dashboard_manifest(manifest_path))
+    provider = usage["providers"][0]
+
+    assert provider["provider"] == "xai_sdk"
+    assert provider["prompt_tokens"] == 1200
+    assert provider["completion_tokens"] == 350
+    assert provider["total_tokens"] == 1550
+    assert provider["web_search_call_count"] == 2
+    assert provider["tool_cost_usd"] == 0.01
+    assert provider["estimated_total_cost_usd"] == 0.0245
+    assert usage["totals"]["estimated_total_cost_usd"] == 0.0245
+
+
 def test_dashboard_server_includes_xai_web_search_tool_cost(tmp_path):
     action_plan = tmp_path / "action_plan.json"
     portfolio = tmp_path / "portfolio.json"
@@ -328,6 +380,122 @@ def test_dashboard_server_includes_xai_web_search_tool_cost(tmp_path):
     assert usage["totals"]["estimated_total_cost_usd"] == 0.02125
     assert status == 200
     assert "3 tools" in html
+
+
+def test_dashboard_server_cost_history_waits_for_completed_month(tmp_path):
+    action_plan = tmp_path / "action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    api_usage = tmp_path / "api_usage.json"
+    manifest_path = tmp_path / "dashboard_manifest.json"
+    action_plan.write_text(json.dumps({"intents": []}), encoding="utf-8")
+    portfolio.write_text(json.dumps({"holdings": []}), encoding="utf-8")
+    api_usage.write_text(
+        json.dumps(
+            {
+                "mode": "api_usage_summary",
+                "generated_at": "2026-05-10T17:00:00Z",
+                "providers": [
+                    {
+                        "provider": "xai",
+                        "model": "grok-4.3",
+                        "request_count": 3,
+                        "estimated_total_cost_usd": 0.025,
+                        "tool_cost_usd": 0.01,
+                        "web_search_call_count": 2,
+                        "occurred_at": "2026-05-10T16:30:00Z",
+                    }
+                ],
+                "order_submission_enabled": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest_path.write_text(
+        json.dumps(
+            build_dashboard_manifest(
+                action_plan=action_plan,
+                portfolio_state=portfolio,
+                api_usage=api_usage,
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    usage = build_api_usage_from_manifest(load_dashboard_manifest(manifest_path))
+    history = usage["cost_history"]
+
+    assert history["current_month"] == "2026-05"
+    assert history["current_month_spend_usd"] == 0.025
+    assert history["total_spend_usd"] == 0.025
+    assert history["completed_month_count"] == 0
+    assert history["average_completed_month_spend_usd"] is None
+    assert history["average_status"] == "pending_first_completed_month"
+
+
+def test_dashboard_server_cost_history_averages_completed_months(tmp_path):
+    action_plan = tmp_path / "action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    api_usage = tmp_path / "api_usage.json"
+    manifest_path = tmp_path / "dashboard_manifest.json"
+    action_plan.write_text(json.dumps({"intents": []}), encoding="utf-8")
+    portfolio.write_text(json.dumps({"holdings": []}), encoding="utf-8")
+    api_usage.write_text(
+        json.dumps(
+            {
+                "mode": "api_usage_summary",
+                "generated_at": "2026-07-03T12:00:00Z",
+                "providers": [
+                    {
+                        "provider": "xai",
+                        "model": "grok-4.3",
+                        "request_count": 3,
+                        "estimated_total_cost_usd": 10.0,
+                        "occurred_at": "2026-05-15T12:00:00Z",
+                    },
+                    {
+                        "provider": "perplexity",
+                        "model": "sonar",
+                        "request_count": 2,
+                        "estimated_total_cost_usd": 20.0,
+                        "occurred_at": "2026-06-15T12:00:00Z",
+                    },
+                    {
+                        "provider": "xai",
+                        "model": "grok-4.3",
+                        "request_count": 1,
+                        "estimated_total_cost_usd": 5.0,
+                        "occurred_at": "2026-07-02T12:00:00Z",
+                    },
+                ],
+                "order_submission_enabled": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest_path.write_text(
+        json.dumps(
+            build_dashboard_manifest(
+                action_plan=action_plan,
+                portfolio_state=portfolio,
+                api_usage=api_usage,
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    usage = build_api_usage_from_manifest(load_dashboard_manifest(manifest_path))
+    history = usage["cost_history"]
+
+    assert history["current_month"] == "2026-07"
+    assert history["current_month_spend_usd"] == 5.0
+    assert history["total_spend_usd"] == 35.0
+    assert history["completed_month_count"] == 2
+    assert history["average_completed_month_spend_usd"] == 15.0
+    assert history["monthly_spend"] == {
+        "2026-05": 10.0,
+        "2026-06": 20.0,
+        "2026-07": 5.0,
+    }
 
 
 def test_dashboard_server_does_not_show_zero_cost_when_api_usage_is_unavailable(tmp_path):

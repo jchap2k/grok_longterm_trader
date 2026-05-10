@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from portfolio.portfolio_profile import PortfolioProfile
 from research.intake import create_research_packet_from_idea
 from longterm.portfolio_state import PortfolioState
+from longterm.decision_journal import LongTermDecisionJournal
 from longterm.research_runner import LongTermResearchRunner
 from research.research_packet import CompanyCategory
 
@@ -410,7 +411,18 @@ def test_longterm_agent_specs_include_active_rules_for_every_committee_role():
 def test_longterm_research_runner_records_structured_decision(monkeypatch, tmp_path):
     class FakeCheapGrokHeavy:
         def __init__(self, **kwargs):
-            pass
+            self.last_usage = {
+                "model": "grok-4.3",
+                "api_backend": "xai_sdk",
+                "request_count": 3,
+                "total_input_tokens": 1200,
+                "total_output_tokens": 300,
+                "total_tool_invocation_count": 2,
+                "total_web_search_call_count": 2,
+                "total_tool_cost_usd": 0.01,
+                "grand_total_cost_usd": 0.025,
+                "cost_basis": "estimated",
+            }
 
         def call_with_context(self, task_prompt, context_sections=None, **_kwargs):
             return (
@@ -457,3 +469,38 @@ def test_longterm_research_runner_records_structured_decision(monkeypatch, tmp_p
     assert row["confidence"] == 84
     assert row["suggested_size_pct"] == 6.0
     assert row["benchmark_symbol"] == "FXAIX"
+    usage = json.loads(row["usage_json"])
+    assert usage["model"] == "grok-4.3"
+    assert usage["grand_total_cost_usd"] == 0.025
+    assert usage["total_web_search_call_count"] == 2
+
+
+def test_decision_journal_usage_json_is_nullable_and_backward_compatible(tmp_path):
+    journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    packet = create_research_packet_from_idea(
+        {
+            "symbol": "AAPL",
+            "company_name": "Apple",
+            "thesis_summary": "Ecosystem durability.",
+        }
+    )
+
+    first_id = journal.record_decision(
+        packet,
+        decision={"recommendation": "HOLD", "confidence": 71, "key_thesis": "Watch valuation."},
+    )
+    second_id = journal.record_decision(
+        packet,
+        decision={"recommendation": "BUY", "confidence": 82, "key_thesis": "Durable compounder."},
+        usage={
+            "model": "grok-4.3",
+            "grand_total_cost_usd": 0.012,
+            "total_web_search_call_count": 1,
+        },
+    )
+
+    assert journal.get_decision(first_id)["usage_json"] is None
+    usage = json.loads(journal.get_decision(second_id)["usage_json"])
+    assert usage["grand_total_cost_usd"] == 0.012
+    recent = journal.list_recent_decisions(limit=2)
+    assert "usage_json" in recent[0]

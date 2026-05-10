@@ -310,16 +310,28 @@ def _provider_usage_review(
     providers = _usage_providers(usage)
     request_count = int(sum(_number(item.get("request_count")) for item in providers))
     estimated_cost = round(sum(_usage_cost(item) for item in providers), 4)
+    tool_invocation_count = int(sum(_usage_tool_invocation_count(item) for item in providers))
+    web_search_call_count = int(sum(_usage_web_search_call_count(item) for item in providers))
+    tool_cost = round(sum(_usage_tool_cost(item) for item in providers), 4)
     totals = usage.get("totals") if isinstance(usage.get("totals"), Mapping) else {}
     if totals:
         request_count = int(_number(totals.get("request_count")) or request_count)
         estimated_cost = round(_usage_cost(totals) or estimated_cost, 4)
+        tool_invocation_count = int(_usage_tool_invocation_count(totals) or tool_invocation_count)
+        web_search_call_count = int(_usage_web_search_call_count(totals) or web_search_call_count)
+        tool_cost = round(_usage_tool_cost(totals) or tool_cost, 4)
     tier_tracking = _tier_tracking(providers, usage)
     return {
         "status": "tracked",
-        "providers": [str(item.get("provider") or item.get("model_provider") or "unknown") for item in providers],
+        "providers": [
+            str(item.get("provider") or item.get("model_provider") or item.get("api_backend") or "unknown")
+            for item in providers
+        ],
         "total_request_count": request_count,
         "estimated_total_cost_usd": estimated_cost,
+        "tool_invocation_count": tool_invocation_count,
+        "web_search_call_count": web_search_call_count,
+        "tool_cost_usd": tool_cost,
         "tier_tracking": tier_tracking,
         "order_submission_enabled": False,
         "next_safe_action": "review_provider_usage_and_tier_progress_before_large_runs",
@@ -347,18 +359,45 @@ def _usage_providers(usage: Mapping[str, Any]) -> list[Mapping[str, Any]]:
 
 
 def _usage_cost(usage: Mapping[str, Any]) -> float:
-    explicit = _number(usage.get("estimated_total_cost_usd") or usage.get("estimated_cost_usd"))
+    explicit = _number(
+        usage.get("grand_total_cost_usd")
+        or usage.get("provider_reported_cost_usd")
+        or usage.get("estimated_total_cost_usd")
+        or usage.get("estimated_cost_usd")
+    )
     if explicit > 0:
         return explicit
     return (
         _number(usage.get("request_fees_usd") or usage.get("request_fee_usd"))
         + _number(usage.get("input_token_cost_usd") or usage.get("input_cost_usd"))
         + _number(usage.get("output_token_cost_usd") or usage.get("output_cost_usd"))
-        + _number(
-            usage.get("tool_cost_usd")
-            or usage.get("tool_invocation_cost_usd")
-            or usage.get("server_side_tool_cost_usd")
-        )
+        + _usage_tool_cost(usage)
+    )
+
+
+def _usage_tool_invocation_count(usage: Mapping[str, Any]) -> float:
+    return _number(
+        usage.get("tool_invocation_count")
+        or usage.get("total_tool_invocation_count")
+        or usage.get("server_side_tool_invocation_count")
+    )
+
+
+def _usage_web_search_call_count(usage: Mapping[str, Any]) -> float:
+    return _number(
+        usage.get("web_search_call_count")
+        or usage.get("total_web_search_call_count")
+        or usage.get("web_search_calls")
+        or usage.get("web_search_invocation_count")
+    )
+
+
+def _usage_tool_cost(usage: Mapping[str, Any]) -> float:
+    return _number(
+        usage.get("tool_cost_usd")
+        or usage.get("total_tool_cost_usd")
+        or usage.get("tool_invocation_cost_usd")
+        or usage.get("server_side_tool_cost_usd")
     )
 
 

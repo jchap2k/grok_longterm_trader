@@ -11,8 +11,9 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-10 by Codex after pushing the CGH native xAI SDK
-backend/cost-tracking branch and refreshing long-term operator context.
+Last updated: 2026-05-10 by Codex after merging CGH/native xAI SDK cost
+tracking into `main` and wiring usage persistence through journal, dashboard,
+and scheduler launch review surfaces.
 
 ## 1. Project Identity
 
@@ -97,11 +98,11 @@ Grok 4.1 fast models are being deprecated on 2026-05-15. Current policy:
 - Keep paid enrichment capped, resumable, and tracked for cost/API usage.
 
 CheapGrokHeavy / CGH state:
-- Current pushed CGH branch is `codex/cgh-xai-sdk-cost-tracking`.
-- CGH commit `3083bf2` switched `agent/utils/cheap_grok_heavy.py` to use the
-  native `xai_sdk` backend by default through `api_backend="xai_sdk"`.
-- Follow-up commit `cbe40bf` clarified stale comments/test names so the code no
-  longer reads as OpenAI-based by default.
+- CGH native xAI SDK cost tracking is now on `main`.
+- `agent/utils/cheap_grok_heavy.py` uses the native `xai_sdk` backend by
+  default through `api_backend="xai_sdk"`.
+- Comments/tests were clarified so the code no longer reads as OpenAI-based by
+  default.
 - `openai_compat` remains available only as an explicit diagnostic fallback via
   `api_backend="openai_compat"`; it is not the default path.
 - The native SDK adapter preserves the internal `chat.completions.create` shape,
@@ -118,8 +119,27 @@ CheapGrokHeavy / CGH state:
   success count, elapsed seconds, input/output/cached tokens, tool calls,
   web-search calls, provider-reported cost, estimated token/tool cost, and
   `grand_total_cost_usd`.
-- Focused CGH validation on the pushed branch: `python -m pytest
-  agent\utils\test_cheap_grok_heavy_config.py -q` reported `29 passed`.
+- `LongTermResearchRunner.run_and_record()` now stores CGH `last_usage` in the
+  decision journal as `usage_json`, with a SQLite migration that adds the column
+  to older journals on open.
+- Dashboard API usage normalization understands CGH `last_usage` aliases such as
+  `api_backend`, `total_input_tokens`, `total_output_tokens`,
+  `total_web_search_call_count`, `total_tool_cost_usd`, and
+  `grand_total_cost_usd`.
+- Dashboard cost history now tracks current-month spend, total tracked spend,
+  and average completed-month spend. The average intentionally stays pending
+  until at least one full month has completed.
+- Scheduler launch packet provider review understands the same CGH usage shape
+  and surfaces tool invocation count, web-search call count, and tool cost in
+  addition to total request/cost.
+- Focused usage/cost validation after the journal/dashboard/scheduler wiring:
+  `python -m pytest
+  ai_trader\trading_agent\longterm\test_operator_dashboard_server.py
+  ai_trader\trading_agent\longterm\test_operator_dashboard.py
+  ai_trader\trading_agent\longterm\test_scheduler_launch_packet.py
+  ai_trader\trading_agent\longterm\test_longterm_intake_runner.py
+  ai_trader\trading_agent\agent\utils\test_cheap_grok_heavy_config.py -q`
+  reported `91 passed`.
 
 Future local model candidate:
 - Kronos is cloned locally at `S:\LLM_files\other_github\Kronos` and queued

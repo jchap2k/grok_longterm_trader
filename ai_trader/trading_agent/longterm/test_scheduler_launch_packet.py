@@ -285,6 +285,47 @@ def test_launch_packet_provider_usage_includes_tool_cost_components(tmp_path):
     assert packet["provider_usage_review"]["estimated_total_cost_usd"] == 0.0212
 
 
+def test_launch_packet_provider_usage_understands_cgh_last_usage_shape(tmp_path):
+    artifacts = _ready_artifacts(tmp_path)
+    api_usage = _write(
+        tmp_path / "api_usage.json",
+        {
+            "mode": "api_usage_summary",
+            "providers": [
+                {
+                    "api_backend": "xai_sdk",
+                    "model": "grok-4.3",
+                    "request_count": 5,
+                    "total_tool_invocation_count": 4,
+                    "total_web_search_call_count": 2,
+                    "total_tool_cost_usd": 0.01,
+                    "grand_total_cost_usd": 0.0245,
+                }
+            ],
+            "order_submission_enabled": False,
+        },
+    )
+
+    packet = build_scheduler_launch_packet(
+        SchedulerLaunchPacketInputs(
+            scheduler_config_validation=artifacts["validation"],
+            scheduler_task_plan=artifacts["task_plan"],
+            scheduler_handoff=artifacts["handoff"],
+            scheduler_task_registration=artifacts["registration"],
+            dashboard_manifest=artifacts["manifest"],
+            api_usage=api_usage,
+        )
+    )
+
+    usage = packet["provider_usage_review"]
+    assert usage["status"] == "tracked"
+    assert usage["providers"] == ["xai_sdk"]
+    assert usage["estimated_total_cost_usd"] == 0.0245
+    assert usage["tool_invocation_count"] == 4
+    assert usage["web_search_call_count"] == 2
+    assert usage["tool_cost_usd"] == 0.01
+
+
 def test_launch_packet_blocks_if_soak_plan_not_ready_or_submit_capable(tmp_path):
     artifacts = _ready_artifacts(tmp_path)
     soak_plan = _write(

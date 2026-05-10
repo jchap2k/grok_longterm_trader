@@ -114,6 +114,38 @@ def test_operator_dashboard_site_surfaces_macro_regime_provider_health():
     assert "yield curve inverted" in html.lower()
 
 
+def test_operator_dashboard_site_surfaces_api_usage_cost_history():
+    dashboard = build_operator_dashboard(
+        action_plan={"intents": []},
+        operator_status={"agent_next_step": {"state": "collect_preflight_artifacts"}},
+    )
+    site = build_operator_dashboard_site(
+        dashboard=dashboard,
+        action_plan={"intents": []},
+        api_usage={
+            "status": "available",
+            "providers": [],
+            "totals": {"estimated_total_cost_usd": 35.0, "request_count": 6, "total_tokens": 3000},
+            "cost_history": {
+                "current_month": "2026-07",
+                "current_month_spend_usd": 5.0,
+                "total_spend_usd": 35.0,
+                "completed_month_count": 2,
+                "average_completed_month_spend_usd": 15.0,
+                "average_status": "available",
+            },
+        },
+    )
+    html = site["index.html"]
+
+    assert "Current Month Spend" in html
+    assert "Total Tracked Spend" in html
+    assert "Avg Completed Month" in html
+    assert "$5.00" in html
+    assert "$35.00" in html
+    assert "$15.00" in html
+
+
 def test_operator_dashboard_svg_logo_uses_rail_contrast_variant():
     data_uri = _logo_data_uri()
     assert data_uri.startswith("data:image/svg+xml;base64,")

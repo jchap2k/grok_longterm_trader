@@ -231,12 +231,14 @@ class LongTermResearchRunner:
         )
         decision = parse_decision_response(raw_response)
         self.decision_journal = LongTermDecisionJournal(journal_db_path)
+        usage = getattr(self._client, "last_usage", None)
         return self.decision_journal.record_decision(
             packet,
             decision=decision,
             candidate_price=candidate_price,
             benchmark_price=benchmark_price,
             raw_response=raw_response,
+            usage=usage if isinstance(usage, dict) else None,
         )
 
 
