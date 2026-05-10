@@ -1,8 +1,8 @@
 """
 cheap_grok_heavy.py
 ====================
-Self-Mixture-of-Agents (Self-MoA) ensemble using the xAI OpenAI-compatible
-REST API. Runs N parallel grok-4.3 calls with temperature
+Self-Mixture-of-Agents (Self-MoA) ensemble using the native xAI SDK by default.
+Runs N parallel grok-4.3 calls with temperature
 variation, then synthesizes via a master call.
 
 SCOPE: Standalone batch tool. Does NOT write to learning.db, trade_journal,
@@ -32,8 +32,8 @@ Usage (CLI self-test):
     python -m agent.utils.cheap_grok_heavy --test
 
 Design notes:
-  - Uses openai.AsyncOpenAI with base_url="https://api.x.ai/v1" (same as grok_client.py)
-  - xai_sdk does NOT expose temperature - OpenAI-compatible REST API does (0.0 to 2.0)
+  - Uses xai_sdk by default so provider-reported costs/tool usage can be captured
+  - xai_sdk now exposes temperature; OpenAI-compatible REST remains available as fallback
   - agent_count=4 default: cost-controlled council for pricier Grok 4.3 calls
   - max_concurrent=4 default: asyncio.Semaphore caps burst to prevent 429s
   - AsyncOpenAI client created once in __init__ and reused (not recreated per call)
@@ -49,6 +49,7 @@ import os
 import sys
 import time
 import pathlib
+from types import SimpleNamespace
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -60,6 +61,8 @@ DEFAULT_AGENTS    = 4            # cost-controlled default after 4.1 fast deprec
 AGENT_TIMEOUT_S   = 180          # per-agent hard timeout
 COST_INPUT_PER_M  = 1.25        # $ per 1M input tokens
 COST_OUTPUT_PER_M = 2.50        # $ per 1M output tokens
+XAI_COST_TICKS_PER_USD = 10_000_000_000
+XAI_WEB_SEARCH_COST_PER_1K = 5.0
 
 # Grok-validated 8-point spread: default for <= 8 agents.
 # NOT evenly spaced - avoids mid-range clustering.
@@ -113,6 +116,179 @@ def load_agent_specs_from_file(path: str, preset_name: str | None = None) -> lis
     """Load a list of agent specs from a JSON config file."""
     payload = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
     return resolve_agent_specs(payload, preset_name=preset_name)
+
+
+def parse_context_file_args(values: list[str] | None) -> dict[str, str]:
+    """Parse repeated CLI context-file args in name=path format."""
+    parsed: dict[str, str] = {}
+    for raw in values or []:
+        if "=" not in raw:
+            raise ValueError("Context files must use name=path format.")
+        name, path = raw.split("=", 1)
+        name = name.strip()
+        path = path.strip()
+        if not name or not path:
+            raise ValueError("Context files must use name=path format.")
+        parsed[name] = path
+    return parsed
+
+
+def format_cli_run_header(client: "CheapGrokHeavy") -> str:
+    """Return the CLI run summary after specs/presets have been resolved."""
+    return (
+        f"CheapGrokHeavy self-test: {client.agent_count} agents, "
+        f"max_concurrent={client.max_concurrent}, model={client.model}, "
+        f"api_backend={client.api_backend}"
+    )
+
+
+def _attr_or_key(value, key: str, default=None):
+    if isinstance(value, dict):
+        return value.get(key, default)
+    return getattr(value, key, default)
+
+
+def _safe_int(value) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _safe_float(value) -> float:
+    try:
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _xai_cost_usd_from_response(response) -> float:
+    """Extract authoritative xAI SDK response cost when the SDK exposes it."""
+    direct = _attr_or_key(response, "cost_usd")
+    if direct not in (None, ""):
+        return round(_safe_float(direct), 6)
+    usage = _attr_or_key(response, "usage")
+    ticks = _attr_or_key(usage, "cost_in_usd_ticks")
+    if ticks not in (None, ""):
+        return round(_safe_float(ticks) / XAI_COST_TICKS_PER_USD, 6)
+    return 0.0
+
+
+def _xai_server_side_tool_counts(response) -> dict[str, int]:
+    """Normalize xAI SDK server-side tool usage into dashboard-friendly counts."""
+    raw = _attr_or_key(response, "server_side_tool_usage")
+    if callable(raw):
+        raw = raw()
+    if raw in (None, ""):
+        usage = _attr_or_key(response, "usage")
+        raw = _attr_or_key(usage, "server_side_tool_usage")
+        if callable(raw):
+            raw = raw()
+    counts: dict[str, int] = {}
+    if isinstance(raw, dict):
+        for key, value in raw.items():
+            count = _safe_int(value)
+            if count:
+                counts[str(key)] = count
+    elif isinstance(raw, (list, tuple)):
+        for item in raw:
+            if isinstance(item, str):
+                counts[item] = counts.get(item, 0) + 1
+            elif isinstance(item, dict):
+                name = str(item.get("tool") or item.get("name") or item.get("type") or "").strip()
+                count = _safe_int(item.get("count") or item.get("calls") or 1)
+                if name and count:
+                    counts[name] = counts.get(name, 0) + count
+            else:
+                name = str(_attr_or_key(item, "tool") or _attr_or_key(item, "name") or _attr_or_key(item, "type") or "").strip()
+                count = _safe_int(_attr_or_key(item, "count") or _attr_or_key(item, "calls") or 1)
+                if name and count:
+                    counts[name] = counts.get(name, 0) + count
+    usage = _attr_or_key(response, "usage")
+    generic_count = _safe_int(_attr_or_key(usage, "server_side_tools_used"))
+    if generic_count and not counts:
+        counts["unknown"] = generic_count
+    return counts
+
+
+def _openai_style_response_from_xai_sdk_response(response):
+    """Adapt a native xAI SDK response to the small OpenAI shape CGH expects."""
+    usage = _attr_or_key(response, "usage")
+    prompt_tokens = _safe_int(
+        _attr_or_key(usage, "prompt_tokens")
+        or _attr_or_key(usage, "prompt_text_tokens")
+    )
+    completion_tokens = _safe_int(_attr_or_key(usage, "completion_tokens"))
+    cached_tokens = _safe_int(_attr_or_key(usage, "cached_prompt_text_tokens"))
+    tool_counts = _xai_server_side_tool_counts(response)
+    web_search_calls = _safe_int(tool_counts.get("web_search"))
+    web_search_cost = round(web_search_calls / 1_000 * XAI_WEB_SEARCH_COST_PER_1K, 6)
+    cost_usd = _xai_cost_usd_from_response(response)
+    return SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(content=str(_attr_or_key(response, "content") or ""))
+            )
+        ],
+        usage=SimpleNamespace(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=_safe_int(_attr_or_key(usage, "total_tokens")) or prompt_tokens + completion_tokens,
+            prompt_tokens_details=SimpleNamespace(cached_tokens=cached_tokens),
+            cost_usd=cost_usd,
+            server_side_tool_usage=tool_counts,
+            tool_invocation_count=sum(tool_counts.values()),
+            web_search_call_count=web_search_calls,
+            web_search_cost_usd=web_search_cost,
+        ),
+    )
+
+
+class _XaiSdkChatCompletions:
+    """Small async adapter exposing the OpenAI chat.completions.create shape."""
+
+    def __init__(self, api_key: str):
+        from xai_sdk import Client
+
+        self._client = Client(api_key=api_key)
+
+    async def create(self, **kwargs):
+        return await asyncio.to_thread(self._create_sync, **kwargs)
+
+    def _create_sync(self, **kwargs):
+        from xai_sdk.chat import assistant, developer, system, user
+
+        role_builders = {
+            "assistant": assistant,
+            "developer": developer,
+            "system": system,
+            "user": user,
+        }
+        messages = []
+        for message in kwargs.get("messages") or []:
+            role = str(message.get("role") or "user")
+            content = message.get("content") or ""
+            if not isinstance(content, str):
+                content = json.dumps(content, sort_keys=True)
+            messages.append(role_builders.get(role, user)(content))
+
+        extra_headers = kwargs.get("extra_headers") or {}
+        conversation_id = extra_headers.get("x-grok-conv-id") if isinstance(extra_headers, dict) else None
+        chat = self._client.chat.create(
+            model=kwargs["model"],
+            messages=messages,
+            max_tokens=kwargs.get("max_tokens"),
+            temperature=kwargs.get("temperature"),
+            conversation_id=conversation_id,
+        )
+        return _openai_style_response_from_xai_sdk_response(chat.sample())
+
+
+class _XaiSdkClientAdapter:
+    """Expose chat.completions.create using native xAI SDK underneath."""
+
+    def __init__(self, api_key: str):
+        self.chat = SimpleNamespace(completions=_XaiSdkChatCompletions(api_key))
 
 
 def _normalize_agent_spec(spec: dict, fallback_temperature: float | None = None) -> dict:
@@ -213,13 +389,14 @@ class CheapGrokHeavy:
         agent_max_tokens: int = 2048,
         max_concurrent: int | None = None,
         verbose: bool = True,
+        api_backend: str = "xai_sdk",
     ):
-        import openai
-
         self.api_key          = api_key or os.environ.get("XAI_API_KEY", "")
         self.model            = model
         self.agent_max_tokens = agent_max_tokens
         self.verbose          = verbose
+        self.api_backend      = api_backend
+        self._last_synthesis_usage: dict | None = None
 
         if agent_specs is not None and agent_specs_path is not None:
             raise ValueError("Pass either agent_specs or agent_specs_path, not both.")
@@ -256,12 +433,7 @@ class CheapGrokHeavy:
                 "xAI API key required. Pass api_key= or set XAI_API_KEY env var."
             )
 
-        # Single shared client - AsyncOpenAI does not connect at construction,
-        # so this is safe to create in __init__ and reuse across all calls.
-        self._client = openai.AsyncOpenAI(
-            api_key=self.api_key,
-            base_url=XAI_BASE_URL,
-        )
+        self._client = self._build_client_adapter(api_backend)
 
         # Semaphore initialized lazily in the first async context to ensure
         # it binds to the correct event loop (Python < 3.10 compatibility).
@@ -270,6 +442,19 @@ class CheapGrokHeavy:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _build_client_adapter(self, api_backend: str):
+        backend = str(api_backend or "xai_sdk").strip().lower()
+        if backend == "xai_sdk":
+            return _XaiSdkClientAdapter(self.api_key)
+        if backend in {"openai", "openai_compat", "openai-compatible"}:
+            import openai
+
+            return openai.AsyncOpenAI(
+                api_key=self.api_key,
+                base_url=XAI_BASE_URL,
+            )
+        raise ValueError("api_backend must be 'xai_sdk' or 'openai_compat'.")
 
     def _temperatures(self) -> list:
         """Select temperature spread for the configured agent count."""
@@ -292,6 +477,87 @@ class CheapGrokHeavy:
                 return schema
         return {}
 
+    def _prepare_agent_output_for_synthesis(self, text: str, max_chars: int = 1600) -> str:
+        """Keep the agent's decision summary while trimming verbose detail."""
+        if len(text) <= max_chars:
+            return text
+
+        summary = ""
+        try:
+            payload = json.loads(text)
+            if isinstance(payload, dict):
+                candidate = payload.get("executive_summary")
+                if isinstance(candidate, str):
+                    summary = candidate.strip()
+        except json.JSONDecodeError:
+            summary = ""
+
+        head_chars = max(1, max_chars // 2)
+        tail_chars = max(1, max_chars // 3)
+        detail = (
+            f"{text[:head_chars]}\n\n"
+            f"... [truncated {max(0, len(text) - head_chars - tail_chars)} chars for synthesis] ...\n\n"
+            f"{text[-tail_chars:]}"
+        )
+
+        if summary:
+            return f"EXECUTIVE SUMMARY:\n{summary[:650]}\n\nDETAILED OUTPUT (truncated):\n{detail}"
+        return detail
+
+    def _merge_context_files(
+        self,
+        context_sections: dict | None,
+        context_files: dict[str, str | pathlib.Path] | None,
+    ) -> dict:
+        """Read named context files and merge them into context sections."""
+        merged = dict(context_sections or {})
+        for key, path in (context_files or {}).items():
+            merged[key] = pathlib.Path(path).read_text(encoding="utf-8")
+        return merged
+
+    @staticmethod
+    def _usage_cached_prompt_tokens(usage) -> int:
+        """Extract provider-reported cached prompt tokens when available."""
+        details = getattr(usage, "prompt_tokens_details", None)
+        if details is None and isinstance(usage, dict):
+            details = usage.get("prompt_tokens_details")
+        if details is None:
+            return 0
+        if isinstance(details, dict):
+            value = details.get("cached_tokens", 0)
+        else:
+            value = getattr(details, "cached_tokens", 0)
+        try:
+            return int(value or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    @staticmethod
+    def _cache_extra_headers(cache_conversation_id: str | None) -> dict[str, str]:
+        """Build optional xAI cache-routing headers."""
+        if not cache_conversation_id:
+            return {}
+        return {"x-grok-conv-id": str(cache_conversation_id)}
+
+    def _build_agent_messages(
+        self,
+        prompt: str,
+        spec: dict,
+        *,
+        shared_system_context: str | None = None,
+    ) -> list[dict[str, str]]:
+        """Build chat messages, keeping any shared system context as a common prefix."""
+        messages: list[dict[str, str]] = []
+        system_parts = []
+        if shared_system_context:
+            system_parts.append(shared_system_context.strip())
+        if spec.get("system_prompt"):
+            system_parts.append(spec["system_prompt"].strip())
+        if system_parts:
+            messages.append({"role": "system", "content": "\n\n".join(system_parts)})
+        messages.append({"role": "user", "content": prompt})
+        return messages
+
     def _get_semaphore(self) -> asyncio.Semaphore:
         """Lazily create semaphore in the running event loop."""
         if self._semaphore is None:
@@ -307,6 +573,9 @@ class CheapGrokHeavy:
         prompt: str,
         spec: dict,
         agent_idx: int,
+        *,
+        shared_system_context: str | None = None,
+        cache_conversation_id: str | None = None,
     ) -> dict:
         """
         Call one agent behind the concurrency semaphore.
@@ -319,7 +588,12 @@ class CheapGrokHeavy:
             "temperature":   spec["temperature"],
             "text":          None,
             "input_tokens":  0,
+            "cached_input_tokens": 0,
             "output_tokens": 0,
+            "estimated_total_cost_usd": 0.0,
+            "tool_invocation_count": 0,
+            "web_search_call_count": 0,
+            "tool_cost_usd": 0.0,
             "elapsed_s":     0.0,
             "error":         None,
         }
@@ -330,27 +604,43 @@ class CheapGrokHeavy:
                     f"[CheapGrokHeavy] Agent {agent_idx + 1}/{self.agent_count} "
                     f"starting ({spec['name']}, temp={spec['temperature']:.2f})..."
                 )
-                messages = []
-                if spec.get("system_prompt"):
-                    messages.append({"role": "system", "content": spec["system_prompt"]})
-                messages.append({"role": "user", "content": prompt})
+                messages = self._build_agent_messages(
+                    prompt,
+                    spec,
+                    shared_system_context=shared_system_context,
+                )
                 response = await asyncio.wait_for(
                     self._client.chat.completions.create(
                         model=self.model,
                         temperature=spec["temperature"],
                         max_tokens=self.agent_max_tokens,
                         messages=messages,
+                        extra_headers=self._cache_extra_headers(cache_conversation_id),
                     ),
                     timeout=AGENT_TIMEOUT_S,
                 )
                 result["text"]          = response.choices[0].message.content or ""
                 result["input_tokens"]  = response.usage.prompt_tokens
+                result["cached_input_tokens"] = self._usage_cached_prompt_tokens(response.usage)
                 result["output_tokens"] = response.usage.completion_tokens
+                result["estimated_total_cost_usd"] = _safe_float(
+                    _attr_or_key(response.usage, "cost_usd")
+                )
+                result["tool_invocation_count"] = _safe_int(
+                    _attr_or_key(response.usage, "tool_invocation_count")
+                )
+                result["web_search_call_count"] = _safe_int(
+                    _attr_or_key(response.usage, "web_search_call_count")
+                )
+                result["tool_cost_usd"] = _safe_float(
+                    _attr_or_key(response.usage, "web_search_cost_usd")
+                )
                 result["elapsed_s"]     = round(time.time() - t0, 1)
                 self._log(
                     f"[CheapGrokHeavy] Agent {agent_idx + 1} done "
                     f"({result['elapsed_s']}s, "
-                    f"{result['output_tokens']} output tokens)"
+                    f"{result['output_tokens']} output tokens, "
+                    f"{result['cached_input_tokens']} cached input tokens)"
                 )
             except asyncio.TimeoutError:
                 result["error"] = f"Timeout after {AGENT_TIMEOUT_S}s"
@@ -371,10 +661,22 @@ class CheapGrokHeavy:
     # Parallel ensemble
     # ------------------------------------------------------------------
 
-    async def _run_agents(self, prompt: str) -> list:
+    async def _run_agents(
+        self,
+        prompt: str,
+        *,
+        shared_system_context: str | None = None,
+        cache_conversation_id: str | None = None,
+    ) -> list:
         """Launch all agents concurrently (gated by semaphore). Returns list of result dicts."""
         tasks = [
-            self._call_agent(prompt, spec, idx)
+            self._call_agent(
+                prompt,
+                spec,
+                idx,
+                shared_system_context=shared_system_context,
+                cache_conversation_id=cache_conversation_id,
+            )
             for idx, spec in enumerate(self.agent_specs)
         ]
         self._log(
@@ -396,7 +698,14 @@ class CheapGrokHeavy:
     # Master synthesis
     # ------------------------------------------------------------------
 
-    async def _synthesize(self, prompt: str, agent_results: list) -> str:
+    async def _synthesize(
+        self,
+        prompt: str,
+        agent_results: list,
+        *,
+        shared_system_context: str | None = None,
+        cache_conversation_id: str | None = None,
+    ) -> str:
         """
         Master call in 'heavy mode': given all agent outputs, synthesize the best answer.
 
@@ -407,6 +716,7 @@ class CheapGrokHeavy:
         4. Produce ONE final polished answer
         """
         good = [r for r in agent_results if r["error"] is None and r["text"]]
+        self._last_synthesis_usage = None
         if not good:
             return "[CheapGrokHeavy] All agents failed - no synthesis possible."
 
@@ -426,9 +736,10 @@ class CheapGrokHeavy:
                 label = "creative"
             else:
                 label = "highly exploratory"
+            prepared_text = self._prepare_agent_output_for_synthesis(r["text"])
             agent_blocks.append(
                 f"--- AGENT {r['idx'] + 1}: {r['name']} (temp={r['temperature']:.2f}, "
-                f"{label}) ---\n{r['text']}"
+                f"{label}) ---\n{prepared_text}"
             )
 
         synthesis_prompt = (
@@ -471,20 +782,41 @@ class CheapGrokHeavy:
         try:
             # Synthesis also goes through the semaphore for consistent rate control
             async with self._get_semaphore():
+                messages = self._build_agent_messages(
+                    synthesis_prompt,
+                    {"name": "Synthesis", "system_prompt": ""},
+                    shared_system_context=shared_system_context,
+                )
                 response = await asyncio.wait_for(
                     self._client.chat.completions.create(
                         model=self.model,
                         temperature=0.1,                       # focused/consistent synthesis output
                         max_tokens=self.agent_max_tokens * 2,  # synthesis = 2x agent limit
-                        messages=[{"role": "user", "content": synthesis_prompt}],
+                        messages=messages,
+                        extra_headers=self._cache_extra_headers(cache_conversation_id),
                     ),
                     timeout=AGENT_TIMEOUT_S,
                 )
             elapsed = round(time.time() - t0, 1)
             text    = response.choices[0].message.content or ""
+            cached_input_tokens = self._usage_cached_prompt_tokens(response.usage)
+            self._last_synthesis_usage = {
+                "idx": "synthesis",
+                "name": "Synthesis",
+                "temperature": 0.1,
+                "input_tokens": _safe_int(_attr_or_key(response.usage, "prompt_tokens")),
+                "cached_input_tokens": cached_input_tokens,
+                "output_tokens": _safe_int(_attr_or_key(response.usage, "completion_tokens")),
+                "estimated_total_cost_usd": _safe_float(_attr_or_key(response.usage, "cost_usd")),
+                "tool_invocation_count": _safe_int(_attr_or_key(response.usage, "tool_invocation_count")),
+                "web_search_call_count": _safe_int(_attr_or_key(response.usage, "web_search_call_count")),
+                "tool_cost_usd": _safe_float(_attr_or_key(response.usage, "web_search_cost_usd")),
+                "error": None,
+            }
             self._log(
                 f"[CheapGrokHeavy] Synthesis done ({elapsed}s, "
-                f"{response.usage.completion_tokens} tokens)"
+                f"{response.usage.completion_tokens} tokens, "
+                f"{cached_input_tokens} cached input tokens)"
             )
             return text
         except Exception as exc:
@@ -500,17 +832,26 @@ class CheapGrokHeavy:
         if not self.verbose:
             return
         total_in  = sum(r["input_tokens"]  for r in agent_results)
+        cached_in = sum(r.get("cached_input_tokens", 0) for r in agent_results)
         total_out = sum(r["output_tokens"] for r in agent_results)
+        provider_cost = sum(float(r.get("estimated_total_cost_usd") or 0.0) for r in agent_results)
+        tool_invocations = sum(int(r.get("tool_invocation_count") or 0) for r in agent_results)
+        tool_cost = sum(float(r.get("tool_cost_usd") or 0.0) for r in agent_results)
         total_in  += synthesis_tokens  # rough estimate for synthesis input
-        cost = (
+        estimated_cost = (
             total_in  / 1_000_000 * COST_INPUT_PER_M +
-            total_out / 1_000_000 * COST_OUTPUT_PER_M
+            total_out / 1_000_000 * COST_OUTPUT_PER_M +
+            tool_cost
         )
+        cost = provider_cost or estimated_cost
+        cost_basis = "actual" if provider_cost else "estimated"
         failed = sum(1 for r in agent_results if r["error"])
         print(
             f"\n[CheapGrokHeavy] Token usage: "
             f"{total_in:,} input / {total_out:,} output | "
-            f"~${cost:.4f} | "
+            f"{cached_in:,} cached input | "
+            f"{tool_invocations:,} tools (${tool_cost:.4f}) | "
+            f"{cost_basis} ${cost:.4f} | "
             f"{self.agent_count - failed}/{self.agent_count} agents succeeded",
             flush=True,
         )
@@ -519,7 +860,13 @@ class CheapGrokHeavy:
     # Public API
     # ------------------------------------------------------------------
 
-    async def call_async(self, prompt: str) -> str:
+    async def call_async(
+        self,
+        prompt: str,
+        *,
+        shared_system_context: str | None = None,
+        cache_conversation_id: str | None = None,
+    ) -> str:
         """
         Async entry point.  Run ensemble and return synthesized result.
 
@@ -530,14 +877,27 @@ class CheapGrokHeavy:
             Synthesized text from master call.
         """
         t_start       = time.time()
-        agent_results = await self._run_agents(prompt)
-        synthesis     = await self._synthesize(prompt, agent_results)
+        agent_results = await self._run_agents(
+            prompt,
+            shared_system_context=shared_system_context,
+            cache_conversation_id=cache_conversation_id,
+        )
+        synthesis     = await self._synthesize(
+            prompt,
+            agent_results,
+            shared_system_context=shared_system_context,
+            cache_conversation_id=cache_conversation_id,
+        )
         elapsed_total = round(time.time() - t_start, 1)
 
         # Estimate synthesis input tokens (rough: len(agent texts) / 4)
         synth_in_est = sum(len(r["text"] or "") for r in agent_results) // 4
 
-        self._print_cost(agent_results, synth_in_est)
+        usage_rows = list(agent_results)
+        if self._last_synthesis_usage:
+            usage_rows.append(self._last_synthesis_usage)
+            synth_in_est = 0
+        self._print_cost(usage_rows, synth_in_est)
         self._log(
             f"[CheapGrokHeavy] Total elapsed: {elapsed_total}s "
             f"({self.agent_count} agents + synthesis)"
@@ -580,6 +940,9 @@ class CheapGrokHeavy:
         self,
         task_prompt: str,
         context_sections: dict | None = None,
+        *,
+        shared_system_context: str | None = None,
+        cache_conversation_id: str | None = None,
     ) -> str:
         """Run the ensemble using per-agent context selection from configured specs."""
         agent_prompts = [
@@ -588,7 +951,13 @@ class CheapGrokHeavy:
         ]
         t_start = time.time()
         tasks = [
-            self._call_agent(prompt, spec, idx)
+            self._call_agent(
+                prompt,
+                spec,
+                idx,
+                shared_system_context=shared_system_context,
+                cache_conversation_id=cache_conversation_id,
+            )
             for idx, (prompt, spec) in enumerate(zip(agent_prompts, self.agent_specs))
         ]
         self._log(
@@ -604,32 +973,101 @@ class CheapGrokHeavy:
             },
             context_sections,
         )
-        synthesis = await self._synthesize(synthesis_prompt, agent_results)
+        synthesis = await self._synthesize(
+            synthesis_prompt,
+            agent_results,
+            shared_system_context=shared_system_context,
+            cache_conversation_id=cache_conversation_id,
+        )
         elapsed_total = round(time.time() - t_start, 1)
         synth_in_est = sum(len(r["text"] or "") for r in agent_results) // 4
-        self._print_cost(agent_results, synth_in_est)
+        usage_rows = list(agent_results)
+        if self._last_synthesis_usage:
+            usage_rows.append(self._last_synthesis_usage)
+            synth_in_est = 0
+        self._print_cost(usage_rows, synth_in_est)
         self._log(
             f"[CheapGrokHeavy] Total elapsed: {elapsed_total}s "
             f"({self.agent_count} agents + synthesis)"
         )
         return synthesis
 
-    def call(self, prompt: str) -> str:
+    async def call_async_with_files(
+        self,
+        task_prompt: str,
+        context_sections: dict | None = None,
+        context_files: dict[str, str | pathlib.Path] | None = None,
+        *,
+        shared_system_context: str | None = None,
+        cache_conversation_id: str | None = None,
+    ) -> str:
+        """Run the ensemble after loading named files into context sections."""
+        merged_context = self._merge_context_files(context_sections, context_files)
+        return await self.call_async_with_context(
+            task_prompt,
+            merged_context,
+            shared_system_context=shared_system_context,
+            cache_conversation_id=cache_conversation_id,
+        )
+
+    def call(
+        self,
+        prompt: str,
+        *,
+        shared_system_context: str | None = None,
+        cache_conversation_id: str | None = None,
+    ) -> str:
         """
         Synchronous entry point.  Wraps call_async with asyncio.run().
 
         Use this from non-async scripts (e.g. run_hypothesis_generator.py).
         Use call_async() from within async contexts.
         """
-        return asyncio.run(self.call_async(prompt))
+        return asyncio.run(
+            self.call_async(
+                prompt,
+                shared_system_context=shared_system_context,
+                cache_conversation_id=cache_conversation_id,
+            )
+        )
 
     def call_with_context(
         self,
         task_prompt: str,
         context_sections: dict | None = None,
+        *,
+        shared_system_context: str | None = None,
+        cache_conversation_id: str | None = None,
     ) -> str:
         """Synchronous wrapper for config-driven context-aware execution."""
-        return asyncio.run(self.call_async_with_context(task_prompt, context_sections))
+        return asyncio.run(
+            self.call_async_with_context(
+                task_prompt,
+                context_sections,
+                shared_system_context=shared_system_context,
+                cache_conversation_id=cache_conversation_id,
+            )
+        )
+
+    def call_with_files(
+        self,
+        task_prompt: str,
+        context_sections: dict | None = None,
+        context_files: dict[str, str | pathlib.Path] | None = None,
+        *,
+        shared_system_context: str | None = None,
+        cache_conversation_id: str | None = None,
+    ) -> str:
+        """Synchronous wrapper for file-backed context-aware execution."""
+        return asyncio.run(
+            self.call_async_with_files(
+                task_prompt,
+                context_sections,
+                context_files,
+                shared_system_context=shared_system_context,
+                cache_conversation_id=cache_conversation_id,
+            )
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -646,7 +1084,10 @@ def cheap_grok_heavy_call(
     model: str = DEFAULT_MODEL,
     agent_max_tokens: int = 2048,
     max_concurrent: int | None = None,
+    shared_system_context: str | None = None,
+    cache_conversation_id: str | None = None,
     verbose: bool = True,
+    api_backend: str = "xai_sdk",
 ) -> str:
     """
     Convenience function.  One-liner replacement for a single Grok call.
@@ -666,8 +1107,13 @@ def cheap_grok_heavy_call(
         agent_max_tokens=agent_max_tokens,
         max_concurrent=max_concurrent,
         verbose=verbose,
+        api_backend=api_backend,
     )
-    return client.call(prompt)
+    return client.call(
+        prompt,
+        shared_system_context=shared_system_context,
+        cache_conversation_id=cache_conversation_id,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -688,6 +1134,14 @@ if __name__ == "__main__":
                         help="custom prompt (default: short test prompt)")
     parser.add_argument("--output",          default=None,
                         help="write result to file instead of stdout")
+    parser.add_argument("--agent-specs-path", default=None,
+                        help="optional JSON agent spec config")
+    parser.add_argument("--agent-preset", default=None,
+                        help="named preset from --agent-specs-path")
+    parser.add_argument("--context-file", action="append", default=[],
+                        help="named context file as name=path; repeatable")
+    parser.add_argument("--api-backend", choices=["xai_sdk", "openai_compat"], default="xai_sdk",
+                        help="API backend (default: xai_sdk for provider-reported costs)")
     args = parser.parse_args()
 
     test_prompt = args.prompt or (
@@ -709,18 +1163,23 @@ if __name__ == "__main__":
         print("ERROR: XAI_API_KEY not found. Set env var or configure credentials_manager.")
         sys.exit(1)
 
-    _max_c = args.max_concurrent or min(4, args.agents)
-    print(f"CheapGrokHeavy self-test: {args.agents} agents, max_concurrent={_max_c}, model={args.model}")
-    print(f"Temps: {_select_temps(args.agents)}")
-    print(f"Prompt: {test_prompt[:100]}...\n")
-
-    result = cheap_grok_heavy_call(
-        test_prompt,
+    client = CheapGrokHeavy(
         api_key=_key,
         agent_count=args.agents,
         max_concurrent=args.max_concurrent,
         model=args.model,
+        agent_specs_path=args.agent_specs_path,
+        agent_preset=args.agent_preset,
+        api_backend=args.api_backend,
     )
+    print(format_cli_run_header(client))
+    print(f"Temps: {[spec['temperature'] for spec in client.agent_specs]}")
+    print(f"Prompt: {test_prompt[:100]}...\n")
+    context_files = parse_context_file_args(args.context_file)
+    if context_files:
+        result = client.call_with_files(test_prompt, context_files=context_files)
+    else:
+        result = client.call(test_prompt)
 
     if args.output:
         pathlib.Path(args.output).write_text(result, encoding="utf-8")
