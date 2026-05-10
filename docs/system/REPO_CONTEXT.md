@@ -107,11 +107,13 @@ CheapGrokHeavy / CGH state:
 - The native SDK adapter preserves the internal `chat.completions.create` shape,
   supports temperature, maps provider-reported cost/tool usage when exposed, and
   adds web-search tool-cost accounting when only tool counts are available.
+- Local verification used installed `xai_sdk` `1.8.2`; its
+  `Client(...).chat.create` signature includes `temperature: float | None`.
 - CGH verbose cost output now includes worker calls plus master synthesis,
   cached prompt tokens, provider-reported actual cost when present, and
   estimated token/tool cost when actual cost is absent.
 - Focused CGH validation on the pushed branch: `python -m pytest
-  agent\utils\test_cheap_grok_heavy_config.py -q` reported `27 passed`.
+  agent\utils\test_cheap_grok_heavy_config.py -q` reported `28 passed`.
 
 Future local model candidate:
 - Kronos is cloned locally at `S:\LLM_files\other_github\Kronos` and queued

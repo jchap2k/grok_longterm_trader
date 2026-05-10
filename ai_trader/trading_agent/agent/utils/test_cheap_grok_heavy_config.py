@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import json
 import sys
 from types import SimpleNamespace
@@ -401,6 +402,15 @@ def test_xai_sdk_response_adapter_extracts_authoritative_cost_and_tool_usage():
     assert adapted.usage.tool_invocation_count == 3
     assert adapted.usage.web_search_call_count == 3
     assert adapted.usage.web_search_cost_usd == 0.015
+
+
+def test_installed_xai_sdk_chat_create_supports_temperature():
+    from xai_sdk import Client
+
+    client = Client(api_key="test-key")
+    signature = inspect.signature(client.chat.create)
+
+    assert "temperature" in signature.parameters
 
 
 def test_print_cost_prefers_xai_sdk_actual_cost_when_available(capsys):
