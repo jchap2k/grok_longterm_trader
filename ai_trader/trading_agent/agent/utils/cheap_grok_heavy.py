@@ -399,6 +399,7 @@ class CheapGrokHeavy:
         self.verbose          = verbose
         self.api_backend      = api_backend
         self._last_synthesis_usage: dict | None = None
+        self.last_usage: dict | None = None
 
         if agent_specs is not None and agent_specs_path is not None:
             raise ValueError("Pass either agent_specs or agent_specs_path, not both.")
@@ -830,33 +831,68 @@ class CheapGrokHeavy:
     # Cost summary
     # ------------------------------------------------------------------
 
-    def _print_cost(self, agent_results: list, synthesis_tokens: int = 0) -> None:
-        if not self.verbose:
-            return
+    def _usage_summary(
+        self,
+        agent_results: list,
+        synthesis_tokens: int = 0,
+        elapsed_s: float = 0.0,
+    ) -> dict:
         total_in  = sum(r["input_tokens"]  for r in agent_results)
         cached_in = sum(r.get("cached_input_tokens", 0) for r in agent_results)
         total_out = sum(r["output_tokens"] for r in agent_results)
         provider_cost = sum(float(r.get("estimated_total_cost_usd") or 0.0) for r in agent_results)
         tool_invocations = sum(int(r.get("tool_invocation_count") or 0) for r in agent_results)
+        web_search_calls = sum(int(r.get("web_search_call_count") or 0) for r in agent_results)
         tool_cost = sum(float(r.get("tool_cost_usd") or 0.0) for r in agent_results)
         total_in  += synthesis_tokens  # rough estimate for synthesis input
-        estimated_cost = (
+        estimated_token_cost = (
             total_in  / 1_000_000 * COST_INPUT_PER_M +
-            total_out / 1_000_000 * COST_OUTPUT_PER_M +
-            tool_cost
+            total_out / 1_000_000 * COST_OUTPUT_PER_M
         )
-        cost = provider_cost or estimated_cost
-        cost_basis = "actual" if provider_cost else "estimated"
-        failed = sum(1 for r in agent_results if r["error"])
+        estimated_total_cost = estimated_token_cost + tool_cost
+        grand_total_cost = max(provider_cost, estimated_total_cost)
+        agent_rows = [r for r in agent_results if isinstance(r.get("idx"), int)]
+        failed = sum(1 for r in agent_rows if r.get("error"))
+        return {
+            "model": self.model,
+            "api_backend": self.api_backend,
+            "agent_count": self.agent_count,
+            "request_count": len(agent_results),
+            "success_count": len(agent_rows) - failed,
+            "failed_count": failed,
+            "elapsed_s": elapsed_s,
+            "total_input_tokens": total_in,
+            "total_output_tokens": total_out,
+            "total_cached_input_tokens": cached_in,
+            "total_tool_invocation_count": tool_invocations,
+            "total_web_search_call_count": web_search_calls,
+            "total_tool_cost_usd": round(tool_cost, 6),
+            "provider_reported_cost_usd": round(provider_cost, 6),
+            "estimated_token_cost_usd": round(estimated_token_cost, 6),
+            "estimated_total_cost_usd": round(estimated_total_cost, 6),
+            "grand_total_cost_usd": round(grand_total_cost, 6),
+            "cost_basis": "actual" if provider_cost >= estimated_total_cost and provider_cost else "estimated",
+        }
+
+    def _print_cost(
+        self,
+        agent_results: list,
+        synthesis_tokens: int = 0,
+        elapsed_s: float = 0.0,
+    ) -> dict:
+        summary = self._usage_summary(agent_results, synthesis_tokens, elapsed_s=elapsed_s)
+        if not self.verbose:
+            return summary
         print(
             f"\n[CheapGrokHeavy] Token usage: "
-            f"{total_in:,} input / {total_out:,} output | "
-            f"{cached_in:,} cached input | "
-            f"{tool_invocations:,} tools (${tool_cost:.4f}) | "
-            f"{cost_basis} ${cost:.4f} | "
-            f"{self.agent_count - failed}/{self.agent_count} agents succeeded",
+            f"{summary['total_input_tokens']:,} input / {summary['total_output_tokens']:,} output | "
+            f"{summary['total_cached_input_tokens']:,} cached input | "
+            f"{summary['total_tool_invocation_count']:,} tools (${summary['total_tool_cost_usd']:.4f}) | "
+            f"{summary['cost_basis']} ${summary['grand_total_cost_usd']:.4f} | "
+            f"{summary['success_count']}/{summary['agent_count']} agents succeeded",
             flush=True,
         )
+        return summary
 
     # ------------------------------------------------------------------
     # Public API
@@ -899,7 +935,7 @@ class CheapGrokHeavy:
         if self._last_synthesis_usage:
             usage_rows.append(self._last_synthesis_usage)
             synth_in_est = 0
-        self._print_cost(usage_rows, synth_in_est)
+        self.last_usage = self._print_cost(usage_rows, synth_in_est, elapsed_s=elapsed_total)
         self._log(
             f"[CheapGrokHeavy] Total elapsed: {elapsed_total}s "
             f"({self.agent_count} agents + synthesis)"
@@ -987,7 +1023,7 @@ class CheapGrokHeavy:
         if self._last_synthesis_usage:
             usage_rows.append(self._last_synthesis_usage)
             synth_in_est = 0
-        self._print_cost(usage_rows, synth_in_est)
+        self.last_usage = self._print_cost(usage_rows, synth_in_est, elapsed_s=elapsed_total)
         self._log(
             f"[CheapGrokHeavy] Total elapsed: {elapsed_total}s "
             f"({self.agent_count} agents + synthesis)"

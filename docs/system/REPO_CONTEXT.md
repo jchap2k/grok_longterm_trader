@@ -112,8 +112,14 @@ CheapGrokHeavy / CGH state:
 - CGH verbose cost output now includes worker calls plus master synthesis,
   cached prompt tokens, provider-reported actual cost when present, and
   estimated token/tool cost when actual cost is absent.
+- CGH now exposes the same aggregate usage payload through
+  `CheapGrokHeavy.last_usage` after `call()`, `call_with_context()`, and related
+  async variants. The payload includes model/backend, request count, agent
+  success count, elapsed seconds, input/output/cached tokens, tool calls,
+  web-search calls, provider-reported cost, estimated token/tool cost, and
+  `grand_total_cost_usd`.
 - Focused CGH validation on the pushed branch: `python -m pytest
-  agent\utils\test_cheap_grok_heavy_config.py -q` reported `28 passed`.
+  agent\utils\test_cheap_grok_heavy_config.py -q` reported `29 passed`.
 
 Future local model candidate:
 - Kronos is cloned locally at `S:\LLM_files\other_github\Kronos` and queued

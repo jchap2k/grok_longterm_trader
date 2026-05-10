@@ -419,6 +419,7 @@ def test_print_cost_prefers_xai_sdk_actual_cost_when_available(capsys):
     client._print_cost(
         [
             {
+                "idx": 0,
                 "input_tokens": 1000,
                 "cached_input_tokens": 400,
                 "output_tokens": 2000,
@@ -441,6 +442,7 @@ def test_print_cost_adds_tool_cost_to_token_estimate_when_actual_cost_missing(ca
     client._print_cost(
         [
             {
+                "idx": 0,
                 "input_tokens": 1000,
                 "cached_input_tokens": 0,
                 "output_tokens": 2000,
@@ -454,7 +456,52 @@ def test_print_cost_adds_tool_cost_to_token_estimate_when_actual_cost_missing(ca
 
     output = capsys.readouterr().out
     assert "3 tools ($0.0150)" in output
-    assert "estimated $0.0212" in output
+    assert "estimated $0.0213" in output
+
+
+def test_usage_summary_exposes_agent_synthesis_and_tool_totals():
+    client = CheapGrokHeavy(api_key="test-key", verbose=False)
+
+    summary = client._usage_summary(
+        [
+            {
+                "idx": 0,
+                "input_tokens": 1000,
+                "cached_input_tokens": 100,
+                "output_tokens": 200,
+                "estimated_total_cost_usd": 0.0,
+                "tool_invocation_count": 2,
+                "web_search_call_count": 2,
+                "tool_cost_usd": 0.01,
+                "error": None,
+            },
+            {
+                "idx": "synthesis",
+                "input_tokens": 500,
+                "cached_input_tokens": 50,
+                "output_tokens": 100,
+                "estimated_total_cost_usd": 0.02,
+                "tool_invocation_count": 1,
+                "web_search_call_count": 1,
+                "tool_cost_usd": 0.005,
+                "error": None,
+            },
+        ],
+        elapsed_s=12.3,
+    )
+
+    assert summary["request_count"] == 2
+    assert summary["agent_count"] == client.agent_count
+    assert summary["success_count"] == 1
+    assert summary["total_input_tokens"] == 1500
+    assert summary["total_output_tokens"] == 300
+    assert summary["total_cached_input_tokens"] == 150
+    assert summary["total_tool_invocation_count"] == 3
+    assert summary["total_web_search_call_count"] == 3
+    assert summary["total_tool_cost_usd"] == 0.015
+    assert summary["provider_reported_cost_usd"] == 0.02
+    assert summary["grand_total_cost_usd"] == 0.02
+    assert summary["elapsed_s"] == 12.3
 
 
 def test_call_agent_omits_cache_header_by_default_with_fake_chat_completion_client():
@@ -593,6 +640,12 @@ def test_call_async_with_context_applies_shared_prefix_to_agents_and_synthesis()
     assert "Analyze risk." in fake_completions.calls[1]["messages"][0]["content"]
     assert "AAPL packet" in fake_completions.calls[0]["messages"][1]["content"]
     assert "valuation risk" in fake_completions.calls[1]["messages"][1]["content"]
+    assert client.last_usage["request_count"] == 3
+    assert client.last_usage["success_count"] == 2
+    assert client.last_usage["total_input_tokens"] == 60
+    assert client.last_usage["total_output_tokens"] == 15
+    assert client.last_usage["total_cached_input_tokens"] == 9
+    assert client.last_usage["grand_total_cost_usd"] > 0
 
 
 def test_resolve_agent_specs_uses_named_preset_not_top_n_truncation():
