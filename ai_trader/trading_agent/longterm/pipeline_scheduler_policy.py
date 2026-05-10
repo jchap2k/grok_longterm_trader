@@ -33,6 +33,7 @@ class PipelineSchedulerPolicyConfig:
 def build_pipeline_scheduler_policy_decision(
     *,
     rules_path: str | Path,
+    research_rules_path: str | Path | None = None,
     now: datetime | None = None,
     market_regime: Mapping[str, Any] | None = None,
     policy_state: Mapping[str, Any] | None = None,
@@ -44,6 +45,7 @@ def build_pipeline_scheduler_policy_decision(
     resolved_config = config or PipelineSchedulerPolicyConfig()
     current_time = _normalize_datetime(now or datetime.now(timezone.utc))
     rules_hash = _rules_sha256(rules_path)
+    research_rules_hash = _rules_sha256(research_rules_path) if research_rules_path else ""
     state = dict(policy_state or {})
     regime = dict(market_regime or {})
     warnings: list[str] = []
@@ -53,6 +55,13 @@ def build_pipeline_scheduler_policy_decision(
     if state.get("active_rules_sha256") and state.get("active_rules_sha256") != rules_hash:
         warnings.append("active_rules_changed")
     active_rules_changed = "active_rules_changed" in warnings
+    if (
+        research_rules_hash
+        and state.get("research_rules_sha256")
+        and state.get("research_rules_sha256") != research_rules_hash
+    ):
+        warnings.append("research_rules_changed")
+    research_rules_changed = "research_rules_changed" in warnings
 
     resource_controls = _latest_resource_controls(pipeline_scheduler_summary or {})
     resource_warning, resource_blocker = _resource_control_findings(resource_controls)
@@ -73,6 +82,7 @@ def build_pipeline_scheduler_policy_decision(
         pipeline_scheduler_summary=pipeline_scheduler_summary or {},
         config=resolved_config,
         active_rules_changed=active_rules_changed,
+        research_rules_changed=research_rules_changed,
     )
 
     recommended_mode = "account_refresh_only"
@@ -131,6 +141,8 @@ def build_pipeline_scheduler_policy_decision(
         "market_regime": regime,
         "active_rules_path": str(Path(rules_path)),
         "active_rules_sha256": rules_hash,
+        "research_rules_path": str(Path(research_rules_path)) if research_rules_path else "",
+        "research_rules_sha256": research_rules_hash,
         "policy_config": {
             "account_refresh_minutes": resolved_config.account_refresh_minutes,
             "no_submit_preflight_hours": resolved_config.no_submit_preflight_hours,
@@ -182,6 +194,9 @@ def build_pipeline_scheduler_policy_state(
     state["schema_version"] = 1
     state["updated_at"] = generated_at
     state["active_rules_sha256"] = str(decision.get("active_rules_sha256") or state.get("active_rules_sha256") or "")
+    state["research_rules_sha256"] = str(
+        decision.get("research_rules_sha256") or state.get("research_rules_sha256") or ""
+    )
 
     scheduler_summary = pipeline_scheduler_summary or {}
     account_refresh_at = _latest_successful_account_refresh_at(scheduler_summary)
@@ -321,8 +336,14 @@ def _cadence_mode(
         return "account_refresh_only", "account_refresh_stale", "refresh_account_and_dashboard_artifacts"
     if _is_stale(preflight_at, now=now, max_age_seconds=config.no_submit_preflight_hours * 3600):
         return "no_submit_preflight", "no_submit_preflight_stale", "run_no_submit_preflight_pipeline"
-    if _is_stale(full_research_at, now=now, max_age_seconds=config.full_research_days * 86400):
-        return "full_research_cycle", "full_research_stale", "run_full_research_cycle_no_submit"
+    if cadence_recommendations.get("full_research_due"):
+        reasons = cadence_recommendations.get("reasons")
+        reason = "full_research_stale"
+        if isinstance(reasons, list) and "research_rules_changed" in reasons:
+            reason = "research_rules_changed"
+        elif _is_stale(full_research_at, now=now, max_age_seconds=config.full_research_days * 86400):
+            reason = "full_research_stale"
+        return "full_research_cycle", reason, "run_full_research_cycle_no_submit"
     if cadence_recommendations.get("final_planning_due"):
         reasons = cadence_recommendations.get("final_planning_reasons")
         reason = str(reasons[0]) if isinstance(reasons, list) and reasons else "final_planning_due"
@@ -337,6 +358,7 @@ def _build_cadence_recommendations(
     pipeline_scheduler_summary: Mapping[str, Any],
     config: PipelineSchedulerPolicyConfig,
     active_rules_changed: bool,
+    research_rules_changed: bool,
 ) -> dict[str, Any]:
     account_refresh_at = _parse_timestamp(state.get("last_account_refresh_at")) or _latest_successful_account_refresh_at(
         pipeline_scheduler_summary
@@ -355,14 +377,18 @@ def _build_cadence_recommendations(
         final_reasons.append("final_planning_stale")
     account_refresh_due = _is_stale(account_refresh_at, now=now, max_age_seconds=config.account_refresh_minutes * 60)
     no_submit_preflight_due = _is_stale(preflight_at, now=now, max_age_seconds=config.no_submit_preflight_hours * 3600)
-    full_research_due = _is_stale(full_research_at, now=now, max_age_seconds=config.full_research_days * 86400)
+    full_research_due = research_rules_changed or _is_stale(
+        full_research_at,
+        now=now,
+        max_age_seconds=config.full_research_days * 86400,
+    )
     reasons: list[str] = []
     if account_refresh_due:
         reasons.append("account_refresh_stale")
     if no_submit_preflight_due:
         reasons.append("no_submit_preflight_stale")
     if full_research_due:
-        reasons.append("full_research_stale")
+        reasons.append("research_rules_changed" if research_rules_changed else "full_research_stale")
     reasons.extend(final_reasons)
     return {
         "account_refresh_due": account_refresh_due,

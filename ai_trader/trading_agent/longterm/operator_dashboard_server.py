@@ -24,6 +24,15 @@ from longterm.scheduler_launch_packet import SchedulerLaunchPacketInputs, build_
 
 
 DEFAULT_PROTECTED_SYMBOLS = {"FXAIX"}
+XAI_TOOL_PRICING_PER_1K_CALLS = {
+    "web_search": 5.0,
+    "x_search": 5.0,
+    "code_execution": 5.0,
+    "code_interpreter": 5.0,
+    "attachment_search": 10.0,
+    "collections_search": 2.5,
+    "file_search": 2.5,
+}
 
 
 def build_dashboard_manifest(
@@ -862,22 +871,80 @@ def _empty_paper_submit_mode_plan(reason: str, *, source_path: Path | None = Non
 
 def _normalize_api_usage_payload(payload: Mapping[str, Any], *, source_path: Path) -> dict[str, Any]:
     if payload.get("mode") == "api_usage_summary" and isinstance(payload.get("providers"), list):
-        normalized = dict(payload)
-        normalized["order_submission_enabled"] = False
-        normalized.setdefault("source_path", str(source_path))
-        return normalized
+        return _normalize_api_usage_summary_payload(payload, source_path=source_path)
     providers = _usage_providers_from_payload(payload)
     if not providers:
         return _empty_api_usage("research_model_usage_missing", source_path=source_path)
-    totals = {
-        "request_count": sum(int(_number(item.get("request_count"))) for item in providers),
-        "prompt_tokens": sum(int(_number(item.get("prompt_tokens"))) for item in providers),
-        "completion_tokens": sum(int(_number(item.get("completion_tokens"))) for item in providers),
-        "total_tokens": sum(int(_number(item.get("total_tokens"))) for item in providers),
-        "estimated_total_cost_usd": round(
-            sum(float(_number(item.get("estimated_total_cost_usd"))) for item in providers),
-            6,
+    return _api_usage_summary_from_providers(providers, source_path=source_path)
+
+
+def _normalize_api_usage_summary_payload(payload: Mapping[str, Any], *, source_path: Path) -> dict[str, Any]:
+    providers = _usage_providers_from_payload(payload)
+    totals = _api_usage_totals_from_providers(providers)
+    raw_totals = payload.get("totals") if isinstance(payload.get("totals"), Mapping) else {}
+    if raw_totals:
+        totals = {
+            "request_count": int(_number(_first_present(raw_totals.get("request_count"), totals["request_count"]))),
+            "prompt_tokens": int(_number(_first_present(raw_totals.get("prompt_tokens"), totals["prompt_tokens"]))),
+            "completion_tokens": int(
+                _number(_first_present(raw_totals.get("completion_tokens"), totals["completion_tokens"]))
+            ),
+            "total_tokens": int(_number(_first_present(raw_totals.get("total_tokens"), totals["total_tokens"]))),
+            "tool_invocation_count": int(
+                _number(_first_present(raw_totals.get("tool_invocation_count"), totals["tool_invocation_count"]))
+            ),
+            "web_search_call_count": int(
+                _number(_first_present(raw_totals.get("web_search_call_count"), totals["web_search_call_count"]))
+            ),
+            "tool_cost_usd": round(
+                float(_number(_first_present(raw_totals.get("tool_cost_usd"), totals["tool_cost_usd"]))),
+                6,
+            ),
+            "web_search_cost_usd": round(
+                float(_number(_first_present(raw_totals.get("web_search_cost_usd"), totals["web_search_cost_usd"]))),
+                6,
+            ),
+            "estimated_total_cost_usd": round(
+                float(
+                    _number(
+                        _first_present(
+                            raw_totals.get("estimated_total_cost_usd"),
+                            raw_totals.get("estimated_cost_usd"),
+                            totals["estimated_total_cost_usd"],
+                        )
+                    )
+                ),
+                6,
+            ),
+        }
+    tier_tracking = (
+        dict(payload.get("tier_tracking"))
+        if isinstance(payload.get("tier_tracking"), Mapping)
+        else _tier_tracking_from_providers(providers)
+    )
+    return {
+        "schema_version": int(_number(payload.get("schema_version")) or 1),
+        "mode": "api_usage_summary",
+        "generated_at": str(
+            payload.get("generated_at")
+            or datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
         ),
+        "status": str(payload.get("status") or "available"),
+        "source_path": str(payload.get("source_path") or source_path),
+        "providers": providers,
+        "totals": totals,
+        "tier_tracking": tier_tracking,
+        "warnings": [str(item) for item in payload.get("warnings") or []],
+        "next_safe_action": str(
+            payload.get("next_safe_action") or "review_usage_before_large_paid_enrichment_runs"
+        ),
+        "order_submission_enabled": False,
+    }
+
+
+def _api_usage_summary_from_providers(providers: list[dict[str, Any]], *, source_path: Path) -> dict[str, Any]:
+    totals = {
+        **_api_usage_totals_from_providers(providers),
     }
     tier_tracking = _tier_tracking_from_providers(providers)
     return {
@@ -892,6 +959,23 @@ def _normalize_api_usage_payload(payload: Mapping[str, Any], *, source_path: Pat
         "warnings": [],
         "next_safe_action": "review_usage_before_large_paid_enrichment_runs",
         "order_submission_enabled": False,
+    }
+
+
+def _api_usage_totals_from_providers(providers: list[Mapping[str, Any]]) -> dict[str, Any]:
+    return {
+        "request_count": sum(int(_number(item.get("request_count"))) for item in providers),
+        "prompt_tokens": sum(int(_number(item.get("prompt_tokens"))) for item in providers),
+        "completion_tokens": sum(int(_number(item.get("completion_tokens"))) for item in providers),
+        "total_tokens": sum(int(_number(item.get("total_tokens"))) for item in providers),
+        "tool_invocation_count": sum(int(_number(item.get("tool_invocation_count"))) for item in providers),
+        "web_search_call_count": sum(int(_number(item.get("web_search_call_count"))) for item in providers),
+        "tool_cost_usd": round(sum(float(_number(item.get("tool_cost_usd"))) for item in providers), 6),
+        "web_search_cost_usd": round(sum(float(_number(item.get("web_search_cost_usd"))) for item in providers), 6),
+        "estimated_total_cost_usd": round(
+            sum(float(_number(item.get("estimated_total_cost_usd"))) for item in providers),
+            6,
+        ),
     }
 
 
@@ -911,19 +995,78 @@ def _usage_providers_from_payload(payload: Mapping[str, Any]) -> list[dict[str, 
         model = str(raw.get("model") or raw.get("model_name") or "").strip()
         if not provider and not model:
             continue
+        prompt_tokens = int(_number(raw.get("prompt_tokens")))
+        completion_tokens = int(_number(raw.get("completion_tokens")))
+        total_tokens = int(_number(raw.get("total_tokens"))) or prompt_tokens + completion_tokens
+        request_fees = round(
+            float(_number(_first_present(raw.get("request_fees_usd"), raw.get("request_fee_usd")))),
+            6,
+        )
+        input_token_cost = round(
+            float(_number(_first_present(raw.get("input_token_cost_usd"), raw.get("input_cost_usd")))),
+            6,
+        )
+        output_token_cost = round(
+            float(_number(_first_present(raw.get("output_token_cost_usd"), raw.get("output_cost_usd")))),
+            6,
+        )
+        web_search_call_count = int(
+            _number(
+                _first_present(
+                    raw.get("web_search_call_count"),
+                    raw.get("web_search_calls"),
+                    raw.get("web_search_invocation_count"),
+                    raw.get("web_search_invocations"),
+                )
+            )
+        )
+        web_search_cost = round(
+            float(_number(_first_present(raw.get("web_search_cost_usd"), raw.get("web_search_tool_cost_usd")))),
+            6,
+        )
+        if web_search_cost <= 0.0 and web_search_call_count:
+            web_search_cost = _tool_invocation_cost_usd("web_search", web_search_call_count)
+        tool_invocation_count = int(_number(raw.get("tool_invocation_count"))) or web_search_call_count
+        tool_cost = round(
+            float(
+                _number(
+                    _first_present(
+                        raw.get("tool_cost_usd"),
+                        raw.get("tool_invocation_cost_usd"),
+                        raw.get("server_side_tool_cost_usd"),
+                    )
+                )
+            ),
+            6,
+        )
+        if tool_cost <= 0.0:
+            tool_cost = web_search_cost
+        explicit_total_cost = _optional_number(
+            _first_present(raw.get("estimated_total_cost_usd"), raw.get("estimated_cost_usd"))
+        )
+        component_total_cost = round(request_fees + input_token_cost + output_token_cost + tool_cost, 6)
+        estimated_total_cost = (
+            round(float(explicit_total_cost), 6)
+            if explicit_total_cost is not None and (explicit_total_cost > 0.0 or component_total_cost <= 0.0)
+            else component_total_cost
+        )
         providers.append(
             {
                 "provider": provider or "unknown",
                 "model": model,
                 "search_context_size": str(raw.get("search_context_size") or raw.get("context_size") or "").strip(),
                 "request_count": int(_number(raw.get("request_count"))),
-                "prompt_tokens": int(_number(raw.get("prompt_tokens"))),
-                "completion_tokens": int(_number(raw.get("completion_tokens"))),
-                "total_tokens": int(_number(raw.get("total_tokens"))),
-                "request_fees_usd": round(float(_number(raw.get("request_fees_usd"))), 6),
-                "input_token_cost_usd": round(float(_number(raw.get("input_token_cost_usd"))), 6),
-                "output_token_cost_usd": round(float(_number(raw.get("output_token_cost_usd"))), 6),
-                "estimated_total_cost_usd": round(float(_number(raw.get("estimated_total_cost_usd"))), 6),
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens,
+                "request_fees_usd": request_fees,
+                "input_token_cost_usd": input_token_cost,
+                "output_token_cost_usd": output_token_cost,
+                "tool_invocation_count": tool_invocation_count,
+                "web_search_call_count": web_search_call_count,
+                "tool_cost_usd": tool_cost,
+                "web_search_cost_usd": web_search_cost,
+                "estimated_total_cost_usd": estimated_total_cost,
                 "credits_purchased_to_date_usd": _optional_number(raw.get("credits_purchased_to_date_usd")),
                 "tier_1_credit_target_usd": _optional_number(raw.get("tier_1_credit_target_usd")),
                 "estimated_progress_to_tier_1_usd": _optional_number(raw.get("estimated_progress_to_tier_1_usd")),
@@ -933,6 +1076,11 @@ def _usage_providers_from_payload(payload: Mapping[str, Any]) -> list[dict[str, 
             }
         )
     return providers
+
+
+def _tool_invocation_cost_usd(tool_name: str, call_count: int) -> float:
+    price_per_1k = XAI_TOOL_PRICING_PER_1K_CALLS.get(tool_name, 0.0)
+    return round(max(0, int(call_count)) / 1_000 * price_per_1k, 6)
 
 
 def _tier_tracking_from_providers(providers: list[Mapping[str, Any]]) -> dict[str, Any]:

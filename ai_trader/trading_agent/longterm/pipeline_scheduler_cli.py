@@ -51,10 +51,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--market-regime-command-template", default="")
     parser.add_argument("--committee-preset-policy-command-template", default="")
     parser.add_argument("--scheduler-policy-command-template", default="")
+    parser.add_argument("--full-research-command-template", default="")
     parser.add_argument("--account-refresh-command-template", default="")
     parser.add_argument("--post-run-verification-command-template", default="")
     parser.add_argument("--scheduler-review-bundle-command-template", default="")
     parser.add_argument("--portfolio-news-monitor-command-template", default="")
+    parser.add_argument("--motley-fool-new-recs-capture-command-template", default="")
+    parser.add_argument("--motley-fool-new-recs-delta-command-template", default="")
     parser.add_argument("--journal-db", default="")
     parser.add_argument("--ledger-db", default="")
     parser.add_argument("--action-plan", default="")
@@ -63,6 +66,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--auto-market-regime-snapshot", action="store_true")
     parser.add_argument("--market-regime-provider", choices=["yfinance", "fredapi"], default="yfinance")
     parser.add_argument("--fred-api-key-env", default="FRED_API_KEY")
+    parser.add_argument("--fred-provider-attempts", type=int, default=3)
+    parser.add_argument("--fred-provider-retry-delay-seconds", type=float, default=2.0)
     parser.add_argument("--price-map", default="")
     parser.add_argument("--scheduler-config-validation", default="")
     parser.add_argument("--scheduler-task-plan", default="")
@@ -119,12 +124,24 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--perplexity-max-tokens", type=int, default=DEFAULT_PERPLEXITY_MAX_TOKENS)
     parser.add_argument("--perplexity-search-context-size", choices=["low", "medium", "high"], default="low")
     parser.add_argument("--perplexity-credits-purchased-to-date", type=float, default=None)
+    parser.add_argument("--kronos-advisory", action="store_true")
+    parser.add_argument("--kronos-root", default="")
+    parser.add_argument("--kronos-python", default="")
+    parser.add_argument("--kronos-limit", type=int, default=None)
     parser.add_argument("--selection-top-percent", type=float, default=None)
     parser.add_argument("--selection-min-count", type=int, default=None)
     parser.add_argument("--selection-max-count", type=int, default=None)
     parser.add_argument("--recent-research-symbols-file", default="")
     parser.add_argument("--research-as-of-date", default="")
     parser.add_argument("--research-batch-size", type=int, default=None)
+    parser.add_argument(
+        "--policy-gated-full-research",
+        action="store_true",
+        help=(
+            "For the ongoing-no-submit preset, keep broad-universe research out of the daily "
+            "pipeline command and run it only when the scheduler policy says full research is due."
+        ),
+    )
     parser.add_argument(
         "--portfolio-news-monitor",
         action="store_true",
@@ -154,6 +171,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--portfolio-news-followup-max-batches", type=int, default=None)
     parser.add_argument("--portfolio-news-followup-agent-preset", default="decision_4")
     parser.add_argument("--no-portfolio-news-followup-committee-resume", action="store_true")
+    parser.add_argument("--motley-fool-new-recs-monitor", action="store_true")
+    parser.add_argument("--motley-fool-profile-dir", default="")
+    parser.add_argument("--motley-fool-new-recs-batches", action="store_true")
+    parser.add_argument("--motley-fool-new-recs-batch-size", type=int, default=3)
+    parser.add_argument("--run-motley-fool-new-recs-committee-batches", action="store_true")
+    parser.add_argument("--motley-fool-new-recs-max-batches", type=int, default=None)
+    parser.add_argument("--motley-fool-new-recs-agent-preset", default="decision_4")
+    parser.add_argument("--no-motley-fool-new-recs-committee-resume", action="store_true")
+    parser.add_argument("--research-supplemental-source-file", action="append", default=[])
+    parser.add_argument("--research-supplemental-source-url", action="append", default=[])
+    parser.add_argument("--research-supplemental-ideas-file", action="append", default=[])
     parser.add_argument("--run-generated-committee-batches", action="store_true")
     parser.add_argument("--no-generated-committee-resume", action="store_true")
     parser.add_argument("--generated-committee-max-batches", type=int, default=None)
@@ -161,6 +189,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--rules-path",
         default=str(Path(__file__).resolve().parents[2] / "rules" / "active_rules.txt"),
+    )
+    parser.add_argument(
+        "--research-rules-path",
+        default=str(Path(__file__).resolve().parents[2] / "rules" / "weekly_full_scan_rules.txt"),
     )
     parser.add_argument("--max-runs", type=int, default=1)
     parser.add_argument("--interval-seconds", type=float, default=3600.0)
@@ -230,6 +262,11 @@ def _validate_ongoing_no_submit_research_bounds(args: argparse.Namespace) -> Non
             "Paid research provider mode with --preset ongoing-no-submit requires "
             "--research-max-pass-count to bound paid enrichment."
         )
+    if args.policy_gated_full_research:
+        if not (args.research_source_file or args.research_source_url):
+            raise ValueError("--policy-gated-full-research requires --research-source-file or --research-source-url.")
+        if not args.research_campaign_dir:
+            raise ValueError("--policy-gated-full-research requires --research-campaign-dir.")
     if args.run_generated_committee_batches and args.generated_committee_max_batches is None:
         raise ValueError(
             "--run-generated-committee-batches with --preset ongoing-no-submit requires "
@@ -248,6 +285,12 @@ def _validate_ongoing_no_submit_research_bounds(args: argparse.Namespace) -> Non
         raise ValueError("--portfolio-news-followup-batches with --preset ongoing-no-submit requires --portfolio-news-monitor.")
     if args.portfolio_news_followup_batch_size < 1:
         raise ValueError("--portfolio-news-followup-batch-size must be positive.")
+    if args.motley_fool_new_recs_batches and not args.motley_fool_new_recs_monitor:
+        raise ValueError("--motley-fool-new-recs-batches with --preset ongoing-no-submit requires --motley-fool-new-recs-monitor.")
+    if args.motley_fool_new_recs_batch_size < 1:
+        raise ValueError("--motley-fool-new-recs-batch-size must be positive.")
+    if args.kronos_limit is not None and args.kronos_limit < 1:
+        raise ValueError("--kronos-limit must be positive when supplied.")
     if args.run_portfolio_news_followup_committee_batches:
         if not args.portfolio_news_monitor or not args.portfolio_news_followup_batches:
             raise ValueError(
@@ -258,6 +301,17 @@ def _validate_ongoing_no_submit_research_bounds(args: argparse.Namespace) -> Non
             raise ValueError(
                 "--run-portfolio-news-followup-committee-batches with --preset ongoing-no-submit requires "
                 "--portfolio-news-followup-max-batches to bound LLM committee work."
+            )
+    if args.run_motley_fool_new_recs_committee_batches:
+        if not args.motley_fool_new_recs_monitor or not args.motley_fool_new_recs_batches:
+            raise ValueError(
+                "--run-motley-fool-new-recs-committee-batches with --preset ongoing-no-submit requires "
+                "--motley-fool-new-recs-monitor and --motley-fool-new-recs-batches."
+            )
+        if args.motley_fool_new_recs_max_batches is None or args.motley_fool_new_recs_max_batches < 1:
+            raise ValueError(
+                "--run-motley-fool-new-recs-committee-batches with --preset ongoing-no-submit requires "
+                "--motley-fool-new-recs-max-batches to bound LLM committee work."
             )
 
 
@@ -302,6 +356,11 @@ def _load_config_file_args(config_file: str | Path) -> list[str]:
             continue
         if value is None:
             continue
+        if action == "append":
+            values = value if isinstance(value, list) else [value]
+            for item in values:
+                expanded.extend([option, str(item)])
+            continue
         expanded.extend([option, str(value)])
     return expanded
 
@@ -316,6 +375,8 @@ def _config_arg_specs() -> dict[str, tuple[str, str]]:
             specs[action.dest] = (option, "store_true")
         elif isinstance(action, argparse._StoreFalseAction):
             specs[action.dest] = (option, "store_false")
+        elif isinstance(action, argparse._AppendAction):
+            specs[action.dest] = (option, "append")
         else:
             specs[action.dest] = (option, "store")
     return specs
@@ -354,6 +415,16 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
         ]
         if args.market_regime_provider == "fredapi":
             _append_optional_value(market_regime_command_parts, "--fred-api-key-env", args.fred_api_key_env)
+            _append_optional_value(
+                market_regime_command_parts,
+                "--fred-provider-attempts",
+                args.fred_provider_attempts,
+            )
+            _append_optional_value(
+                market_regime_command_parts,
+                "--fred-provider-retry-delay-seconds",
+                _format_number(float(args.fred_provider_retry_delay_seconds)),
+            )
 
     pipeline_parts = [
         "python",
@@ -372,88 +443,122 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
         _quote_path_arg(profile_config),
         "--json",
     ]
-    _append_optional_path(pipeline_parts, "--research-source-file", args.research_source_file)
-    _append_optional_path(pipeline_parts, "--research-source-url", args.research_source_url)
-    _append_optional_value(pipeline_parts, "--research-source", args.research_source)
-    _append_optional_path(pipeline_parts, "--research-campaign-dir", args.research_campaign_dir)
-    _append_optional_flag(pipeline_parts, "--research-resume", args.research_resume)
-    _append_optional_value(pipeline_parts, "--research-run-until", args.research_run_until)
-    _append_optional_value(pipeline_parts, "--research-watchlist-limit", args.research_watchlist_limit)
-    _append_optional_value(pipeline_parts, "--research-universe-batch-size", args.research_universe_batch_size)
-    _append_optional_value(pipeline_parts, "--research-top-percent", args.research_top_percent)
-    _append_optional_value(pipeline_parts, "--research-min-pass-count", args.research_min_pass_count)
-    _append_optional_value(pipeline_parts, "--research-max-pass-count", args.research_max_pass_count)
+    full_research_parts: list[str] = []
+    research_parts = pipeline_parts
+    if args.policy_gated_full_research:
+        full_research_parts = [
+            "python",
+            _script_path("longterm_research_to_paper_pipeline.py"),
+            "--output-dir",
+            "{full_research_output_dir}",
+            "--action-plan",
+            _quote_path_arg(action_plan),
+            "--portfolio-state",
+            "{portfolio_state}",
+            "--journal-db",
+            _quote_path_arg(journal_db),
+            "--ledger-db",
+            _quote_path_arg(ledger_db),
+            "--profile-config",
+            _quote_path_arg(profile_config),
+            "--skip-paper-preflight",
+            "--json",
+        ]
+        research_parts = full_research_parts
+
+    _append_optional_path(research_parts, "--research-source-file", args.research_source_file)
+    _append_optional_path(research_parts, "--research-source-url", args.research_source_url)
+    _append_optional_value(research_parts, "--research-source", args.research_source)
+    for spec in args.research_supplemental_source_file or []:
+        _append_optional_value(research_parts, "--supplemental-source-file", spec)
+    for spec in args.research_supplemental_source_url or []:
+        _append_optional_value(research_parts, "--supplemental-source-url", spec)
+    for spec in args.research_supplemental_ideas_file or []:
+        _append_optional_value(research_parts, "--supplemental-ideas-file", spec)
+    _append_optional_path(research_parts, "--research-campaign-dir", args.research_campaign_dir)
+    _append_optional_flag(research_parts, "--research-resume", args.research_resume)
+    _append_optional_value(research_parts, "--research-run-until", args.research_run_until)
+    _append_optional_value(research_parts, "--research-watchlist-limit", args.research_watchlist_limit)
+    _append_optional_value(research_parts, "--research-universe-batch-size", args.research_universe_batch_size)
+    _append_optional_value(research_parts, "--research-top-percent", args.research_top_percent)
+    _append_optional_value(research_parts, "--research-min-pass-count", args.research_min_pass_count)
+    _append_optional_value(research_parts, "--research-max-pass-count", args.research_max_pass_count)
     _append_optional_value(
-        pipeline_parts,
+        research_parts,
         "--research-min-coverage-percent-for-enrichment",
         args.research_min_coverage_percent_for_enrichment,
     )
     _append_optional_value(
-        pipeline_parts,
+        research_parts,
         "--research-max-fundamental-fetches",
         args.research_max_fundamental_fetches,
     )
     _append_optional_value(
-        pipeline_parts,
+        research_parts,
         "--research-fundamental-fetch-chunk-size",
         args.research_fundamental_fetch_chunk_size,
     )
-    _append_optional_value(pipeline_parts, "--research-evidence-batch-size", args.research_evidence_batch_size)
-    _append_optional_value(pipeline_parts, "--research-max-evidence-batches", args.research_max_evidence_batches)
-    _append_optional_value(pipeline_parts, "--research-rate-limit-batch-size", args.research_rate_limit_batch_size)
+    _append_optional_value(research_parts, "--research-evidence-batch-size", args.research_evidence_batch_size)
+    _append_optional_value(research_parts, "--research-max-evidence-batches", args.research_max_evidence_batches)
+    _append_optional_value(research_parts, "--research-rate-limit-batch-size", args.research_rate_limit_batch_size)
     _append_optional_value(
-        pipeline_parts,
+        research_parts,
         "--research-rate-limit-pause-seconds",
         args.research_rate_limit_pause_seconds,
     )
     _append_optional_value(
-        pipeline_parts,
+        research_parts,
         "--research-campaign-batch-pause-seconds",
         args.research_campaign_batch_pause_seconds,
     )
-    _append_optional_flag(pipeline_parts, "--polygon-news", args.polygon_news)
-    _append_optional_path(pipeline_parts, "--research-news-cache-path", args.research_news_cache_path)
-    _append_optional_flag(pipeline_parts, "--xai-grok", args.xai_grok)
-    _append_optional_flag(pipeline_parts, "--skip-grok", args.skip_grok)
-    _append_optional_flag(pipeline_parts, "--perplexity-research", args.perplexity_research)
+    _append_optional_flag(research_parts, "--polygon-news", args.polygon_news)
+    _append_optional_path(research_parts, "--research-news-cache-path", args.research_news_cache_path)
+    _append_optional_flag(research_parts, "--xai-grok", args.xai_grok)
+    _append_optional_flag(research_parts, "--skip-grok", args.skip_grok)
+    _append_optional_flag(research_parts, "--perplexity-research", args.perplexity_research)
     if args.perplexity_research:
-        _append_optional_value(pipeline_parts, "--perplexity-api-key-env", args.perplexity_api_key_env)
-        _append_optional_value(pipeline_parts, "--perplexity-model", args.perplexity_model)
-        _append_optional_value(pipeline_parts, "--perplexity-api-url", args.perplexity_api_url)
-        _append_optional_value(pipeline_parts, "--perplexity-timeout-seconds", args.perplexity_timeout_seconds)
-        _append_optional_value(pipeline_parts, "--perplexity-max-tokens", args.perplexity_max_tokens)
+        _append_optional_value(research_parts, "--perplexity-api-key-env", args.perplexity_api_key_env)
+        _append_optional_value(research_parts, "--perplexity-model", args.perplexity_model)
+        _append_optional_value(research_parts, "--perplexity-api-url", args.perplexity_api_url)
+        _append_optional_value(research_parts, "--perplexity-timeout-seconds", args.perplexity_timeout_seconds)
+        _append_optional_value(research_parts, "--perplexity-max-tokens", args.perplexity_max_tokens)
         _append_optional_value(
-            pipeline_parts,
+            research_parts,
             "--perplexity-search-context-size",
             args.perplexity_search_context_size,
         )
         _append_optional_value(
-            pipeline_parts,
+            research_parts,
             "--perplexity-credits-purchased-to-date",
             args.perplexity_credits_purchased_to_date,
         )
-    _append_optional_value(pipeline_parts, "--selection-top-percent", args.selection_top_percent)
-    _append_optional_value(pipeline_parts, "--selection-min-count", args.selection_min_count)
-    _append_optional_value(pipeline_parts, "--selection-max-count", args.selection_max_count)
-    _append_optional_path(pipeline_parts, "--recent-research-symbols-file", args.recent_research_symbols_file)
-    _append_optional_value(pipeline_parts, "--research-as-of-date", args.research_as_of_date)
-    _append_optional_value(pipeline_parts, "--research-batch-size", args.research_batch_size)
+    _append_optional_flag(research_parts, "--kronos-advisory", args.kronos_advisory)
+    if args.kronos_advisory:
+        _append_optional_path(research_parts, "--kronos-root", args.kronos_root)
+        _append_optional_path(research_parts, "--kronos-python", args.kronos_python)
+        _append_optional_value(research_parts, "--kronos-limit", args.kronos_limit)
+    _append_optional_value(research_parts, "--selection-top-percent", args.selection_top_percent)
+    _append_optional_value(research_parts, "--selection-min-count", args.selection_min_count)
+    _append_optional_value(research_parts, "--selection-max-count", args.selection_max_count)
+    _append_optional_path(research_parts, "--recent-research-symbols-file", args.recent_research_symbols_file)
+    _append_optional_value(research_parts, "--research-as-of-date", args.research_as_of_date)
+    _append_optional_value(research_parts, "--research-batch-size", args.research_batch_size)
     _append_optional_flag(
-        pipeline_parts,
+        research_parts,
         "--run-generated-committee-batches",
         args.run_generated_committee_batches,
     )
     _append_optional_flag(
-        pipeline_parts,
+        research_parts,
         "--no-generated-committee-resume",
         args.no_generated_committee_resume,
     )
     _append_optional_value(
-        pipeline_parts,
+        research_parts,
         "--generated-committee-max-batches",
         args.generated_committee_max_batches,
     )
-    _append_optional_path(pipeline_parts, "--committee-batch-dir", args.committee_batch_dir)
+    _append_optional_path(research_parts, "--committee-batch-dir", args.committee_batch_dir)
     _append_optional_path(pipeline_parts, "--market-regime-file", market_regime_path)
     _append_optional_path(pipeline_parts, "--price-map", args.price_map)
     _append_optional_flag(pipeline_parts, "--skip-price-map", args.skip_price_map)
@@ -506,6 +611,36 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
             "--no-portfolio-news-followup-committee-resume",
             args.no_portfolio_news_followup_committee_resume,
         )
+    if args.motley_fool_new_recs_monitor:
+        _append_optional_path(pipeline_parts, "--motley-fool-new-recs-ideas", "{motley_fool_new_recs_ideas}")
+    _append_optional_flag(pipeline_parts, "--motley-fool-new-recs-batches", args.motley_fool_new_recs_batches)
+    if args.motley_fool_new_recs_batches:
+        _append_optional_value(
+            pipeline_parts,
+            "--motley-fool-new-recs-batch-size",
+            args.motley_fool_new_recs_batch_size,
+        )
+    _append_optional_flag(
+        pipeline_parts,
+        "--run-motley-fool-new-recs-committee-batches",
+        args.run_motley_fool_new_recs_committee_batches,
+    )
+    if args.run_motley_fool_new_recs_committee_batches:
+        _append_optional_value(
+            pipeline_parts,
+            "--motley-fool-new-recs-max-batches",
+            args.motley_fool_new_recs_max_batches,
+        )
+        _append_optional_value(
+            pipeline_parts,
+            "--motley-fool-new-recs-agent-preset",
+            args.motley_fool_new_recs_agent_preset,
+        )
+        _append_optional_flag(
+            pipeline_parts,
+            "--no-motley-fool-new-recs-committee-resume",
+            args.no_motley_fool_new_recs_committee_resume,
+        )
 
     portfolio_news_monitor_parts: list[str] = []
     if args.portfolio_news_monitor:
@@ -533,6 +668,37 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
             args.portfolio_news_published_after,
         )
 
+    motley_fool_new_recs_capture_parts: list[str] = []
+    motley_fool_new_recs_delta_parts: list[str] = []
+    if args.motley_fool_new_recs_monitor:
+        motley_fool_new_recs_capture_parts = [
+            "python",
+            _script_path("longterm_motley_fool_capture.py"),
+            "--source",
+            "new_recommendations",
+            "--output",
+            "{motley_fool_new_recs_capture}",
+        ]
+        _append_optional_path(
+            motley_fool_new_recs_capture_parts,
+            "--profile-dir",
+            args.motley_fool_profile_dir,
+        )
+        motley_fool_new_recs_delta_parts = [
+            "python",
+            _script_path("longterm_motley_fool_new_recs_state.py"),
+            "--ideas-file",
+            "{motley_fool_new_recs_capture}",
+            "--state-file",
+            "{motley_fool_new_recs_state}",
+            "--output",
+            "{motley_fool_new_recs_delta}",
+            "--new-ideas-output",
+            "{motley_fool_new_recs_ideas}",
+            "--bootstrap-if-empty",
+            "--json",
+        ]
+
     position_review_queue_parts: list[str] = []
     if args.position_review_queue:
         position_review_queue_parts = [
@@ -556,6 +722,8 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
         _script_path("longterm_pipeline_scheduler_policy.py"),
         "--rules-path",
         "{rules_path}",
+        "--research-rules-path",
+        "{research_rules_path}",
         "--journal-db",
         _quote_path_arg(journal_db),
         "--policy-state",
@@ -629,7 +797,7 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
                 "last_final_planning_at",
             ]
         )
-    if args.run_generated_committee_batches:
+    if args.run_generated_committee_batches and not args.policy_gated_full_research:
         post_run_verification_parts.extend(
             [
                 "--require-policy-timestamp",
@@ -641,6 +809,13 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
             [
                 "--require-policy-timestamp",
                 "last_news_monitor_at",
+            ]
+        )
+    if args.motley_fool_new_recs_monitor:
+        post_run_verification_parts.extend(
+            [
+                "--require-policy-timestamp",
+                "last_motley_fool_new_recs_at",
             ]
         )
     if args.position_review_queue:
@@ -689,9 +864,12 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
         "pre_pipeline_refresh": pre_refresh,
         "market_regime": " ".join(market_regime_command_parts),
         "portfolio_news_monitor": " ".join(portfolio_news_monitor_parts),
+        "motley_fool_new_recs_capture": " ".join(motley_fool_new_recs_capture_parts),
+        "motley_fool_new_recs_delta": " ".join(motley_fool_new_recs_delta_parts),
         "position_review_queue": " ".join(position_review_queue_parts),
         "pipeline": " ".join(pipeline_parts),
         "scheduler_policy": " ".join(scheduler_policy_parts),
+        "full_research": " ".join(full_research_parts),
         "account_refresh": " ".join(account_refresh_parts),
         "post_run_verification": " ".join(post_run_verification_parts),
         "scheduler_review_bundle": " ".join(scheduler_review_bundle_parts),
@@ -705,10 +883,13 @@ def _resolve_command_templates(args: argparse.Namespace) -> dict[str, str]:
         args.pipeline_command_template,
         args.committee_preset_policy_command_template,
         args.scheduler_policy_command_template,
+        args.full_research_command_template,
         args.account_refresh_command_template,
         args.post_run_verification_command_template,
         args.scheduler_review_bundle_command_template,
         args.portfolio_news_monitor_command_template,
+        args.motley_fool_new_recs_capture_command_template,
+        args.motley_fool_new_recs_delta_command_template,
     ]
     if args.preset == "ongoing-no-submit":
         if any(explicit_templates):
@@ -720,9 +901,12 @@ def _resolve_command_templates(args: argparse.Namespace) -> dict[str, str]:
         "pre_pipeline_refresh": args.pre_pipeline_refresh_command_template,
         "market_regime": args.market_regime_command_template,
         "portfolio_news_monitor": args.portfolio_news_monitor_command_template,
+        "motley_fool_new_recs_capture": args.motley_fool_new_recs_capture_command_template,
+        "motley_fool_new_recs_delta": args.motley_fool_new_recs_delta_command_template,
         "pipeline": args.pipeline_command_template,
         "committee_preset_policy": args.committee_preset_policy_command_template,
         "scheduler_policy": args.scheduler_policy_command_template,
+        "full_research": args.full_research_command_template,
         "account_refresh": args.account_refresh_command_template,
         "post_run_verification": args.post_run_verification_command_template,
         "scheduler_review_bundle": args.scheduler_review_bundle_command_template,
@@ -733,6 +917,7 @@ def validate_resolved_scheduler_config(args: argparse.Namespace) -> dict[str, ob
     """Validate resolved scheduler templates without creating run artifacts."""
     templates = _resolve_command_templates(args)
     rules_path = Path(args.rules_path)
+    research_rules_path = Path(args.research_rules_path) if args.research_rules_path else None
     validate_scheduler_command_template(
         templates["pipeline"],
         command_kind="pipeline",
@@ -742,9 +927,12 @@ def validate_resolved_scheduler_config(args: argparse.Namespace) -> dict[str, ob
         ("pre_pipeline_refresh", "pre_pipeline_refresh"),
         ("market_regime", "market_regime"),
         ("portfolio_news_monitor", "portfolio_news_monitor"),
+        ("motley_fool_new_recs_capture", "motley_fool_new_recs_capture"),
+        ("motley_fool_new_recs_delta", "motley_fool_new_recs_delta"),
         ("position_review_queue", "position_review_queue"),
         ("committee_preset_policy", "committee_preset_policy"),
         ("scheduler_policy", "scheduler_policy"),
+        ("full_research", "full_research"),
         ("account_refresh", "account_refresh"),
         ("post_run_verification", "post_run_verification"),
         ("scheduler_review_bundle", "scheduler_review_bundle"),
@@ -754,7 +942,9 @@ def validate_resolved_scheduler_config(args: argparse.Namespace) -> dict[str, ob
         if command:
             validate_scheduler_command_template(command, command_kind=command_kind, rules_path=rules_path)
     commands = {key: value for key, value in templates.items() if value}
-    resource_controls = derive_scheduler_resource_controls(templates["pipeline"])
+    resource_controls = derive_scheduler_resource_controls(
+        f"{templates['pipeline']} {templates.get('full_research', '')}".strip()
+    )
     operating_mode_summary = _build_operating_mode_summary(
         args=args,
         commands=commands,
@@ -771,6 +961,7 @@ def validate_resolved_scheduler_config(args: argparse.Namespace) -> dict[str, ob
         "preset": args.preset,
         "output_dir": str(Path(args.output_dir).expanduser().resolve()),
         "rules_path": str(rules_path.expanduser().resolve()),
+        "research_rules_path": str(research_rules_path.expanduser().resolve()) if research_rules_path else "",
         "commands": commands,
         "resource_controls": resource_controls,
         "next_safe_action": "run_scheduler_profile_when_operator_window_is_approved",
@@ -795,6 +986,8 @@ def _build_operating_mode_summary(
         "pre_pipeline_refresh": bool(commands.get("pre_pipeline_refresh")),
         "market_regime": bool(commands.get("market_regime")),
         "portfolio_news_monitor": bool(commands.get("portfolio_news_monitor")),
+        "motley_fool_new_recs_monitor": bool(commands.get("motley_fool_new_recs_capture"))
+        and bool(commands.get("motley_fool_new_recs_delta")),
         "position_review_queue": bool(commands.get("position_review_queue")),
         "research_pipeline": bool(commands.get("pipeline")),
         "scheduler_policy": bool(commands.get("scheduler_policy")),
@@ -803,9 +996,14 @@ def _build_operating_mode_summary(
         "scheduler_review_bundle": bool(commands.get("scheduler_review_bundle")),
         "portfolio_news_followup_batches": bool(args.portfolio_news_followup_batches),
         "portfolio_news_followup_committee_batches": bool(args.run_portfolio_news_followup_committee_batches),
+        "motley_fool_new_recs_batches": bool(args.motley_fool_new_recs_batches),
+        "motley_fool_new_recs_committee_batches": bool(args.run_motley_fool_new_recs_committee_batches),
+        "kronos_advisory": bool(args.kronos_advisory),
         "generated_committee_batches": bool(args.run_generated_committee_batches),
         "final_planning_refresh": bool(args.final_planning_refresh),
     }
+    if commands.get("full_research") or args.policy_gated_full_research:
+        stage_flags["policy_gated_full_research"] = bool(commands.get("full_research"))
     missing_required_stages = [
         stage_name for stage_name in required_no_submit_stages if not commands.get(stage_name)
     ]
@@ -861,14 +1059,18 @@ def run_cli(args: argparse.Namespace) -> int:
             pre_pipeline_refresh_command_template=templates.get("pre_pipeline_refresh", ""),
             market_regime_command_template=templates.get("market_regime", ""),
             portfolio_news_monitor_command_template=templates.get("portfolio_news_monitor", ""),
+            motley_fool_new_recs_capture_command_template=templates.get("motley_fool_new_recs_capture", ""),
+            motley_fool_new_recs_delta_command_template=templates.get("motley_fool_new_recs_delta", ""),
             position_review_queue_command_template=templates.get("position_review_queue", ""),
             pipeline_command_template=templates["pipeline"],
             committee_preset_policy_command_template=templates.get("committee_preset_policy", ""),
             scheduler_policy_command_template=templates.get("scheduler_policy", ""),
+            full_research_command_template=templates.get("full_research", ""),
             account_refresh_command_template=templates.get("account_refresh", ""),
             post_run_verification_command_template=templates.get("post_run_verification", ""),
             scheduler_review_bundle_command_template=templates.get("scheduler_review_bundle", ""),
             rules_path=args.rules_path,
+            research_rules_path=args.research_rules_path or None,
             summary_output=args.summary_output or None,
         ),
         PipelineSchedulerConfig(

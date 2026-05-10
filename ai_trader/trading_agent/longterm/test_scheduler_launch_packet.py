@@ -180,12 +180,12 @@ def test_launch_packet_surfaces_provider_queue_soak_and_registration_readiness(t
                 {
                     "provider": "perplexity",
                     "request_count": 7,
-                    "estimated_cost_usd": 0.42,
+                    "estimated_total_cost_usd": 0.42,
                     "credits_purchased_to_date_usd": 12.0,
                     "tier_1_threshold_usd": 50.0,
                 }
             ],
-            "totals": {"request_count": 7, "estimated_cost_usd": 0.42},
+            "totals": {"request_count": 7, "estimated_total_cost_usd": 0.42},
             "order_submission_enabled": False,
         },
     )
@@ -238,6 +238,7 @@ def test_launch_packet_surfaces_provider_queue_soak_and_registration_readiness(t
     assert packet["provider_usage_review"]["status"] == "tracked"
     assert packet["provider_usage_review"]["providers"] == ["perplexity"]
     assert packet["provider_usage_review"]["total_request_count"] == 7
+    assert packet["provider_usage_review"]["estimated_total_cost_usd"] == 0.42
     assert packet["provider_usage_review"]["tier_tracking"]["remaining_to_tier_1_usd"] == 38.0
     assert packet["research_queue_review"]["status"] == "ready"
     assert packet["research_queue_review"]["selected_count"] == 50
@@ -246,6 +247,42 @@ def test_launch_packet_surfaces_provider_queue_soak_and_registration_readiness(t
     assert packet["scheduler_soak_review"]["status"] == "ready_for_no_submit_soak_review"
     assert packet["registration_readiness"]["status"] == "ready_for_guarded_no_submit_registration"
     assert packet["registration_readiness"]["order_submission_enabled"] is False
+
+
+def test_launch_packet_provider_usage_includes_tool_cost_components(tmp_path):
+    artifacts = _ready_artifacts(tmp_path)
+    api_usage = _write(
+        tmp_path / "api_usage.json",
+        {
+            "mode": "api_usage_summary",
+            "providers": [
+                {
+                    "provider": "xai",
+                    "model": "grok-4.3",
+                    "request_count": 1,
+                    "input_token_cost_usd": 0.00125,
+                    "output_token_cost_usd": 0.005,
+                    "tool_cost_usd": 0.015,
+                    "web_search_call_count": 3,
+                }
+            ],
+            "order_submission_enabled": False,
+        },
+    )
+
+    packet = build_scheduler_launch_packet(
+        SchedulerLaunchPacketInputs(
+            scheduler_config_validation=artifacts["validation"],
+            scheduler_task_plan=artifacts["task_plan"],
+            scheduler_handoff=artifacts["handoff"],
+            scheduler_task_registration=artifacts["registration"],
+            dashboard_manifest=artifacts["manifest"],
+            api_usage=api_usage,
+        )
+    )
+
+    assert packet["provider_usage_review"]["status"] == "tracked"
+    assert packet["provider_usage_review"]["estimated_total_cost_usd"] == 0.0212
 
 
 def test_launch_packet_blocks_if_soak_plan_not_ready_or_submit_capable(tmp_path):

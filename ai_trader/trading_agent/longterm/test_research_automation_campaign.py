@@ -81,6 +81,118 @@ def test_research_automation_campaign_reaches_scan_ready(tmp_path, monkeypatch, 
     assert len(events) >= 2
 
 
+def test_research_automation_campaign_refreshes_empty_stale_prepare_on_resume(tmp_path, monkeypatch, capsys):
+    import longterm.research_automation_campaign_cli as cli
+
+    campaign_dir = tmp_path / "campaign"
+    campaign_dir.mkdir()
+    (campaign_dir / "extended_watchlist_ideas.json").write_text("[]", encoding="utf-8")
+    (campaign_dir / "extended_universe_summary.json").write_text(
+        json.dumps(
+            {
+                "source": "nasdaq_trader",
+                "source_candidate_count": 2,
+                "watchlist_ideas_count": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (campaign_dir / "campaign_state.json").write_text(
+        json.dumps({"schema_version": 1, "stage": "scan_filling"}),
+        encoding="utf-8",
+    )
+
+    def fake_loader(url, *, source):
+        return [
+            {"symbol": "AAA", "company_name": "AAA Corp", "source": source},
+            {"symbol": "BBB", "company_name": "BBB Corp", "source": source},
+        ]
+
+    monkeypatch.setattr(cli, "load_candidate_source_url", fake_loader)
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--source-url",
+                "https://example.test/nasdaq.txt",
+                "--source",
+                "nasdaq_trader",
+                "--campaign-dir",
+                str(campaign_dir),
+                "--resume",
+                "--watchlist-limit",
+                "2",
+                "--run-until",
+                "scan_ready",
+                "--max-fundamental-fetches",
+                "2",
+            ]
+        ),
+        fetch_metrics=_metrics,
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    ideas = json.loads((campaign_dir / "extended_watchlist_ideas.json").read_text(encoding="utf-8"))
+    assert code == 0
+    assert printed["prepare"]["watchlist_ideas_count"] == 2
+    assert [idea["symbol"] for idea in ideas] == ["AAA", "BBB"]
+
+
+def test_research_automation_campaign_merges_supplemental_sources_into_full_scan(tmp_path):
+    campaign_dir = tmp_path / "campaign"
+    source_file = tmp_path / "nasdaq.csv"
+    spy_file = tmp_path / "spy.csv"
+    fool_file = tmp_path / "fool.json"
+    source_file.write_text("symbol,name\nAAPL,Apple\nMSFT,Microsoft\n", encoding="utf-8")
+    spy_file.write_text("symbol,name,weight\nJNJ,Johnson & Johnson,1.2\n", encoding="utf-8")
+    fool_file.write_text(
+        json.dumps(
+            [
+                {
+                    "symbol": "ADBE",
+                    "company_name": "Adobe",
+                    "source_fresh_recommendation": True,
+                    "source_priority_reason": "fresh_motley_fool_recommendation",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--source-file",
+                str(source_file),
+                "--source",
+                "nasdaq_trader",
+                "--supplemental-source-file",
+                f"spy_holdings={spy_file}",
+                "--supplemental-ideas-file",
+                f"motley_fool={fool_file}",
+                "--campaign-dir",
+                str(campaign_dir),
+                "--watchlist-limit",
+                "10",
+                "--run-until",
+                "scan_ready",
+                "--max-fundamental-fetches",
+                "4",
+            ]
+        ),
+        fetch_metrics=_metrics,
+    )
+
+    ideas = json.loads((campaign_dir / "extended_watchlist_ideas.json").read_text(encoding="utf-8"))
+    summary = json.loads((campaign_dir / "extended_universe_summary.json").read_text(encoding="utf-8"))
+    symbols = [idea["symbol"] for idea in ideas]
+    assert code == 0
+    assert "JNJ" in symbols
+    assert "ADBE" in symbols
+    assert summary["supplemental_source_count"] == 2
+    assert summary["supplemental_candidate_count"] == 2
+
+
 def test_research_automation_campaign_reaches_evidence_ready_with_skip_grok(tmp_path, monkeypatch, capsys):
     import longterm.research_automation_campaign_cli as cli
 
@@ -128,6 +240,83 @@ def test_research_automation_campaign_reaches_evidence_ready_with_skip_grok(tmp_
     assert state["stage"] == "evidence_ready"
     assert state["evidence"]["enriched_count"] == 3
     assert [idea["symbol"] for idea in enriched] == ["AAA", "BBB", "CCC"]
+
+
+def test_research_automation_campaign_can_attach_kronos_advisory_before_evidence(tmp_path, monkeypatch, capsys):
+    import longterm.research_automation_campaign_cli as cli
+
+    campaign_dir = tmp_path / "campaign"
+    captured = {}
+
+    def fake_loader(url, *, source):
+        return [
+            {"symbol": "AAA", "company_name": "AAA Corp", "source": source},
+            {"symbol": "BBB", "company_name": "BBB Corp", "source": source},
+        ]
+
+    def fake_kronos_batch(args):
+        captured["idea_batch"] = args.idea_batch
+        captured["limit"] = args.limit
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(
+            json.dumps(
+                {
+                    "source_type": "kronos_advisory_batch",
+                    "provider_status": "ok",
+                    "items": [
+                        {
+                            "symbol": "AAA",
+                            "provider_status": "ok",
+                            "forecast_direction": "up",
+                            "forecast_return_pct": 1.25,
+                            "forecast_horizon_rows": 5,
+                        }
+                    ],
+                    "policy_boundary": "advisory only; not a trade trigger",
+                }
+            ),
+            encoding="utf-8",
+        )
+        return 0
+
+    monkeypatch.setattr(cli, "load_candidate_source_url", fake_loader)
+    monkeypatch.setattr(cli, "run_kronos_batch_cli", fake_kronos_batch)
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--source-url",
+                "https://example.test/nasdaq.txt",
+                "--source",
+                "nasdaq_listed",
+                "--campaign-dir",
+                str(campaign_dir),
+                "--watchlist-limit",
+                "2",
+                "--run-until",
+                "evidence_ready",
+                "--max-fundamental-fetches",
+                "2",
+                "--evidence-batch-size",
+                "2",
+                "--kronos-advisory",
+                "--kronos-limit",
+                "1",
+                "--skip-grok",
+            ]
+        ),
+        fetch_metrics=_metrics,
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    enriched = json.loads((campaign_dir / "evidence_campaign" / "campaign_enriched.json").read_text(encoding="utf-8"))
+    assert code == 0
+    assert captured["idea_batch"] == str(campaign_dir / "python_scan_passed.json")
+    assert captured["limit"] == 1
+    assert printed["kronos"]["provider_status"] == "ok"
+    assert printed["evidence"]["kronos_mode"] == "snapshot"
+    assert enriched[0]["kronos_advisory"]["forecast_direction"] == "up"
 
 
 def test_research_automation_campaign_forwards_evidence_campaign_pause(tmp_path, monkeypatch, capsys):

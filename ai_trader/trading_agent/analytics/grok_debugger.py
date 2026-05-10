@@ -1,5 +1,5 @@
 """
-GrokDebugger - Root cause analysis and fix review using Grok 4.20.
+GrokDebugger - Root cause analysis and fix review using the Grok web/project UI.
 
 Two modes:
   "diagnose" - Claude Code is stuck, send symptom + code + logs for root cause
@@ -55,7 +55,7 @@ EMPTY_DEBUG_RESULT = {
 
 class GrokDebugger:
     """
-    Root cause analysis and fix review using Grok 4.20.
+    Root cause analysis and fix review using the Grok web/project UI.
 
     Two modes of operation:
       diagnose()    - send a symptom + code + logs for root cause diagnosis
@@ -362,7 +362,7 @@ def format_debug_result(result: Dict[str, Any], title: str = "") -> str:
 
     Returns a markdown-formatted string with the diagnosis/fix review.
     """
-    lines = [f"## Grok 4.20 Debug Analysis{': ' + title if title else ''}"]
+    lines = [f"## Grok Browser Debug Analysis{': ' + title if title else ''}"]
     lines.append("")
 
     confidence = result.get("confidence", 0)

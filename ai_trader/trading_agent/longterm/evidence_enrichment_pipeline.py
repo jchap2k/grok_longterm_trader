@@ -26,6 +26,7 @@ def run_evidence_enrichment_pipeline(
     news_provider: NewsProvider | None = None,
     grok_client: GrokResearchClient | None = None,
     free_facts_by_symbol: Mapping[str, Mapping[str, Any]] | None = None,
+    kronos_advisory_by_symbol: Mapping[str, Mapping[str, Any]] | None = None,
     as_of_date: str | None = None,
     limit: int | None = None,
     max_news_items: int = 5,
@@ -102,6 +103,13 @@ def run_evidence_enrichment_pipeline(
         stage_modes["research_model_usage"] = {}
 
     enriched = [_with_evidence_brief(idea) for idea in enriched]
+    if kronos_advisory_by_symbol is not None:
+        enriched = _attach_kronos_advisory(enriched, kronos_advisory_by_symbol)
+        enriched = [_refresh_evidence_brief(idea) for idea in enriched]
+        stage_modes["kronos"] = "snapshot"
+    else:
+        stage_modes["kronos"] = "skipped"
+
     summary = _summary(
         input_count=len(ideas),
         enriched=enriched,
@@ -122,6 +130,29 @@ def _with_evidence_brief(idea: Mapping[str, Any]) -> dict[str, Any]:
         if evidence_brief:
             payload["evidence_brief"] = evidence_brief
     return payload
+
+
+def _refresh_evidence_brief(idea: Mapping[str, Any]) -> dict[str, Any]:
+    payload = dict(idea)
+    evidence_brief = build_research_evidence_brief(payload)
+    if evidence_brief:
+        payload["evidence_brief"] = evidence_brief
+    return payload
+
+
+def _attach_kronos_advisory(
+    ideas: list[Mapping[str, Any]],
+    kronos_advisory_by_symbol: Mapping[str, Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    snapshots = _normalize_symbol_mapping(kronos_advisory_by_symbol)
+    enriched = []
+    for idea in ideas:
+        payload = dict(idea)
+        advisory = snapshots.get(_symbol(payload))
+        if advisory:
+            payload["kronos_advisory"] = advisory
+        enriched.append(payload)
+    return enriched
 
 
 def _summary(
@@ -146,6 +177,7 @@ def _summary(
         "latest_earnings_mode": stage_modes.get("latest_earnings", "skipped"),
         "scorecard_mode": stage_modes.get("scorecard", "skipped"),
         "grok_mode": stage_modes.get("grok", "skipped"),
+        "kronos_mode": stage_modes.get("kronos", "skipped"),
         "research_model_provider": stage_modes.get("research_model_provider", "none"),
         "research_model_usage": stage_modes.get("research_model_usage", {}),
         "symbols": [_symbol(idea) for idea in enriched if _symbol(idea)],

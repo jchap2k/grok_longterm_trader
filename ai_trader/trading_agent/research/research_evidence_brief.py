@@ -19,6 +19,7 @@ Latest earnings: source-filtered earnings context with confidence and thesis dev
 Primary news: primary-company articles only, with source, impact, relevance, and subject score.
 Article evidence: snippet-grounded Grok summaries of the primary articles when present.
 Grok catalyst synthesis: source-backed catalyst narrative when present, labeled separately.
+Kronos timing: optional short-horizon technical forecast context, advisory only.
 Warnings: thin coverage, provider gaps, valuation/safety concerns, and model/source caveats.
 """
 
@@ -66,6 +67,10 @@ def build_research_evidence_brief(
     if grok:
         sections.append(f"Grok catalyst synthesis: {grok}")
 
+    kronos = _kronos_section(idea.get("kronos_advisory"))
+    if kronos:
+        sections.append(f"Kronos timing: {kronos}")
+
     warnings = _warnings_section(idea)
     if warnings:
         sections.append(f"Warnings: {warnings}")
@@ -107,9 +112,13 @@ def _scorecard_section(value: Any) -> str:
         _metric("quality", value.get("quality_score")),
         _metric("growth", value.get("growth_score")),
         _metric("valuation", value.get("valuation_score")),
+        _metric("valuation sanity", value.get("valuation_sanity_score")),
         _metric("safety", value.get("safety_score")),
         _metric("drawdown", value.get("estimated_drawdown_band")),
     ]
+    sanity_reasons = _list_items(value.get("valuation_sanity_reasons"), limit=DEFAULT_MAX_LIST_ITEMS)
+    if sanity_reasons:
+        parts.append(f"valuation sanity reasons {', '.join(sanity_reasons)}")
     reasons = _list_items(value.get("score_reasons"), limit=DEFAULT_MAX_LIST_ITEMS)
     if reasons:
         parts.append(f"reasons {', '.join(reasons)}")
@@ -228,6 +237,31 @@ def _article_evidence_section(value: Any) -> str:
     return " | ".join(parts)
 
 
+def _kronos_section(value: Any) -> str:
+    if not isinstance(value, Mapping):
+        return ""
+    status = _clean(value.get("provider_status"))
+    if status and status != "ok":
+        return _join_parts(
+            [
+                _metric("status", status),
+                _metric("mode", value.get("provider_mode")),
+                _metric("warning", value.get("provider_warning")),
+                "advisory only",
+            ]
+        )
+    horizon = value.get("forecast_horizon_rows")
+    return_pct = value.get("forecast_return_pct")
+    return _join_parts(
+        [
+            _metric("direction", value.get("forecast_direction")),
+            _metric(f"{horizon}-row return" if horizon else "return", _pct_value(return_pct)),
+            _metric("status", status),
+            "advisory only; not a trade trigger",
+        ]
+    )
+
+
 def _warnings_section(idea: Mapping[str, Any]) -> str:
     warnings: list[str] = []
     for key in (
@@ -270,6 +304,15 @@ def _clean(value: Any) -> str:
         return ""
     text = " ".join(str(value).split())
     return _truncate_inline(text, 240)
+
+
+def _pct_value(value: Any) -> str:
+    if value in ("", None, "N/A"):
+        return ""
+    try:
+        return f"{float(value):.2f}%"
+    except (TypeError, ValueError):
+        return str(value)
 
 
 def _truncate_inline(text: str, max_chars: int) -> str:

@@ -17,10 +17,12 @@ SOURCE_BOOSTS = {
     "motley_fool": 12.0,
     "sp500": 10.0,
     "s&p500": 10.0,
+    "spy_holdings": 10.0,
     "russell1000": 8.0,
     "russell3000": 6.0,
     "nasdaq100": 8.0,
     "nasdaq_listed": 5.0,
+    "nasdaq_trader": 5.0,
     "nyse_amex_listed": 5.0,
     "qqq": 8.0,
     "etf_holdings": 5.0,
@@ -292,6 +294,8 @@ def _source_boost(candidate: DiscoveryCandidate) -> float:
             boost = max(boost, SOURCE_BOOSTS["russell3000"])
         elif "nasdaq100" in normalized or "qqq" in normalized:
             boost = max(boost, SOURCE_BOOSTS["qqq"])
+        elif "nasdaqtrader" in normalized:
+            boost = max(boost, SOURCE_BOOSTS["nasdaq_trader"])
         else:
             boost = max(boost, SOURCE_BOOSTS.get(str(source).lower(), 0.0))
     return boost

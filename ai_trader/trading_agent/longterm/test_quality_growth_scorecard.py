@@ -27,6 +27,9 @@ def _metrics(
     fcf_margin: str = "18.00%",
     roe: str = "26.00%",
     debt_equity: str = "0.3x",
+    roic: str = "24.00%",
+    total_cash: str = "$80.00B",
+    total_debt: str = "$40.00B",
 ) -> dict:
     return {
         "symbol": "MSFT",
@@ -49,7 +52,13 @@ def _metrics(
             "operating_margin": operating_margin,
             "free_cash_flow_margin": fcf_margin,
             "return_on_equity": roe,
+            "return_on_invested_capital": roic,
+            "return_on_capital": roic,
             "debt_equity": debt_equity,
+        },
+        "financials_ttm": {
+            "total_cash": total_cash,
+            "total_debt": total_debt,
         },
         "warnings": [],
     }
@@ -106,6 +115,9 @@ def test_quality_growth_scorecard_penalizes_weak_expensive_name():
                 fcf_margin="2.00%",
                 roe="4.00%",
                 debt_equity="1.6x",
+                roic="3.00%",
+                total_cash="$1.00B",
+                total_debt="$9.00B",
             ),
             "relevant_news": [],
         }
@@ -118,6 +130,37 @@ def test_quality_growth_scorecard_penalizes_weak_expensive_name():
     assert scorecard["superscore"] <= 35
     assert scorecard["investing_type"] == "Speculative / Watchlist"
     assert "debt" in " ".join(scorecard["score_reasons"]).lower()
+
+
+def test_quality_growth_scorecard_adds_valuation_sanity_without_replacing_valuation_score():
+    strong = build_quality_growth_scorecard(
+        {
+            "symbol": "MSFT",
+            "fundamental_metrics": _metrics(pe="20.0x", p_fcf="18.0x", peg="1.2x", roic="32.00%"),
+            "relevant_news": _news(),
+        }
+    )
+    stretched = build_quality_growth_scorecard(
+        {
+            "symbol": "HYPE",
+            "fundamental_metrics": _metrics(
+                pe="180.0x",
+                p_fcf="140.0x",
+                peg="7.0x",
+                roic="4.00%",
+                total_cash="$1.00B",
+                total_debt="$12.00B",
+            ),
+            "relevant_news": _news(),
+        }
+    )
+
+    assert "valuation_sanity_score" in strong
+    assert "valuation_sanity_reasons" in strong
+    assert strong["valuation_sanity_score"] > stretched["valuation_sanity_score"]
+    assert any("fcf yield" in reason.lower() for reason in strong["valuation_sanity_reasons"])
+    assert any("debt" in reason.lower() for reason in stretched["valuation_sanity_reasons"])
+    assert strong["valuation_score"] >= 55
 
 
 def test_enrich_idea_with_quality_growth_scorecard_adds_packet_fields_and_note():

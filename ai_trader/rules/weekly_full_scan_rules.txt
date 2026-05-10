@@ -1,0 +1,134 @@
+<weekly_full_scan_rules>
+<metadata>
+    <version>0.1.0-weekly-scan</version>
+    <derived_from>ai_trader/rules/active_rules.txt</derived_from>
+    <paradigm>Long-term quality-growth active sleeve weekly discovery and batch research</paradigm>
+    <description>
+        Stage-specific rules for weekly full-universe scans, generated committee
+        batches, Motley Fool new-recommendation batches, and other pre-decision
+        research triage. This file narrows active_rules.txt for discovery and
+        enrichment routing. It is not a replacement for final buy, sell, sizing,
+        or rebalance decision rules.
+    </description>
+</metadata>
+
+<operating_boundary>
+    <rule>The stage is research, enrichment, ranking, and routing only.</rule>
+    <rule>Do not submit broker orders.</rule>
+    <rule>Do not recommend selling, trimming, or funding from protected holdings.</rule>
+    <rule>FXAIX remains the protected benchmark and performance hurdle.</rule>
+    <rule>Outputs should feed evidence enrichment, deferred research, or final CGH committee review.</rule>
+</operating_boundary>
+
+<stage_objective>
+    <primary_goal>
+        Find the best candidates for deeper long-term research without applying
+        final buy-decision strictness too early.
+    </primary_goal>
+    <secondary_goals>
+        <goal>Preserve promising but incomplete ideas as deferred research instead of discarding them.</goal>
+        <goal>Surface new information about existing watchlist and portfolio names.</goal>
+        <goal>Prioritize candidates where fresh evidence could change rank, thesis state, or committee urgency.</goal>
+        <goal>Keep the active-sleeve mandate visible so scans do not become generic stock screens.</goal>
+    </secondary_goals>
+</stage_objective>
+
+<inclusion_bias>
+    <rule>Do not reject a candidate solely because evidence is incomplete.</rule>
+    <rule>If the business appears promising but evidence is thin, route to deferred_research or evidence_enrichment.</rule>
+    <rule>Prefer false positives that can be filtered later over false negatives that never receive research.</rule>
+    <rule>Still reject obvious non-fits: unclear business, severe balance-sheet stress, weak fundamentals with no turnaround evidence, or protected-symbol conflicts.</rule>
+</inclusion_bias>
+
+<scan_framing>
+    <rule>Use this stage before final CGH buy sizing. It should decide whether a candidate deserves more evidence or committee time.</rule>
+    <rule>Do not mark a candidate evidence_ready unless the ResearchPacket has at least symbol, company_name, idea_source, and credible business or thesis context.</rule>
+    <rule>Classify the company before scoring it: slow_grower, stalwart, fast_grower, cyclical, turnaround, or asset_play.</rule>
+    <rule>Apply lightweight versions of BusinessStoryReviewer, BalanceSheetReviewer, QualityDurabilityReviewer, MoatDurabilityReviewer, ManagementCapitalAllocationReviewer, QualityAtReasonablePriceReviewer, MarginOfSafetyReviewer, and MacroRegimeReviewer thinking during triage.</rule>
+    <rule>If a deterministic reviewer would likely fail because required evidence is missing, route to deferred_research rather than evidence_ready.</rule>
+</scan_framing>
+
+<conviction_rubric_light>
+    <evidence_ready>
+        <criterion>Business can be explained clearly in plain English.</criterion>
+        <criterion>At least one durable quality pattern is visible: recurring revenue, installed base, pricing power, market-share gains, switching costs, brand strength, distribution advantage, cost advantage, data advantage, or regulatory advantage.</criterion>
+        <criterion>Balance sheet does not show obvious distress or refinancing dependency.</criterion>
+        <criterion>Valuation is not obviously disconnected from quality and growth, or the valuation concern is explicitly flagged for committee review.</criterion>
+        <criterion>There is enough source-backed evidence for a committee to debate thesis, risk, and benchmark edge.</criterion>
+    </evidence_ready>
+    <deferred_research>
+        <criterion>Business or thesis appears promising but key facts are missing.</criterion>
+        <criterion>Motley Fool, news, FRED, Kronos, or deterministic scorecard data suggests urgency but source support is incomplete.</criterion>
+        <criterion>Company may be high quality, but moat, balance sheet, valuation, or growth durability evidence is too thin.</criterion>
+    </deferred_research>
+    <reject_or_low_priority>
+        <criterion>Business is hard to understand after basic enrichment.</criterion>
+        <criterion>No durable quality pattern is visible.</criterion>
+        <criterion>Balance sheet stress, weak cash conversion, or leverage risk dominates the thesis.</criterion>
+        <criterion>Candidate is a weak laggard with no unusually strong turnaround evidence.</criterion>
+    </reject_or_low_priority>
+</conviction_rubric_light>
+
+<candidate_sources>
+    <source name="motley_fool">
+        <rule>Motley Fool recommendations are high-priority investigation leads, not automatic buys.</rule>
+        <rule>Track latest and previous recommendation dates so genuinely new recommendations enter the universe.</rule>
+        <rule>New Motley Fool recommendations should receive deterministic enrichment and, if minimally complete, committee batch consideration.</rule>
+    </source>
+    <source name="sp500_spy_universe">
+        <rule>S&amp;P 500 / SPY-like constituents are broad baseline candidates for deterministic pre-LLM enrichment.</rule>
+        <rule>Sector diversification matters during scan review; do not let technology concentration crowd out all other high-quality businesses.</rule>
+    </source>
+    <source name="portfolio_and_watchlist">
+        <rule>Existing holdings, watchlist names, and prior recommendations should be rescanned for fresh evidence and thesis drift.</rule>
+        <rule>Fresh negative evidence should route to review, not an automatic sell action.</rule>
+    </source>
+</candidate_sources>
+
+<ranking_priorities>
+    <priority>Understandable business model.</priority>
+    <priority>Durable moat or improving competitive position.</priority>
+    <priority>Revenue and earnings growth that appears real and not purely cyclical.</priority>
+    <priority>Strong or improving balance sheet and cash conversion.</priority>
+    <priority>Category or industry leadership.</priority>
+    <priority>Valuation sanity relative to quality and growth.</priority>
+    <priority>Evidence that could plausibly justify active-sleeve risk versus FXAIX after full review.</priority>
+    <priority>Fresh catalyst, recommendation, earnings, FRED regime, or Kronos advisory context that changes urgency.</priority>
+</ranking_priorities>
+
+<macro_and_model_context>
+    <rule>FRED macro data is context for regime pressure, rates, inflation, labor risk, and review urgency; it is not an automatic veto.</rule>
+    <rule>Kronos is advisory only. Use it as a timing and momentum clue, not as a standalone reason to promote or reject a long-term candidate.</rule>
+    <rule>VIX, market-risk, and trend signals can adjust urgency, but business quality and thesis durability remain primary.</rule>
+</macro_and_model_context>
+
+<routing_outputs>
+    <output name="evidence_ready">
+        Candidate has enough business, financial, valuation, risk, and source context to enter committee review.
+    </output>
+    <output name="deferred_research">
+        Candidate is potentially interesting but needs more evidence before paid LLM committee work.
+    </output>
+    <output name="watchlist_refresh">
+        Existing or prior candidate has new information worth updating, but not enough for an immediate committee decision.
+    </output>
+    <output name="reject_or_low_priority">
+        Candidate has obvious non-fit evidence or ranks too low after deterministic enrichment.
+    </output>
+</routing_outputs>
+
+<provenance_requirements>
+    <rule>Carry scan_stage=weekly_full_scan when this brief influences routing.</rule>
+    <rule>Preserve source names and dates for Motley Fool recommendations, including latest and previous recommendation dates when available.</rule>
+    <rule>Preserve deterministic scorecard values, reviewer support/objections, FRED regime labels, Kronos advisory fields, news source URLs, and free/provider facts as provenance.</rule>
+    <rule>Do not let generated summaries overwrite source provenance.</rule>
+</provenance_requirements>
+
+<quality_guardrails>
+    <rule>Do not impersonate or copy proprietary third-party scoring systems.</rule>
+    <rule>Label generated scores as model_estimate or deterministic_model as appropriate.</rule>
+    <rule>Keep source provenance visible: Motley Fool, FRED, Finnhub/free facts, news snippets, Kronos, or local deterministic scorecard.</rule>
+    <rule>Quiet fallback is not success. Missing FRED, Motley Fool capture, Kronos, or enrichment should be reported as degraded or failed for that stage.</rule>
+    <rule>Final BUY, ADD, HOLD, PASS, REDUCE, SELL, and sizing decisions belong to the decision CGH stage plus local safety checks.</rule>
+</quality_guardrails>
+</weekly_full_scan_rules>

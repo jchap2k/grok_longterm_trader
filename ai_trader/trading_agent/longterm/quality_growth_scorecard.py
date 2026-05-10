@@ -39,6 +39,7 @@ def build_quality_growth_scorecard(idea: Mapping[str, Any], *, as_of_date: str |
     quality, quality_reasons = _quality_score(metrics)
     growth, growth_reasons = _growth_score(metrics)
     valuation, valuation_reasons = _valuation_score(metrics)
+    valuation_sanity, valuation_sanity_reasons = _valuation_sanity_score(metrics)
     safety, safety_reasons = _safety_score(metrics)
     attention, attention_reasons = _market_attention_score(news)
     superscore = round(
@@ -49,7 +50,14 @@ def build_quality_growth_scorecard(idea: Mapping[str, Any], *, as_of_date: str |
         + (attention * 0.14),
         1,
     )
-    reasons = [*quality_reasons, *growth_reasons, *valuation_reasons, *safety_reasons, *attention_reasons]
+    reasons = [
+        *quality_reasons,
+        *growth_reasons,
+        *valuation_reasons,
+        *valuation_sanity_reasons,
+        *safety_reasons,
+        *attention_reasons,
+    ]
     return {
         "symbol": str(idea.get("symbol") or metrics.get("symbol") or "").upper(),
         "as_of_date": as_of_date or date.today().isoformat(),
@@ -59,6 +67,8 @@ def build_quality_growth_scorecard(idea: Mapping[str, Any], *, as_of_date: str |
         "quality_score": round(quality, 1),
         "growth_score": round(growth, 1),
         "valuation_score": round(valuation, 1),
+        "valuation_sanity_score": round(valuation_sanity, 1),
+        "valuation_sanity_reasons": valuation_sanity_reasons,
         "safety_score": round(safety, 1),
         "market_attention_score": round(attention, 1),
         "investing_type": _investing_type(superscore, quality, valuation, safety),
@@ -111,6 +121,84 @@ def _valuation_score(metrics: Mapping[str, Any]) -> tuple[float, list[str]]:
     score += _inverse_bucket(p_fcf, [(20, 25), (35, 18), (60, 9), (100, 4)], "P/FCF", reasons)
     score += _inverse_bucket(peg, [(1.5, 22), (2.5, 16), (4, 8), (8, 4)], "PEG", reasons)
     return min(100.0, score), reasons
+
+
+def _valuation_sanity_score(metrics: Mapping[str, Any]) -> tuple[float, list[str]]:
+    """Add Graham/Greenblatt-style valuation context without replacing valuation_score."""
+    valuation = metrics.get("valuation_ttm") or {}
+    profitability = metrics.get("profitability_ttm") or {}
+    growth = metrics.get("revenue_growth_cagr") or {}
+    financials = metrics.get("financials_ttm") or {}
+    pe = _multiple(valuation.get("price_earnings"))
+    p_fcf = _multiple(valuation.get("price_free_cash_flow"))
+    peg = _multiple(valuation.get("price_earnings_growth_5yr"))
+    roic = _pct(
+        profitability.get("return_on_invested_capital")
+        or profitability.get("return_on_capital")
+        or profitability.get("return_on_capital_employed")
+    )
+    fcf_growth = _pct(growth.get("3_yr_fcf_per_share_growth"))
+    total_cash = _compact_to_number(financials.get("total_cash"))
+    total_debt = _compact_to_number(financials.get("total_debt"))
+    score = 35.0
+    reasons: list[str] = []
+
+    if p_fcf is not None and p_fcf > 0:
+        fcf_yield = 100.0 / p_fcf
+        if fcf_yield >= 5:
+            score += 20
+            reasons.append(f"FCF yield {fcf_yield:.1f}% supports valuation sanity")
+        elif fcf_yield >= 3:
+            score += 12
+            reasons.append(f"FCF yield {fcf_yield:.1f}% is acceptable but not cheap")
+        else:
+            score -= 12
+            reasons.append(f"FCF yield {fcf_yield:.1f}% leaves little cash-flow cushion")
+
+    if pe is not None and pe > 0:
+        earnings_yield = 100.0 / pe
+        if earnings_yield >= 4:
+            score += 14
+            reasons.append(f"earnings yield {earnings_yield:.1f}% supports price discipline")
+        elif earnings_yield < 1.5:
+            score -= 10
+            reasons.append(f"earnings yield {earnings_yield:.1f}% is thin")
+
+    if peg is not None and peg > 0:
+        if peg <= 1.5:
+            score += 12
+            reasons.append("PEG supports growth-adjusted valuation")
+        elif peg > 4:
+            score -= 10
+            reasons.append("PEG is stretched versus growth")
+
+    if roic is not None:
+        if roic >= 20:
+            score += 12
+            reasons.append("high return on invested capital supports premium tolerance")
+        elif roic < 8:
+            score -= 8
+            reasons.append("low return on invested capital weakens valuation support")
+
+    if fcf_growth is not None:
+        if fcf_growth >= 10:
+            score += 7
+            reasons.append("FCF/share growth supports normalized cash-flow durability")
+        elif fcf_growth < 0:
+            score -= 7
+            reasons.append("negative FCF/share growth weakens normalized valuation support")
+
+    if total_cash is not None and total_debt is not None:
+        if total_cash >= total_debt:
+            score += 5
+            reasons.append("cash exceeds debt in valuation sanity check")
+        elif total_debt > total_cash * 2:
+            score -= 8
+            reasons.append("debt materially exceeds cash in valuation sanity check")
+
+    if not reasons:
+        reasons.append("valuation sanity has limited normalized earnings or cash-flow inputs")
+    return max(0.0, min(100.0, score)), reasons
 
 
 def _safety_score(metrics: Mapping[str, Any]) -> tuple[float, list[str]]:

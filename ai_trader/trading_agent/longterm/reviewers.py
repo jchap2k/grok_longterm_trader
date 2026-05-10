@@ -293,6 +293,140 @@ class QualityDurabilityReviewer:
         )
 
 
+class MoatDurabilityReviewer:
+    """Check whether durable competitive advantage evidence is explicit."""
+
+    MOAT_PATTERNS = (
+        "switching costs",
+        "network effects",
+        "pricing power",
+        "recurring revenue",
+        "installed base",
+        "brand strength",
+        "distribution advantage",
+        "scale advantage",
+        "cost advantage",
+        "cost to replicate",
+        "regulatory advantage",
+        "data advantage",
+        "share gains",
+        "market share gains",
+        "stable oligopoly",
+    )
+    DECAY_RISKS = (
+        "commoditization",
+        "commodity",
+        "churn",
+        "customer concentration",
+        "dependency",
+        "platform dependency",
+        "price-war",
+        "price war",
+        "share loss",
+        "good-enough",
+        "good enough",
+        "technological disruption",
+        "disruption",
+        "regulatory risk",
+    )
+
+    def review(self, packet: ResearchPacket) -> ReviewResult:
+        text = _packet_text(packet)
+        score = 45.0
+        support: list[str] = []
+        objections: list[str] = []
+
+        for pattern in self.MOAT_PATTERNS:
+            if pattern in text:
+                score += 9
+                support.append(f"Moat evidence present: {pattern}.")
+
+        for risk in self.DECAY_RISKS:
+            if risk in text:
+                score -= 10
+                objections.append(f"Moat decay risk present: {risk}.")
+
+        if not support:
+            objections.append("No explicit durable moat evidence was identified.")
+
+        bounded = max(0.0, min(score, 100.0))
+        return ReviewResult(
+            reviewer="MoatDurabilityReviewer",
+            score=round(bounded, 2),
+            passed=bounded >= 70.0 and bool(support),
+            support=support,
+            objections=objections,
+        )
+
+
+class ManagementCapitalAllocationReviewer:
+    """Check management alignment and capital-allocation discipline."""
+
+    POSITIVE_TERMS = (
+        "disciplined capital allocation",
+        "capital allocation",
+        "owner-aligned",
+        "owner aligned",
+        "reinvestment discipline",
+        "reinvest",
+        "high roic",
+        "high return on invested capital",
+        "return on invested capital",
+        "buybacks at reasonable valuation",
+        "net cash",
+        "founder-led",
+        "operator-led",
+        "acquisition discipline",
+    )
+    NEGATIVE_TERMS = (
+        "dilution",
+        "sbc",
+        "stock based compensation",
+        "empire building",
+        "serial acquisitions",
+        "leverage-funded buybacks",
+        "management turnover",
+        "accounting issue",
+        "aggressive guidance",
+        "weak cash conversion",
+        "refinancing risk",
+    )
+
+    def review(self, packet: ResearchPacket) -> ReviewResult:
+        text = _packet_text(packet)
+        metrics = dict(packet.fundamental_metrics or {})
+        score = 45.0
+        support: list[str] = []
+        objections: list[str] = []
+
+        for term in self.POSITIVE_TERMS:
+            if term in text:
+                score += 8
+                support.append(f"Management/capital allocation support: {term}.")
+
+        for term in self.NEGATIVE_TERMS:
+            if term in text:
+                score -= 11
+                objections.append(f"Management/capital allocation risk: {term}.")
+
+        metrics_score, metrics_support, metrics_objections = _capital_allocation_metric_checks(metrics)
+        score += metrics_score
+        support.extend(metrics_support)
+        objections.extend(metrics_objections)
+
+        if not support:
+            objections.append("No explicit owner-aligned management or capital-allocation evidence was identified.")
+
+        bounded = max(0.0, min(score, 100.0))
+        return ReviewResult(
+            reviewer="ManagementCapitalAllocationReviewer",
+            score=round(bounded, 2),
+            passed=bounded >= 65.0 and bool(support),
+            support=support,
+            objections=objections,
+        )
+
+
 class MacroRegimeReviewer:
     """Translate advisory macro context into reviewer objections/support."""
 
@@ -355,5 +489,75 @@ def _packet_text(packet: ResearchPacket) -> str:
             " ".join(packet.confirming_signals),
             " ".join(packet.invalidation_conditions),
             packet.evidence_brief,
+            str(packet.fundamental_metrics or ""),
         ]
     ).lower()
+
+
+def _capital_allocation_metric_checks(metrics: dict) -> tuple[float, list[str], list[str]]:
+    profitability = metrics.get("profitability_ttm") or {}
+    financials = metrics.get("financials_ttm") or {}
+    score = 0.0
+    support: list[str] = []
+    objections: list[str] = []
+
+    roic = _pct_value(
+        profitability.get("return_on_invested_capital")
+        or profitability.get("return_on_capital")
+        or profitability.get("return_on_capital_employed")
+    )
+    if roic is not None:
+        if roic >= 20:
+            score += 12
+            support.append("Return on invested capital supports reinvestment discipline.")
+        elif roic < 8:
+            score -= 8
+            objections.append("Low return on invested capital weakens capital-allocation evidence.")
+
+    fcf_margin = _pct_value(profitability.get("free_cash_flow_margin"))
+    if fcf_margin is not None:
+        if fcf_margin >= 15:
+            score += 8
+            support.append("Free cash flow margin supports owner-return flexibility.")
+        elif fcf_margin < 5:
+            score -= 8
+            objections.append("Weak free cash flow margin limits capital-allocation flexibility.")
+
+    cash = _compact_to_number(financials.get("total_cash"))
+    debt = _compact_to_number(financials.get("total_debt"))
+    if cash is not None and debt is not None:
+        if cash >= debt:
+            score += 6
+            support.append("Cash exceeds debt, reducing capital-allocation fragility.")
+        elif debt > cash * 2:
+            score -= 8
+            objections.append("Debt materially exceeds cash, increasing capital-allocation risk.")
+
+    return score, support, objections
+
+
+def _pct_value(value: object) -> float | None:
+    if value in ("", None, "N/A"):
+        return None
+    try:
+        return float(str(value).replace("%", "").replace("x", "").replace(",", "").strip())
+    except ValueError:
+        return None
+
+
+def _compact_to_number(value: object) -> float | None:
+    if value in ("", None, "N/A"):
+        return None
+    text = str(value).split(" (")[0].replace("$", "").replace(",", "").strip()
+    multiplier = 1.0
+    if text.endswith("T"):
+        multiplier = 1_000_000_000_000
+        text = text[:-1]
+    elif text.endswith("B"):
+        multiplier = 1_000_000_000
+        text = text[:-1]
+    elif text.endswith("M"):
+        multiplier = 1_000_000
+        text = text[:-1]
+    number = _pct_value(text)
+    return None if number is None else number * multiplier

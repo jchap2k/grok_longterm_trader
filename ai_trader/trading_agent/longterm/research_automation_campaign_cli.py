@@ -22,6 +22,8 @@ from longterm.extended_universe_scan_cli import (
     _write_json,
     _write_jsonl,
 )
+from longterm.kronos_advisory_batch_cli import run_cli as run_kronos_batch_cli
+from longterm.kronos_advisory_cli import DEFAULT_KRONOS_PYTHON, DEFAULT_KRONOS_ROOT
 from longterm.perplexity_research_enrichment import (
     DEFAULT_PERPLEXITY_API_URL,
     DEFAULT_PERPLEXITY_MAX_TOKENS,
@@ -37,6 +39,24 @@ def build_parser() -> argparse.ArgumentParser:
     source_group.add_argument("--source-file", default="")
     source_group.add_argument("--source-url", default="")
     parser.add_argument("--source", required=True)
+    parser.add_argument(
+        "--supplemental-source-file",
+        action="append",
+        default=[],
+        help="Optional extra discovery source as source_name=path, e.g. spy_holdings=spy.csv.",
+    )
+    parser.add_argument(
+        "--supplemental-source-url",
+        action="append",
+        default=[],
+        help="Optional extra discovery source as source_name=url.",
+    )
+    parser.add_argument(
+        "--supplemental-ideas-file",
+        action="append",
+        default=[],
+        help="Optional research ideas JSON list as source_name=path, e.g. motley_fool=fool.json.",
+    )
     parser.add_argument("--campaign-dir", required=True)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument(
@@ -80,6 +100,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--portfolio-state", default="")
     parser.add_argument("--recent-research-symbols-file", default="")
     parser.add_argument("--as-of-date", default="")
+    parser.add_argument("--kronos-advisory", action="store_true")
+    parser.add_argument("--kronos-root", default=DEFAULT_KRONOS_ROOT)
+    parser.add_argument("--kronos-python", default=DEFAULT_KRONOS_PYTHON)
+    parser.add_argument("--kronos-period", default="2y")
+    parser.add_argument("--kronos-interval", default="1d")
+    parser.add_argument("--kronos-lookback", type=int, default=256)
+    parser.add_argument("--kronos-pred-len", type=int, default=5)
+    parser.add_argument("--kronos-model", default="NeoQuasar/Kronos-small")
+    parser.add_argument("--kronos-tokenizer", default="NeoQuasar/Kronos-Tokenizer-base")
+    parser.add_argument("--kronos-device", default="cpu")
+    parser.add_argument("--kronos-timeout-seconds", type=int, default=600)
+    parser.add_argument("--kronos-limit", type=int, default=None)
     return parser
 
 
@@ -90,7 +122,7 @@ def run_cli(args: argparse.Namespace, *, fetch_metrics=fetch_yfinance_fundamenta
     state = _load_state(campaign_dir) if args.resume else _initial_state(campaign_dir)
     _record_event(campaign_dir, "campaign_started", {"run_until": args.run_until, "resume": bool(args.resume)})
 
-    if not (campaign_dir / "extended_watchlist_ideas.json").exists():
+    if _prepare_stage_needs_refresh(args, campaign_dir):
         _run_prepare_stage(args, campaign_dir, state)
     else:
         state["prepare"] = _load_json(campaign_dir / "extended_universe_summary.json")
@@ -118,9 +150,11 @@ def _run_prepare_stage(args: argparse.Namespace, campaign_dir: Path, state: dict
         if args.source_url
         else load_candidate_source_file(args.source_file, source=args.source)
     )
+    supplemental_candidates = _load_supplemental_candidates(args)
     prepared = prepare_extended_universe(
         candidates,
         source=args.source,
+        supplemental_candidates=supplemental_candidates,
         watchlist_limit=args.watchlist_limit,
         batch_size=args.universe_batch_size,
     )
@@ -134,6 +168,62 @@ def _run_prepare_stage(args: argparse.Namespace, campaign_dir: Path, state: dict
     state["stage"] = "universe_prepared"
     _write_state(campaign_dir, state)
     _record_event(campaign_dir, "universe_prepared", summary)
+
+
+def _prepare_stage_needs_refresh(args: argparse.Namespace, campaign_dir: Path) -> bool:
+    ideas_path = campaign_dir / "extended_watchlist_ideas.json"
+    summary_path = campaign_dir / "extended_universe_summary.json"
+    if not ideas_path.exists() or not summary_path.exists():
+        return True
+    summary = _load_json(summary_path)
+    if str(summary.get("source") or "") != str(args.source or ""):
+        return True
+    supplemental_count = len(args.supplemental_source_file or []) + len(args.supplemental_source_url or []) + len(args.supplemental_ideas_file or [])
+    if int(summary.get("supplemental_source_count") or 0) != supplemental_count:
+        return True
+    if int(summary.get("watchlist_ideas_count") or 0) == 0:
+        return int(summary.get("source_candidate_count") or 0) > 0 and int(args.watchlist_limit or 0) > 0
+    return False
+
+
+def _load_supplemental_candidates(args: argparse.Namespace) -> list[list[dict[str, Any]]]:
+    groups: list[list[dict[str, Any]]] = []
+    for spec in args.supplemental_source_file or []:
+        source, path = _split_source_spec(spec, flag_name="--supplemental-source-file")
+        groups.append(load_candidate_source_file(path, source=source))
+    for spec in args.supplemental_source_url or []:
+        source, url = _split_source_spec(spec, flag_name="--supplemental-source-url")
+        groups.append(load_candidate_source_url(url, source=source))
+    for spec in args.supplemental_ideas_file or []:
+        source, path = _split_source_spec(spec, flag_name="--supplemental-ideas-file")
+        groups.append(_load_supplemental_ideas_file(path, source=source))
+    return groups
+
+
+def _load_supplemental_ideas_file(path: str, *, source: str) -> list[dict[str, Any]]:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, list):
+        raise ValueError("--supplemental-ideas-file must contain a JSON list.")
+    ideas = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        idea = dict(item)
+        idea.setdefault("source", source)
+        idea.setdefault("idea_source", source)
+        ideas.append(idea)
+    return ideas
+
+
+def _split_source_spec(spec: str, *, flag_name: str) -> tuple[str, str]:
+    if "=" not in str(spec):
+        raise ValueError(f"{flag_name} must use source_name=value format.")
+    source, value = str(spec).split("=", 1)
+    source = source.strip()
+    value = value.strip()
+    if not source or not value:
+        raise ValueError(f"{flag_name} must use source_name=value format.")
+    return source, value
 
 
 def _run_scan_stage(
@@ -216,6 +306,9 @@ def _run_scan_stage(
 def _run_evidence_stage(args: argparse.Namespace, campaign_dir: Path, state: dict[str, Any]) -> None:
     evidence_dir = campaign_dir / "evidence_campaign"
     news_cache = args.news_cache_path or str(evidence_dir / "polygon_news_cache.json")
+    kronos_path = ""
+    if args.kronos_advisory:
+        kronos_path = _run_kronos_stage(args, campaign_dir, state)
     evidence_args = [
         "--idea-batch",
         str(campaign_dir / "python_scan_passed.json"),
@@ -266,6 +359,8 @@ def _run_evidence_stage(args: argparse.Namespace, campaign_dir: Path, state: dic
         evidence_args.append("--xai-grok")
     else:
         evidence_args.append("--skip-grok")
+    if kronos_path:
+        evidence_args.extend(["--kronos-advisory-file", kronos_path])
     if args.as_of_date:
         evidence_args.extend(["--as-of-date", args.as_of_date])
 
@@ -281,6 +376,40 @@ def _run_evidence_stage(args: argparse.Namespace, campaign_dir: Path, state: dic
         state["stage"] = "evidence_in_progress"
     _write_state(campaign_dir, state)
     _record_event(campaign_dir, "evidence_campaign_advanced", summary)
+
+
+def _run_kronos_stage(args: argparse.Namespace, campaign_dir: Path, state: dict[str, Any]) -> str:
+    output = campaign_dir / "kronos_advisory_batch.json"
+    kronos_args = argparse.Namespace(
+        symbols="",
+        idea_batch=str(campaign_dir / "python_scan_passed.json"),
+        output=str(output),
+        kronos_root=args.kronos_root,
+        kronos_python=args.kronos_python,
+        period=args.kronos_period,
+        interval=args.kronos_interval,
+        lookback=args.kronos_lookback,
+        pred_len=args.kronos_pred_len,
+        model=args.kronos_model,
+        tokenizer=args.kronos_tokenizer,
+        device=args.kronos_device,
+        timeout_seconds=args.kronos_timeout_seconds,
+        limit=args.kronos_limit,
+    )
+    with contextlib.redirect_stdout(io.StringIO()):
+        run_kronos_batch_cli(kronos_args)
+    summary = _load_json(output)
+    state["kronos"] = {
+        "advisory_file": str(output),
+        "provider_status": summary.get("provider_status"),
+        "symbol_count": summary.get("symbol_count"),
+        "ok_count": summary.get("ok_count"),
+        "unavailable_count": summary.get("unavailable_count"),
+        "policy_boundary": summary.get("policy_boundary"),
+    }
+    _write_state(campaign_dir, state)
+    _record_event(campaign_dir, "kronos_advisory_batch_completed", state["kronos"])
+    return str(output)
 
 
 def _run_selection_stage(args: argparse.Namespace, campaign_dir: Path, state: dict[str, Any]) -> None:

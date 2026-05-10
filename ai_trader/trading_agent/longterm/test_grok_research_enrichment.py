@@ -1,11 +1,13 @@
 import json
 import sys
+from types import SimpleNamespace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from longterm.grok_research_enrichment import (
     FakeGrokResearchClient,
+    XaiGrokResearchClient,
     build_grok_research_messages,
     enrich_idea_with_grok_research,
     enrich_ideas_with_grok_research,
@@ -212,6 +214,39 @@ def test_prompt_asks_for_source_backed_catalysts_not_motley_fool_impersonation()
     assert "primary earnings context" in joined
     assert "article_evidence_summaries" in joined
     assert "snippet-grounded" in joined
+
+
+def test_xai_grok_research_client_passes_optional_cache_conversation_header(monkeypatch):
+    captured = {}
+
+    class FakeCompletions:
+        def create(self, **kwargs):
+            captured["create_kwargs"] = kwargs
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(message=SimpleNamespace(content=json.dumps(_raw_enrichment())))
+                ]
+            )
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            captured["client_kwargs"] = kwargs
+            self.chat = SimpleNamespace(completions=FakeCompletions())
+
+    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=FakeOpenAI))
+    monkeypatch.setitem(sys.modules, "httpx", SimpleNamespace(Timeout=lambda value: value))
+
+    client = XaiGrokResearchClient(
+        api_key="test-key",
+        cache_conversation_id="longterm-enrichment-ruleshash",
+    )
+
+    result = client.enrich({"symbol": "AMZN", "company_name": "Amazon"})
+
+    assert result["symbol"] == "AMZN"
+    assert captured["create_kwargs"]["extra_headers"] == {
+        "x-grok-conv-id": "longterm-enrichment-ruleshash"
+    }
 
 
 def test_grok_research_enrichment_cli_can_normalize_offline_snapshots(tmp_path, capsys):

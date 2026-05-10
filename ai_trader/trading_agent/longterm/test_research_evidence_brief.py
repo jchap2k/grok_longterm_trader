@@ -38,6 +38,11 @@ def _enriched_idea() -> dict:
             "quality_score": 53.0,
             "growth_score": 42.0,
             "valuation_score": 53.0,
+            "valuation_sanity_score": 41.0,
+            "valuation_sanity_reasons": [
+                "FCF yield 1.1% leaves little cash-flow cushion",
+                "debt materially exceeds cash in valuation sanity check",
+            ],
             "safety_score": 46.0,
             "investing_type": "Aggressive Growth",
             "estimated_drawdown_band": "-40% to -60%",
@@ -101,6 +106,15 @@ def _enriched_idea() -> dict:
             "risk_flags": ["FCF pressure from infrastructure spend."],
             "warnings": ["Evidence thin on long-term AI ROI."],
         },
+        "kronos_advisory": {
+            "source_type": "kronos_advisory",
+            "provider_status": "ok",
+            "provider_mode": "kronos_subagent",
+            "forecast_direction": "down",
+            "forecast_return_pct": -1.07,
+            "forecast_horizon_rows": 5,
+            "policy_boundary": "Kronos output is experimental advisory context only.",
+        },
     }
 
 
@@ -113,6 +127,8 @@ def test_build_research_evidence_brief_summarizes_enriched_context():
     assert "P/E 37.1x" in brief
     assert "Scorecard:" in brief
     assert "super 54.1" in brief
+    assert "valuation sanity 41.0" in brief
+    assert "FCF yield 1.1% leaves little cash-flow cushion" in brief
     assert "Latest earnings:" in brief
     assert "AWS growth and advertising margin expansion" in brief
     assert "Primary news:" in brief
@@ -122,6 +138,9 @@ def test_build_research_evidence_brief_summarizes_enriched_context():
     assert "snippet_grounded" in brief
     assert "Grok catalyst synthesis:" in brief
     assert "AWS achieved 28% Q1 revenue growth" in brief
+    assert "Kronos timing:" in brief
+    assert "direction down" in brief
+    assert "5-row return -1.07%" in brief
     assert "Warnings:" in brief
     assert "High capex phase" in brief
 

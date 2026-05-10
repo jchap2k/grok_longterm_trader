@@ -19,6 +19,8 @@ from longterm.research_to_paper_pipeline import (
     build_final_planning_action_plan_extract_stage,
     build_final_planning_refresh_stage,
     build_generated_committee_batch_runner_stage,
+    build_motley_fool_new_recs_batch_split_stage,
+    build_motley_fool_new_recs_committee_batch_runner_stage,
     build_paper_preflight_stages,
     build_portfolio_news_followup_committee_batch_runner_stage,
     build_portfolio_news_followup_batch_split_stage,
@@ -40,6 +42,9 @@ def build_parser() -> argparse.ArgumentParser:
     research_source.add_argument("--research-source-file", default="")
     research_source.add_argument("--research-source-url", default="")
     parser.add_argument("--research-source", default="")
+    parser.add_argument("--supplemental-source-file", action="append", default=[])
+    parser.add_argument("--supplemental-source-url", action="append", default=[])
+    parser.add_argument("--supplemental-ideas-file", action="append", default=[])
     parser.add_argument("--research-campaign-dir", default="")
     parser.add_argument("--research-resume", action="store_true")
     parser.add_argument(
@@ -73,6 +78,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--perplexity-max-tokens", type=int, default=DEFAULT_PERPLEXITY_MAX_TOKENS)
     parser.add_argument("--perplexity-search-context-size", choices=["low", "medium", "high"], default="low")
     parser.add_argument("--perplexity-credits-purchased-to-date", type=float, default=None)
+    parser.add_argument("--kronos-advisory", action="store_true")
+    parser.add_argument("--kronos-root", default="")
+    parser.add_argument("--kronos-python", default="")
+    parser.add_argument("--kronos-limit", type=int, default=None)
     parser.add_argument("--selection-top-percent", type=float, default=20.0)
     parser.add_argument("--selection-min-count", type=int, default=10)
     parser.add_argument("--selection-max-count", type=int, default=50)
@@ -113,6 +122,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--portfolio-news-followup-agent-preset", default="decision_4")
     parser.add_argument("--no-portfolio-news-followup-committee-resume", action="store_true")
+    parser.add_argument("--motley-fool-new-recs-ideas", default="")
+    parser.add_argument("--motley-fool-new-recs-batches", action="store_true")
+    parser.add_argument("--motley-fool-new-recs-batch-size", type=int, default=3)
+    parser.add_argument("--run-motley-fool-new-recs-committee-batches", action="store_true")
+    parser.add_argument("--motley-fool-new-recs-max-batches", type=int, default=None)
+    parser.add_argument("--motley-fool-new-recs-batch-dir", default="")
+    parser.add_argument("--motley-fool-new-recs-agent-preset", default="decision_4")
+    parser.add_argument("--no-motley-fool-new-recs-committee-resume", action="store_true")
     parser.add_argument("--run-generated-committee-batches", action="store_true")
     parser.add_argument(
         "--no-generated-committee-resume",
@@ -156,6 +173,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--allow-existing-paper-positions",
         action="store_true",
         help="Allow current paper holdings in readiness checks for ongoing paper portfolio runs.",
+    )
+    parser.add_argument(
+        "--skip-paper-preflight",
+        action="store_true",
+        help="Stop after research/committee preparation stages instead of building paper-submit readiness artifacts.",
     )
     parser.add_argument("--print-plan-only", action="store_true")
     parser.add_argument("--summary-output", default="")
@@ -217,8 +239,12 @@ def run_cli(args: argparse.Namespace) -> int:
         raise ValueError("--final-planning-timeout-seconds must be positive when supplied.")
     if args.portfolio_news_followup_batch_size < 1:
         raise ValueError("--portfolio-news-followup-batch-size must be positive.")
+    if args.motley_fool_new_recs_batch_size < 1:
+        raise ValueError("--motley-fool-new-recs-batch-size must be positive.")
     if args.portfolio_news_followup_batches and not args.portfolio_news_monitor and not args.portfolio_news_followup_ideas:
         raise ValueError("--portfolio-news-followup-batches requires --portfolio-news-monitor or --portfolio-news-followup-ideas.")
+    if args.motley_fool_new_recs_batches and not args.motley_fool_new_recs_ideas:
+        raise ValueError("--motley-fool-new-recs-batches requires --motley-fool-new-recs-ideas.")
     if args.run_portfolio_news_followup_committee_batches:
         if args.portfolio_news_followup_max_batches is None or args.portfolio_news_followup_max_batches < 1:
             raise ValueError(
@@ -229,6 +255,17 @@ def run_cli(args: argparse.Namespace) -> int:
             raise ValueError(
                 "--run-portfolio-news-followup-committee-batches requires "
                 "--portfolio-news-followup-batches or --portfolio-news-followup-batch-dir."
+            )
+    if args.run_motley_fool_new_recs_committee_batches:
+        if args.motley_fool_new_recs_max_batches is None or args.motley_fool_new_recs_max_batches < 1:
+            raise ValueError(
+                "--run-motley-fool-new-recs-committee-batches requires "
+                "--motley-fool-new-recs-max-batches as a positive cap."
+            )
+        if not args.motley_fool_new_recs_batches and not args.motley_fool_new_recs_batch_dir:
+            raise ValueError(
+                "--run-motley-fool-new-recs-committee-batches requires "
+                "--motley-fool-new-recs-batches or --motley-fool-new-recs-batch-dir."
             )
     output_dir = Path(args.output_dir)
     summary_output = Path(args.summary_output) if args.summary_output else output_dir / "pipeline_summary.json"
@@ -243,6 +280,9 @@ def run_cli(args: argparse.Namespace) -> int:
                 source_file=args.research_source_file or None,
                 source_url=args.research_source_url,
                 source=args.research_source,
+                supplemental_source_files=args.supplemental_source_file or None,
+                supplemental_source_urls=args.supplemental_source_url or None,
+                supplemental_ideas_files=args.supplemental_ideas_file or None,
                 campaign_dir=args.research_campaign_dir,
                 resume=args.research_resume,
                 run_until=args.research_run_until,
@@ -271,6 +311,10 @@ def run_cli(args: argparse.Namespace) -> int:
                 perplexity_max_tokens=args.perplexity_max_tokens,
                 perplexity_search_context_size=args.perplexity_search_context_size,
                 perplexity_credits_purchased_to_date=args.perplexity_credits_purchased_to_date,
+                kronos_advisory=args.kronos_advisory,
+                kronos_root=args.kronos_root or None,
+                kronos_python=args.kronos_python or None,
+                kronos_limit=args.kronos_limit,
                 selection_top_percent=args.selection_top_percent,
                 selection_min_count=args.selection_min_count,
                 selection_max_count=args.selection_max_count,
@@ -362,19 +406,43 @@ def run_cli(args: argparse.Namespace) -> int:
                 max_batches=args.portfolio_news_followup_max_batches,
             )
         )
-    stages.extend(build_paper_preflight_stages(
-        output_dir=output_dir,
-        rules_path=args.rules_path,
-        action_plan=args.action_plan,
-        portfolio_state=args.portfolio_state,
-        journal_db=args.journal_db,
-        ledger_db=args.ledger_db,
-        price_map=args.price_map or None,
-        expected_cash=expected_cash,
-        profile_config=args.profile_config,
-        skip_price_map=args.skip_price_map,
-        allow_existing_paper_positions=args.allow_existing_paper_positions,
-    ))
+    if args.motley_fool_new_recs_batches:
+        stages.append(
+            build_motley_fool_new_recs_batch_split_stage(
+                output_dir=output_dir,
+                new_recs_ideas=args.motley_fool_new_recs_ideas,
+                batch_size=args.motley_fool_new_recs_batch_size,
+            )
+        )
+    if args.run_motley_fool_new_recs_committee_batches:
+        stages.append(
+            build_motley_fool_new_recs_committee_batch_runner_stage(
+                output_dir=output_dir,
+                batch_dir=args.motley_fool_new_recs_batch_dir or None,
+                journal_db=args.journal_db,
+                portfolio_state=args.portfolio_state,
+                market_regime_file=args.market_regime_file or None,
+                motley_fool_config=args.motley_fool_config or None,
+                agent_preset=args.motley_fool_new_recs_agent_preset,
+                profile_config=args.profile_config,
+                resume=not args.no_motley_fool_new_recs_committee_resume,
+                max_batches=args.motley_fool_new_recs_max_batches,
+            )
+        )
+    if not args.skip_paper_preflight:
+        stages.extend(build_paper_preflight_stages(
+            output_dir=output_dir,
+            rules_path=args.rules_path,
+            action_plan=args.action_plan,
+            portfolio_state=args.portfolio_state,
+            journal_db=args.journal_db,
+            ledger_db=args.ledger_db,
+            price_map=args.price_map or None,
+            expected_cash=expected_cash,
+            profile_config=args.profile_config,
+            skip_price_map=args.skip_price_map,
+            allow_existing_paper_positions=args.allow_existing_paper_positions,
+        ))
     result = run_pipeline_stages(
         stages,
         output_dir=output_dir,

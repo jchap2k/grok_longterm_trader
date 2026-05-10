@@ -62,6 +62,7 @@ class XaiGrokResearchClient:
         model: str = DEFAULT_GROK_MODEL,
         base_url: str = DEFAULT_XAI_BASE_URL,
         timeout_seconds: float = 180.0,
+        cache_conversation_id: str | None = None,
     ) -> None:
         self.api_key = api_key or os.getenv(api_key_env)
         if not self.api_key:
@@ -69,6 +70,7 @@ class XaiGrokResearchClient:
         self.model = model
         self.base_url = base_url
         self.timeout_seconds = timeout_seconds
+        self.cache_conversation_id = cache_conversation_id
 
     def enrich(
         self,
@@ -96,6 +98,7 @@ class XaiGrokResearchClient:
                 as_of_date=as_of_date,
             ),
             response_format=_response_format_schema(),
+            extra_headers=_cache_extra_headers(self.cache_conversation_id),
         )
         content = completion.choices[0].message.content
         if not content:
@@ -131,6 +134,13 @@ def enrich_idea_with_grok_research(
         payload["thesis_summary"] = thesis
     payload["source_notes"] = _merge_notes(payload.get("source_notes"), _source_notes(normalized, free_facts))
     return payload
+
+
+def _cache_extra_headers(cache_conversation_id: str | None) -> dict[str, str]:
+    """Build optional xAI cache-routing headers."""
+    if not cache_conversation_id:
+        return {}
+    return {"x-grok-conv-id": str(cache_conversation_id)}
 
 
 def enrich_ideas_with_grok_research(

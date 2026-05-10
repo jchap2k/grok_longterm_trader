@@ -58,6 +58,24 @@ def _safe_account_refresh_template() -> str:
     )
 
 
+def _safe_full_research_template() -> str:
+    return (
+        "python scripts/longterm_research_to_paper_pipeline.py "
+        "--output-dir {full_research_output_dir} "
+        "--action-plan action_plan.json "
+        "--portfolio-state {portfolio_state} "
+        "--journal-db journal.db "
+        "--ledger-db ledger.db "
+        "--research-source-file universe.csv "
+        "--research-source manual_watchlist "
+        "--research-campaign-dir {full_research_campaign_dir} "
+        "--research-run-until research_queue_ready "
+        "--research-max-pass-count 25 "
+        "--skip-grok "
+        "--print-plan-only"
+    )
+
+
 def _safe_scheduler_policy_template() -> str:
     return (
         "python scripts/longterm_pipeline_scheduler_policy.py "
@@ -103,6 +121,27 @@ def _safe_portfolio_news_monitor_template() -> str:
         "--snapshot-file news_snapshot.json "
         "--journal-db journal.db "
         "--output {portfolio_news_monitor} "
+        "--json"
+    )
+
+
+def _safe_motley_fool_new_recs_capture_template() -> str:
+    return (
+        "python scripts/longterm_motley_fool_capture.py "
+        "--source new_recommendations "
+        "--profile-dir fool_profile "
+        "--output {motley_fool_new_recs_capture}"
+    )
+
+
+def _safe_motley_fool_new_recs_delta_template() -> str:
+    return (
+        "python scripts/longterm_motley_fool_new_recs_state.py "
+        "--ideas-file {motley_fool_new_recs_capture} "
+        "--state-file {motley_fool_new_recs_state} "
+        "--output {motley_fool_new_recs_delta} "
+        "--new-ideas-output {motley_fool_new_recs_ideas} "
+        "--bootstrap-if-empty "
         "--json"
     )
 
@@ -357,6 +396,38 @@ def test_validate_portfolio_news_monitor_template_requires_script_and_output(tmp
         )
 
 
+def test_validate_motley_fool_new_recs_templates_require_scripts_and_outputs(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+
+    validate_scheduler_command_template(
+        _safe_motley_fool_new_recs_capture_template(),
+        command_kind="motley_fool_new_recs_capture",
+        rules_path=rules_path,
+    )
+    validate_scheduler_command_template(
+        _safe_motley_fool_new_recs_delta_template(),
+        command_kind="motley_fool_new_recs_delta",
+        rules_path=rules_path,
+    )
+
+    with pytest.raises(ValueError, match="new_recommendations"):
+        validate_scheduler_command_template(
+            _safe_motley_fool_new_recs_capture_template().replace("--source new_recommendations ", ""),
+            command_kind="motley_fool_new_recs_capture",
+            rules_path=rules_path,
+        )
+    with pytest.raises(ValueError, match="--new-ideas-output"):
+        validate_scheduler_command_template(
+            _safe_motley_fool_new_recs_delta_template().replace(
+                "--new-ideas-output {motley_fool_new_recs_ideas} ",
+                "",
+            ),
+            command_kind="motley_fool_new_recs_delta",
+            rules_path=rules_path,
+        )
+
+
 def test_validate_position_review_queue_template_requires_script_and_output(tmp_path):
     rules_path = tmp_path / "active_rules.txt"
     rules_path.write_text("<rules />", encoding="utf-8")
@@ -432,6 +503,34 @@ def test_print_plan_only_renders_portfolio_news_monitor_command(tmp_path):
     assert "portfolio_news_monitor.json" in run.portfolio_news_monitor_command
     assert "{portfolio_news_monitor}" not in run.portfolio_news_monitor_command
     assert run.portfolio_news_monitor_path.endswith("portfolio_news_monitor.json")
+
+
+def test_print_plan_only_renders_motley_fool_new_recs_commands(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+
+    summary = run_pipeline_scheduler(
+        PipelineSchedulerInputs(
+            output_dir=tmp_path / "scheduler",
+            pipeline_command_template=_safe_pipeline_template(),
+            motley_fool_new_recs_capture_command_template=_safe_motley_fool_new_recs_capture_template(),
+            motley_fool_new_recs_delta_command_template=_safe_motley_fool_new_recs_delta_template(),
+            rules_path=rules_path,
+        ),
+        PipelineSchedulerConfig(max_runs=1, print_plan_only=True),
+        now_func=FakeClock().now,
+    )
+
+    run = summary.runs[0]
+    assert summary.status == "planned"
+    assert "longterm_motley_fool_capture.py" in run.motley_fool_new_recs_capture_command
+    assert "motley_fool_new_recs_capture.json" in run.motley_fool_new_recs_capture_command
+    assert "longterm_motley_fool_new_recs_state.py" in run.motley_fool_new_recs_delta_command
+    assert "motley_fool_new_recs_delta.json" in run.motley_fool_new_recs_delta_command
+    assert "motley_fool_new_recs_ideas.json" in run.motley_fool_new_recs_delta_command
+    assert "motley_fool_new_recs_state.json" in run.motley_fool_new_recs_delta_command
+    assert "{motley_fool_new_recs_capture}" not in run.motley_fool_new_recs_capture_command
+    assert "{motley_fool_new_recs_delta}" not in run.motley_fool_new_recs_delta_command
 
 
 def test_print_plan_only_renders_position_review_queue_command(tmp_path):
@@ -510,6 +609,77 @@ def test_successful_scheduler_run_executes_position_review_queue_after_news_moni
     assert run.position_review_queue_path.endswith("position_review_queue.json")
     state = json.loads((tmp_path / "scheduler" / "scheduler_policy_state.json").read_text(encoding="utf-8"))
     assert state["last_position_review_at"] == run.finished_at
+
+
+def test_successful_scheduler_run_executes_motley_fool_new_recs_before_pipeline(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    calls: list[str] = []
+
+    def fake_runner(command: str) -> tuple[int, str, str]:
+        calls.append(command)
+        if "longterm_motley_fool_capture.py" in command:
+            path = Path(command.split("--output ", 1)[1].split(" --", 1)[0].strip('"'))
+            path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "symbol": "NVDA",
+                            "company_name": "NVIDIA",
+                            "recommendation_date": "2026-05-09",
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            return 0, "capture", ""
+        if "longterm_motley_fool_new_recs_state.py" in command:
+            delta_path = Path(command.split("--output ", 1)[1].split(" --", 1)[0].strip('"'))
+            state_path = Path(command.split("--state-file ", 1)[1].split(" --", 1)[0].strip('"'))
+            ideas_path = Path(command.split("--new-ideas-output ", 1)[1].split(" --", 1)[0].strip('"'))
+            delta_path.write_text(
+                json.dumps({"status": "completed", "new_count": 1, "new_symbols": ["NVDA"]}),
+                encoding="utf-8",
+            )
+            state_path.write_text(json.dumps({"seen_count": 1}), encoding="utf-8")
+            ideas_path.write_text(json.dumps([{"symbol": "NVDA"}]), encoding="utf-8")
+            return 0, "delta", ""
+        summary_path = Path(command.split("--summary-output ", 1)[1].split(" --", 1)[0].strip('"'))
+        summary_path.write_text(json.dumps({"status": "completed", "order_submission_enabled": False}), encoding="utf-8")
+        return 0, "pipeline", ""
+
+    summary = run_pipeline_scheduler(
+        PipelineSchedulerInputs(
+            output_dir=tmp_path / "scheduler",
+            pipeline_command_template=_safe_pipeline_template(),
+            motley_fool_new_recs_capture_command_template=_safe_motley_fool_new_recs_capture_template(),
+            motley_fool_new_recs_delta_command_template=_safe_motley_fool_new_recs_delta_template(),
+            rules_path=rules_path,
+        ),
+        PipelineSchedulerConfig(max_runs=1),
+        command_runner=fake_runner,
+        now_func=FakeClock().now,
+    )
+
+    run = summary.runs[0]
+    assert summary.status == "completed"
+    assert [
+        (
+            "capture"
+            if "longterm_motley_fool_capture.py" in call
+            else "delta"
+            if "longterm_motley_fool_new_recs_state.py" in call
+            else "pipeline"
+        )
+        for call in calls
+    ] == ["capture", "delta", "pipeline"]
+    assert run.motley_fool_new_recs_capture_exit_code == 0
+    assert run.motley_fool_new_recs_delta_exit_code == 0
+    assert run.motley_fool_new_recs_capture_path.endswith("motley_fool_new_recs_capture.json")
+    assert run.motley_fool_new_recs_delta_path.endswith("motley_fool_new_recs_delta.json")
+    assert run.motley_fool_new_recs_ideas_path.endswith("motley_fool_new_recs_ideas.json")
+    state = json.loads((tmp_path / "scheduler" / "scheduler_policy_state.json").read_text(encoding="utf-8"))
+    assert state["last_motley_fool_new_recs_at"] == run.finished_at
 
 
 def test_successful_scheduler_run_writes_command_logs_health_and_summary(tmp_path):
@@ -1125,6 +1295,182 @@ def test_scheduler_policy_runs_between_pipeline_and_account_refresh_and_is_passe
     assert run.scheduler_policy_path in run.account_refresh_command
 
 
+def test_validate_full_research_command_template_requires_research_source_and_campaign(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+
+    validate_scheduler_command_template(
+        _safe_full_research_template(),
+        command_kind="full_research",
+        rules_path=rules_path,
+    )
+    with pytest.raises(ValueError, match="research source"):
+        validate_scheduler_command_template(
+            _safe_full_research_template().replace("--research-source-file universe.csv ", ""),
+            command_kind="full_research",
+            rules_path=rules_path,
+        )
+    with pytest.raises(ValueError, match="--research-campaign-dir"):
+        validate_scheduler_command_template(
+            _safe_full_research_template().replace("--research-campaign-dir {full_research_campaign_dir} ", ""),
+            command_kind="full_research",
+            rules_path=rules_path,
+        )
+
+
+def test_full_research_runs_after_policy_when_due_and_updates_cadence_state(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    calls: list[str] = []
+
+    def fake_runner(command: str) -> tuple[int, str, str]:
+        calls.append(command)
+        if "longterm_research_to_paper_pipeline.py" in command and "{pipeline_output_dir}" not in command:
+            summary_path = Path(command.split("--summary-output ", 1)[1].split(" --", 1)[0].strip('"'))
+            if "full_research" in command:
+                summary_path.write_text(
+                    json.dumps(
+                        {
+                            "status": "completed",
+                            "blocker_count": 0,
+                            "stages": [
+                                {"stage_id": "research_campaign", "status": "passed"},
+                                {"stage_id": "research_batch_split", "status": "passed"},
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                return 0, "full research", ""
+            summary_path.write_text(
+                json.dumps({"status": "completed", "blocker_count": 0, "stages": []}),
+                encoding="utf-8",
+            )
+            return 0, "pipeline", ""
+        if "longterm_pipeline_scheduler_policy.py" in command:
+            policy_path = Path(command.split("--report-output ", 1)[1].split(" --", 1)[0].strip('"'))
+            policy_path.write_text(
+                json.dumps(
+                    {
+                        "recommended_mode": "account_refresh_only",
+                        "cadence_recommendations": {"full_research_due": True},
+                        "order_submission_enabled": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            return 0, "policy", ""
+        return 0, "refresh", ""
+
+    summary = run_pipeline_scheduler(
+        PipelineSchedulerInputs(
+            output_dir=tmp_path / "scheduler",
+            pipeline_command_template=_safe_pipeline_template(),
+            full_research_command_template=_safe_full_research_template(),
+            scheduler_policy_command_template=_safe_scheduler_policy_template(),
+            account_refresh_command_template=_safe_account_refresh_template(),
+            rules_path=rules_path,
+        ),
+        PipelineSchedulerConfig(max_runs=1),
+        command_runner=fake_runner,
+        now_func=FakeClock().now,
+    )
+
+    run = summary.runs[0]
+    assert len(calls) == 4
+    assert "longterm_research_to_paper_pipeline.py" in calls[0]
+    assert "longterm_pipeline_scheduler_policy.py" in calls[1]
+    assert "full_research" in calls[2]
+    assert "longterm_paper_account_refresh.py" in calls[3]
+    assert run.full_research_exit_code == 0
+    assert Path(run.full_research_summary_path).exists()
+    state = json.loads((tmp_path / "scheduler" / "scheduler_policy_state.json").read_text(encoding="utf-8"))
+    assert state["last_full_research_at"] == run.finished_at
+
+
+def test_full_research_is_skipped_when_policy_says_not_due(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    calls: list[str] = []
+
+    def fake_runner(command: str) -> tuple[int, str, str]:
+        calls.append(command)
+        if "longterm_research_to_paper_pipeline.py" in command:
+            summary_path = Path(command.split("--summary-output ", 1)[1].split(" --", 1)[0].strip('"'))
+            summary_path.write_text(
+                json.dumps({"status": "completed", "blocker_count": 0, "stages": []}),
+                encoding="utf-8",
+            )
+            return 0, "pipeline", ""
+        if "longterm_pipeline_scheduler_policy.py" in command:
+            policy_path = Path(command.split("--report-output ", 1)[1].split(" --", 1)[0].strip('"'))
+            policy_path.write_text(
+                json.dumps(
+                    {
+                        "recommended_mode": "account_refresh_only",
+                        "cadence_recommendations": {"full_research_due": False},
+                        "order_submission_enabled": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            return 0, "policy", ""
+        return 0, "refresh", ""
+
+    summary = run_pipeline_scheduler(
+        PipelineSchedulerInputs(
+            output_dir=tmp_path / "scheduler",
+            pipeline_command_template=_safe_pipeline_template(),
+            full_research_command_template=_safe_full_research_template(),
+            scheduler_policy_command_template=_safe_scheduler_policy_template(),
+            account_refresh_command_template=_safe_account_refresh_template(),
+            rules_path=rules_path,
+        ),
+        PipelineSchedulerConfig(max_runs=1),
+        command_runner=fake_runner,
+        now_func=FakeClock().now,
+    )
+
+    run = summary.runs[0]
+    assert len(calls) == 3
+    research_calls = [command for command in calls if "longterm_research_to_paper_pipeline.py" in command]
+    assert len(research_calls) == 1
+    assert "research-source-file" not in research_calls[0]
+    assert run.full_research_exit_code is None
+
+
+def test_scheduler_uses_next_run_folder_when_previous_runs_exist(tmp_path):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    existing = tmp_path / "scheduler" / "run_001"
+    existing.mkdir(parents=True)
+    (existing / "keep.txt").write_text("previous", encoding="utf-8")
+
+    def fake_runner(command: str) -> tuple[int, str, str]:
+        if "longterm_research_to_paper_pipeline.py" in command:
+            summary_path = Path(command.split("--summary-output ", 1)[1].split(" --", 1)[0].strip('"'))
+            summary_path.write_text(
+                json.dumps({"status": "completed", "blocker_count": 0, "stages": []}),
+                encoding="utf-8",
+            )
+        return 0, "ok", ""
+
+    summary = run_pipeline_scheduler(
+        PipelineSchedulerInputs(
+            output_dir=tmp_path / "scheduler",
+            pipeline_command_template=_safe_pipeline_template(),
+            rules_path=rules_path,
+        ),
+        PipelineSchedulerConfig(max_runs=1),
+        command_runner=fake_runner,
+        now_func=FakeClock().now,
+    )
+
+    assert summary.runs[0].run_number == 2
+    assert Path(summary.runs[0].run_dir).name == "run_002"
+    assert (existing / "keep.txt").read_text(encoding="utf-8") == "previous"
+
+
 def test_committee_preset_policy_runs_after_pipeline_and_is_passed_to_refresh(tmp_path):
     rules_path = tmp_path / "active_rules.txt"
     rules_path.write_text("<rules />", encoding="utf-8")
@@ -1618,6 +1964,150 @@ def test_pipeline_scheduler_cli_accepts_portfolio_news_monitor_template(tmp_path
     assert "portfolio_news_monitor.json" in run["pipeline_command"]
 
 
+def test_pipeline_scheduler_cli_accepts_motley_fool_new_recs_templates(tmp_path, capsys):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    summary_output = tmp_path / "summary.json"
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--output-dir",
+                str(tmp_path / "scheduler"),
+                "--rules-path",
+                str(rules_path),
+                "--pipeline-command-template",
+                _safe_pipeline_template() + " --motley-fool-new-recs-ideas {motley_fool_new_recs_ideas}",
+                "--motley-fool-new-recs-capture-command-template",
+                _safe_motley_fool_new_recs_capture_template(),
+                "--motley-fool-new-recs-delta-command-template",
+                _safe_motley_fool_new_recs_delta_template(),
+                "--print-plan-only",
+                "--summary-output",
+                str(summary_output),
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    run = printed["runs"][0]
+    assert code == 0
+    assert run["status"] == "planned"
+    assert "longterm_motley_fool_capture.py" in run["motley_fool_new_recs_capture_command"]
+    assert "longterm_motley_fool_new_recs_state.py" in run["motley_fool_new_recs_delta_command"]
+    assert "--motley-fool-new-recs-ideas" in run["pipeline_command"]
+    assert "motley_fool_new_recs_ideas.json" in run["pipeline_command"]
+
+
+def test_pipeline_scheduler_ongoing_preset_can_wire_motley_fool_new_recs_and_supplemental_full_scan(
+    tmp_path,
+    capsys,
+):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    action_plan = tmp_path / "action_plan.json"
+    for path in (action_plan,):
+        path.write_text("{}", encoding="utf-8")
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--preset",
+                "ongoing-no-submit",
+                "--output-dir",
+                str(tmp_path / "scheduler"),
+                "--rules-path",
+                str(rules_path),
+                "--action-plan",
+                str(action_plan),
+                "--journal-db",
+                str(tmp_path / "journal.db"),
+                "--ledger-db",
+                str(tmp_path / "ledger.db"),
+                "--policy-gated-full-research",
+                "--research-source-url",
+                "https://example.test/nasdaq.txt",
+                "--research-source",
+                "nasdaq_trader",
+                "--research-campaign-dir",
+                str(tmp_path / "campaign"),
+                "--research-max-pass-count",
+                "20",
+                "--research-supplemental-source-url",
+                "spy_holdings=https://example.test/spy.csv",
+                "--research-supplemental-ideas-file",
+                "motley_fool=C:/tmp/fool.json",
+                "--motley-fool-new-recs-monitor",
+                "--motley-fool-new-recs-batches",
+                "--run-motley-fool-new-recs-committee-batches",
+                "--motley-fool-new-recs-max-batches",
+                "1",
+                "--print-plan-only",
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    run = printed["runs"][0]
+    assert code == 0
+    assert "--supplemental-source-url spy_holdings=https://example.test/spy.csv" in run["full_research_command"]
+    assert "--supplemental-ideas-file motley_fool=C:/tmp/fool.json" in run["full_research_command"]
+    assert "longterm_motley_fool_capture.py" in run["motley_fool_new_recs_capture_command"]
+    assert "--motley-fool-new-recs-batches" in run["pipeline_command"]
+    assert "--run-motley-fool-new-recs-committee-batches" in run["pipeline_command"]
+    assert "last_motley_fool_new_recs_at" in run["post_run_verification_command"]
+
+
+def test_pipeline_scheduler_ongoing_preset_can_enable_kronos_in_full_scan(tmp_path, capsys):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    action_plan = tmp_path / "action_plan.json"
+    action_plan.write_text("{}", encoding="utf-8")
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--preset",
+                "ongoing-no-submit",
+                "--output-dir",
+                str(tmp_path / "scheduler"),
+                "--rules-path",
+                str(rules_path),
+                "--action-plan",
+                str(action_plan),
+                "--journal-db",
+                str(tmp_path / "journal.db"),
+                "--ledger-db",
+                str(tmp_path / "ledger.db"),
+                "--policy-gated-full-research",
+                "--research-source-url",
+                "https://example.test/nasdaq.txt",
+                "--research-source",
+                "nasdaq_trader",
+                "--research-campaign-dir",
+                str(tmp_path / "campaign"),
+                "--research-max-pass-count",
+                "20",
+                "--kronos-advisory",
+                "--kronos-limit",
+                "25",
+                "--print-plan-only",
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    run = printed["runs"][0]
+    assert code == 0
+    assert "--kronos-advisory" in run["full_research_command"]
+    assert "--kronos-limit 25" in run["full_research_command"]
+    assert "--kronos-advisory" not in run["pipeline_command"]
+    assert "--submit-paper-orders" not in run["full_research_command"]
+
+
 def test_pipeline_scheduler_cli_accepts_post_run_verification_template(tmp_path, capsys):
     rules_path = tmp_path / "active_rules.txt"
     rules_path.write_text("<rules />", encoding="utf-8")
@@ -1727,6 +2217,8 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_safe_commands(t
     assert "longterm_pipeline_scheduler_policy.py" in run["scheduler_policy_command"]
     assert "--policy-state" in run["scheduler_policy_command"]
     assert "--state-output" in run["scheduler_policy_command"]
+    assert "--research-rules-path" in run["scheduler_policy_command"]
+    assert "weekly_full_scan_rules.txt" in run["scheduler_policy_command"]
     assert "longterm_paper_account_refresh.py" in run["account_refresh_command"]
     assert "--scheduler-policy" in run["account_refresh_command"]
     assert "--scheduler-config-validation" in run["account_refresh_command"]
@@ -1777,6 +2269,10 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_can_generate_fred_marke
                 "--auto-market-regime-snapshot",
                 "--market-regime-provider",
                 "fredapi",
+                "--fred-provider-attempts",
+                "4",
+                "--fred-provider-retry-delay-seconds",
+                "0.5",
                 "--print-plan-only",
                 "--json",
             ]
@@ -1798,6 +2294,8 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_can_generate_fred_marke
     assert code == 0
     assert "longterm_market_regime_snapshot.py" in run["market_regime_command"]
     assert "--provider fredapi" in run["market_regime_command"]
+    assert "--fred-provider-attempts 4" in run["market_regime_command"]
+    assert "--fred-provider-retry-delay-seconds 0.5" in run["market_regime_command"]
     assert "--output" in run["market_regime_command"]
     assert "market_regime.json" in all_commands
     assert "--market-regime-file" in run["pipeline_command"]
@@ -2082,10 +2580,14 @@ def test_pipeline_scheduler_cli_validate_config_only_reports_unattended_no_submi
             "scheduler_review_bundle": True,
             "market_regime": False,
             "portfolio_news_followup_batches": True,
-        "portfolio_news_followup_committee_batches": True,
-        "generated_committee_batches": False,
-        "final_planning_refresh": False,
-    }
+            "portfolio_news_followup_committee_batches": True,
+            "motley_fool_new_recs_monitor": False,
+            "motley_fool_new_recs_batches": False,
+            "motley_fool_new_recs_committee_batches": False,
+            "kronos_advisory": False,
+            "generated_committee_batches": False,
+            "final_planning_refresh": False,
+        }
     assert mode["operator_next_step"] == "schedule_or_run_no_submit_profile_after_operator_window_approval"
     assert not output_dir.exists()
 
@@ -2563,6 +3065,59 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_passes_bounded_research
     assert controls["bounded"] is True
     assert controls["estimated_cost_usd"] == "unknown"
     assert "PERPLEXITY_API_KEY" not in json.dumps(controls)
+
+
+def test_pipeline_scheduler_cli_can_make_research_policy_gated_weekly(tmp_path, capsys):
+    rules_path = tmp_path / "active_rules.txt"
+    rules_path.write_text("<rules />", encoding="utf-8")
+    source_file = tmp_path / "universe.csv"
+    source_file.write_text("symbol\nAAPL\n", encoding="utf-8")
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--preset",
+                "ongoing-no-submit",
+                "--output-dir",
+                str(tmp_path / "scheduler"),
+                "--rules-path",
+                str(rules_path),
+                "--journal-db",
+                str(tmp_path / "journal.db"),
+                "--ledger-db",
+                str(tmp_path / "paper_ledger.db"),
+                "--action-plan",
+                str(tmp_path / "account_action_plan.json"),
+                "--research-source-file",
+                str(source_file),
+                "--research-source",
+                "manual_watchlist",
+                "--research-campaign-dir",
+                str(tmp_path / "campaign"),
+                "--research-run-until",
+                "research_queue_ready",
+                "--research-max-pass-count",
+                "25",
+                "--skip-grok",
+                "--policy-gated-full-research",
+                "--print-plan-only",
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    run = printed["runs"][0]
+    assert code == 0
+    assert "--research-source-file" not in run["pipeline_command"]
+    assert "--research-source-file" in run["full_research_command"]
+    assert "longterm_research_to_paper_pipeline.py" in run["full_research_command"]
+    assert "--research-campaign-dir" in run["full_research_command"]
+    assert "--skip-grok" in run["full_research_command"]
+    assert "--skip-paper-preflight" in run["full_research_command"]
+    assert run["resource_controls"]["research_source_file_present"] is True
+    assert run["resource_controls"]["research_max_pass_count"] == 25
+    assert printed["runs"][0]["full_research_summary_path"].endswith("full_research_summary.json")
 
 
 def test_pipeline_scheduler_cli_ongoing_no_submit_preset_requires_cost_bounds_for_perplexity(tmp_path):

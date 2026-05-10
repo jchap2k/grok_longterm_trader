@@ -131,6 +131,7 @@
         "research_principles"
       ],
       "output_schema": {
+        "executive_summary": "4-6 sentence human-readable decision summary. Include recommendation, strongest reason, key risk or invalidation condition, sizing rationale, and benchmark/protected-holding discipline where relevant.",
         "recommendation": "BUY | ADD | HOLD | PASS | REDUCE | SELL",
         "suggested_size_pct": "number",
         "confidence": "integer 0-100",

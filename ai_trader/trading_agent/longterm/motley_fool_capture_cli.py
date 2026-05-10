@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
 from longterm.motley_fool_capture import capture_motley_fool_ideas
 from longterm.motley_fool_intake import default_motley_fool_sources
@@ -22,6 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--profile-dir", default=None)
     parser.add_argument("--url", default=None)
+    parser.add_argument("--output", default="", help="Optional JSON output file for captured ideas.")
     return parser
 
 
@@ -40,7 +42,12 @@ def run_cli(args: argparse.Namespace, *, capture_func=capture_motley_fool_ideas)
                 url=args.url if len(source_keys) == 1 else None,
             )
         )
-    print(json.dumps(ideas, indent=2, sort_keys=True))
+    payload = json.dumps(ideas, indent=2, sort_keys=True)
+    if args.output:
+        output = Path(args.output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(payload + "\n", encoding="utf-8")
+    print(payload)
     return 0
 
 

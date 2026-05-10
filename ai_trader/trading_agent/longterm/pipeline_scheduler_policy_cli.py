@@ -20,6 +20,7 @@ from longterm.pipeline_scheduler_policy import (
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build an advisory scheduler cadence policy JSON artifact.")
     parser.add_argument("--rules-path", required=True)
+    parser.add_argument("--research-rules-path", default="")
     parser.add_argument("--market-regime", default="")
     parser.add_argument("--policy-state", default="")
     parser.add_argument("--state-output", default="")
@@ -44,6 +45,7 @@ def run_cli(args: argparse.Namespace) -> int:
     pipeline_summary = _load_optional_json_object(args.pipeline_summary)
     decision = build_pipeline_scheduler_policy_decision(
         rules_path=args.rules_path,
+        research_rules_path=args.research_rules_path or None,
         now=datetime.fromisoformat(args.now) if args.now else None,
         market_regime=load_json_object(args.market_regime),
         policy_state=policy_state,

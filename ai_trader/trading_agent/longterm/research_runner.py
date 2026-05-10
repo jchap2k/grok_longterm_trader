@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 from agent.utils.cheap_grok_heavy import CheapGrokHeavy
@@ -14,8 +15,10 @@ from longterm.review_cadence import ReviewCadencePolicy
 from longterm.reviewers import (
     BalanceSheetReviewer,
     BusinessStoryReviewer,
+    ManagementCapitalAllocationReviewer,
     MarginOfSafetyReviewer,
     MacroRegimeReviewer,
+    MoatDurabilityReviewer,
     QualityDurabilityReviewer,
     QualityAtReasonablePriceReviewer,
     ReviewResult,
@@ -39,6 +42,7 @@ class LongTermResearchRunner:
         book_principles_provider: BookPrinciplesProvider | None = None,
         active_rules_provider: ActiveRulesProvider | None = None,
         rules_path: str | Path | None = None,
+        active_rules_stage: str = "decision",
     ):
         self._client = CheapGrokHeavy(
             api_key=api_key,
@@ -50,6 +54,7 @@ class LongTermResearchRunner:
         )
         self.book_principles_provider = book_principles_provider or BookPrinciplesProvider()
         self.active_rules_provider = active_rules_provider or ActiveRulesProvider(rules_path)
+        self.active_rules_stage = active_rules_stage
         self.review_cadence_policy = ReviewCadencePolicy()
         self.decision_journal: LongTermDecisionJournal | None = None
 
@@ -58,6 +63,8 @@ class LongTermResearchRunner:
             BusinessStoryReviewer().review(packet),
             BalanceSheetReviewer().review(packet),
             QualityDurabilityReviewer().review(packet),
+            MoatDurabilityReviewer().review(packet),
+            ManagementCapitalAllocationReviewer().review(packet),
             QualityAtReasonablePriceReviewer().review(packet),
             MarginOfSafetyReviewer().review(packet),
             MacroRegimeReviewer().review(packet),
@@ -130,7 +137,6 @@ class LongTermResearchRunner:
                 "Recommend BUY/ADD/HOLD/PASS/REDUCE/SELL only within non-protected active capital."
             ),
             "research_principles": self.book_principles_provider.recall(principles_query),
-            "active_rules_context": self.active_rules_provider.load(),
             "decision_constraints": (
                 "Do not recommend actions that violate protected-symbol constraints. "
                 "Respect benchmark-awareness and active-sleeve discipline."
@@ -140,6 +146,27 @@ class LongTermResearchRunner:
                 f"Defensive parking symbol: {packet.defensive_parking_symbol or 'none'}."
             ),
         }
+
+    @staticmethod
+    def _build_shared_system_context(active_rules_context: str) -> str:
+        """Build stable cacheable system context for all long-term committee calls."""
+        return (
+            "Long-term trader shared rules context. Apply these rules to every "
+            "agent response and to the synthesis. These rules are safety and "
+            "process constraints, not optional background.\n\n"
+            "[active_rules_context]\n"
+            f"{active_rules_context}"
+        )
+
+    @staticmethod
+    def _shared_context_hash(shared_system_context: str) -> str:
+        """Return a short stable hash for cache routing and audit labels."""
+        return hashlib.sha256(shared_system_context.encode("utf-8")).hexdigest()[:16]
+
+    def _cache_conversation_id(self, shared_system_context: str) -> str:
+        """Build a stable xAI cache-routing ID for long-term decision CGH."""
+        stage = self.active_rules_stage.strip().lower().replace("_", "-")
+        return f"longterm-{stage}-{self._shared_context_hash(shared_system_context)}"
 
     def run(
         self,
@@ -153,6 +180,7 @@ class LongTermResearchRunner:
         risk_flags: str = "",
     ) -> str:
         """Run the configured long-term research flow for one packet."""
+        active_rules_context = self.active_rules_provider.load_for_stage(self.active_rules_stage)
         context_sections = self._build_context_sections(
             packet,
             portfolio_state=portfolio_state,
@@ -162,6 +190,7 @@ class LongTermResearchRunner:
             supporting_evidence=supporting_evidence,
             risk_flags=risk_flags,
         )
+        shared_system_context = self._build_shared_system_context(active_rules_context)
         task_prompt = (
             f"Evaluate whether {packet.symbol} deserves consideration in a long-term "
             "quality-growth active sleeve. Ignore short-term noise. Focus on "
@@ -169,7 +198,12 @@ class LongTermResearchRunner:
             "whether the idea is strong enough to justify active capital. Return the "
             "buy, add, hold, pass, reduce, or sell choice with suggested active-sleeve size."
         )
-        return self._client.call_with_context(task_prompt, context_sections)
+        return self._client.call_with_context(
+            task_prompt,
+            context_sections,
+            shared_system_context=shared_system_context,
+            cache_conversation_id=self._cache_conversation_id(shared_system_context),
+        )
 
     def run_and_record(
         self,

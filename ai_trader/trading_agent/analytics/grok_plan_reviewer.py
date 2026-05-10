@@ -1,7 +1,7 @@
 """
 GrokPlanReviewer - Automated second-opinion on implementation plans.
 
-Sends a plan to Grok 4.20 for blind-spot analysis before coding starts.
+Sends a plan to the Grok web/project reviewer for blind-spot analysis before coding starts.
 Uses 2-prompt conversation flow:
   1. Submit plan for Grok to read (leverages project sources for full context)
   2. Request structured JSON feedback (risks, blindspots, improvements)
@@ -236,7 +236,7 @@ def build_grok_context_warmup_prompt(trading_mode: str = "swing") -> str:
 
 class GrokPlanReviewer:
     """
-    Automated plan review using Grok 4.20 via browser automation.
+    Automated plan review using the Grok web/project UI via browser automation.
 
     Grok's project has full codebase context via uploaded sources, so it
     can identify blindspots that Claude Code might miss (e.g., conflicts
@@ -635,7 +635,7 @@ def format_review_for_display(result: Dict[str, Any], feature_name: str = "") ->
     Returns a markdown-formatted string with the review findings.
     """
     lines = []
-    header = f"Grok 4.20 Plan Review"
+    header = f"Grok Browser Plan Review"
     if feature_name:
         header += f": {feature_name}"
     lines.append(f"## {header}")

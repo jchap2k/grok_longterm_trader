@@ -38,3 +38,27 @@ def test_active_rules_are_xml_structured_and_include_quality_durability():
     assert root.findtext("metadata/paradigm") == "Long-term quality-growth active sleeve"
     assert root.find("quality_durability_rules") is not None
     assert "pricing power" in rules_path.read_text(encoding="utf-8")
+
+
+def test_weekly_full_scan_rules_are_stage_specific_and_xml_structured():
+    rules_path = REPO_ROOT / "ai_trader" / "rules" / "weekly_full_scan_rules.txt"
+    text = rules_path.read_text(encoding="utf-8")
+    root = ET.fromstring(text)
+
+    assert root.tag == "weekly_full_scan_rules"
+    assert root.findtext("metadata/derived_from") == "ai_trader/rules/active_rules.txt"
+    assert root.find("stage_objective") is not None
+    assert root.find("inclusion_bias") is not None
+    assert root.find("scan_framing") is not None
+    assert root.find("conviction_rubric_light") is not None
+    assert root.find("routing_outputs") is not None
+    assert root.find("provenance_requirements") is not None
+    assert "Motley Fool" in text
+    assert "latest and previous recommendation dates" in text
+    assert "S&amp;P 500 / SPY-like constituents" in text
+    assert "FRED macro data is context" in text
+    assert "Kronos is advisory only" in text
+    assert "ResearchPacket" in text
+    assert "QualityDurabilityReviewer" in text
+    assert "scan_stage=weekly_full_scan" in text
+    assert "Final BUY, ADD, HOLD, PASS, REDUCE, SELL" in text

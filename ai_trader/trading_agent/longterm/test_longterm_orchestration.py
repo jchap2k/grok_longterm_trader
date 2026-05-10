@@ -1295,3 +1295,37 @@ def test_orchestration_cli_passes_launch_login_flag(tmp_path, capsys):
     captured = capsys.readouterr()
     assert exit_code == 0
     assert '"setup_status": "not_requested"' in captured.out
+
+
+def test_orchestration_cli_passes_active_rules_stage(tmp_path, capsys):
+    profile_path = tmp_path / "profile.json"
+    profile_path.write_text(
+        '{"account_strategy_mode":"roth_ira","tradable_capital":35000,"protected_symbols":["FXAIX"],"benchmark_symbol":"FXAIX","defensive_parking_symbol":"SPY"}',
+        encoding="utf-8",
+    )
+
+    def fake_cycle(**kwargs):
+        assert kwargs["active_rules_stage"] == "weekly_full_scan"
+        return {
+            "status": "completed",
+            "decision_ids": [],
+            "total_idea_count": 0,
+            "capture_status": "disabled",
+            "setup_status": "not_requested",
+        }
+
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--profile-config",
+            str(profile_path),
+            "--active-rules-stage",
+            "weekly_full_scan",
+        ]
+    )
+
+    exit_code = run_cli(args, cycle_func=fake_cycle)
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert '"status": "completed"' in captured.out

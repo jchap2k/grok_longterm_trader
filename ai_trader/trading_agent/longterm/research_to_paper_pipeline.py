@@ -88,6 +88,9 @@ def build_research_campaign_stages(
     source_file: str | Path | None = None,
     source_url: str | None = "",
     source: str,
+    supplemental_source_files: list[str] | None = None,
+    supplemental_source_urls: list[str] | None = None,
+    supplemental_ideas_files: list[str] | None = None,
     campaign_dir: str | Path,
     resume: bool = False,
     run_until: str = "research_queue_ready",
@@ -116,6 +119,10 @@ def build_research_campaign_stages(
     perplexity_max_tokens: int = DEFAULT_PERPLEXITY_MAX_TOKENS,
     perplexity_search_context_size: str = "low",
     perplexity_credits_purchased_to_date: float | None = None,
+    kronos_advisory: bool = False,
+    kronos_root: str | Path | None = None,
+    kronos_python: str | Path | None = None,
+    kronos_limit: int | None = None,
     selection_top_percent: float = 20.0,
     selection_min_count: int = 10,
     selection_max_count: int = 50,
@@ -147,7 +154,10 @@ def build_research_campaign_stages(
         f"{_optional_path_arg('--source-file', source_file)}"
         f"{_optional_path_arg('--source-url', source_url)}"
         f" --source {source} "
-        f"--campaign-dir {_quote(campaign_root)} "
+        f"{_repeat_text_args('--supplemental-source-file', supplemental_source_files or [])}"
+        f"{_repeat_text_args('--supplemental-source-url', supplemental_source_urls or [])}"
+        f"{_repeat_text_args('--supplemental-ideas-file', supplemental_ideas_files or [])}"
+        f" --campaign-dir {_quote(campaign_root)} "
         f"--run-until {run_until} "
         f"--watchlist-limit {int(watchlist_limit)} "
         f"--universe-batch-size {int(universe_batch_size)} "
@@ -179,6 +189,10 @@ def build_research_campaign_stages(
         f"{_optional_number_arg('--perplexity-max-tokens', perplexity_max_tokens if perplexity_research else None)}"
         f"{_optional_text_arg('--perplexity-search-context-size', perplexity_search_context_size if perplexity_research else '')}"
         f"{_optional_number_arg('--perplexity-credits-purchased-to-date', perplexity_credits_purchased_to_date if perplexity_research else None)}"
+        f"{' --kronos-advisory' if kronos_advisory else ''}"
+        f"{_optional_path_arg('--kronos-root', kronos_root if kronos_advisory else None)}"
+        f"{_optional_path_arg('--kronos-python', kronos_python if kronos_advisory else None)}"
+        f"{_optional_number_arg('--kronos-limit', kronos_limit if kronos_advisory else None)}"
     )
     split_output = pipeline_root / "research_batch_split.json"
     split_command = (
@@ -225,6 +239,7 @@ def build_generated_committee_batch_runner_stage(
     market_regime_file: str | Path | None = None,
     motley_fool_config: str | Path | None = None,
     agent_preset: str = "decision_4",
+    active_rules_stage: str = "weekly_full_scan",
     profile_config: str | Path | None = None,
     resume: bool = True,
     max_batches: int | None = None,
@@ -247,6 +262,7 @@ def build_generated_committee_batch_runner_stage(
         f"--portfolio-state {_quote(portfolio_state)} "
         f"--campaign-id {_quote(campaign_root.name)} "
         f"--agent-preset {agent_preset} "
+        f"--active-rules-stage {active_rules_stage} "
         f"--summary-output {_quote(summary_output)} "
         f"{_optional_path_arg('--market-regime-file', market_regime_file)}"
         f"{_optional_path_arg('--motley-fool-config', motley_fool_config)}"
@@ -315,6 +331,55 @@ def build_portfolio_news_followup_committee_batch_runner_stage(
         artifact_paths={
             "portfolio_news_followup_batch_dir": str(batch_dir),
             "portfolio_news_followup_committee_batch_run_summary": str(summary_output),
+        },
+        stdout_artifact_path=str(runner_output_dir / "committee_batch_runner_stdout.json"),
+    )
+    validate_stage_command(stage)
+    return stage
+
+
+def build_motley_fool_new_recs_committee_batch_runner_stage(
+    *,
+    output_dir: str | Path,
+    journal_db: str | Path,
+    portfolio_state: str | Path,
+    batch_dir: str | Path | None = None,
+    market_regime_file: str | Path | None = None,
+    motley_fool_config: str | Path | None = None,
+    agent_preset: str = "decision_4",
+    profile_config: str | Path | None = None,
+    resume: bool = True,
+    max_batches: int,
+) -> PipelineStage:
+    """Run bounded fresh Motley Fool recommendation batches through committee review."""
+    if max_batches < 1:
+        raise ValueError("Motley Fool new-recs max_batches must be a positive integer.")
+    pipeline_root = Path(output_dir)
+    source_batch_dir = Path(batch_dir) if batch_dir else pipeline_root / "motley_fool_new_recs_batches"
+    runner_output_dir = pipeline_root / "motley_fool_new_recs_committee_batches"
+    summary_output = runner_output_dir / "committee_batch_run_summary.json"
+    command = (
+        "python scripts/longterm_committee_batch_runner.py "
+        f"--committee-batch-dir {_quote(source_batch_dir)} "
+        f"--output-dir {_quote(runner_output_dir)} "
+        f"--journal-db {_quote(journal_db)} "
+        f"--portfolio-state {_quote(portfolio_state)} "
+        "--campaign-id motley_fool_new_recs "
+        f"--agent-preset {agent_preset} "
+        f"--summary-output {_quote(summary_output)} "
+        f"{_optional_path_arg('--market-regime-file', market_regime_file)}"
+        f"{_optional_path_arg('--motley-fool-config', motley_fool_config)}"
+        f"{_optional_path_arg('--profile-config', profile_config)}"
+        f" --max-batches {max_batches}"
+        f"{' --resume' if resume else ''} --json"
+    )
+    stage = PipelineStage(
+        stage_id="motley_fool_new_recs_committee_batches",
+        title="Run capped Motley Fool new-recommendation batches through committee review",
+        command=command,
+        artifact_paths={
+            "motley_fool_new_recs_batch_dir": str(source_batch_dir),
+            "motley_fool_new_recs_committee_batch_run_summary": str(summary_output),
         },
         stdout_artifact_path=str(runner_output_dir / "committee_batch_runner_stdout.json"),
     )
@@ -492,6 +557,39 @@ def build_portfolio_news_followup_batch_split_stage(
             "portfolio_news_followup_ideas": str(ideas),
             "portfolio_news_followup_batch_dir": str(batch_dir),
             "portfolio_news_followup_batch_split": str(split_output),
+        },
+        stdout_artifact_path=str(split_output),
+    )
+    validate_stage_command(stage)
+    return stage
+
+
+def build_motley_fool_new_recs_batch_split_stage(
+    *,
+    output_dir: str | Path,
+    new_recs_ideas: str | Path,
+    batch_size: int = 3,
+) -> PipelineStage:
+    """Split newly observed Motley Fool recommendations into bounded committee batches."""
+    if int(batch_size or 0) < 1:
+        raise ValueError("batch_size must be a positive integer.")
+    root = Path(output_dir)
+    ideas = Path(new_recs_ideas)
+    batch_dir = root / "motley_fool_new_recs_batches"
+    split_output = root / "motley_fool_new_recs_batch_split.json"
+    stage = PipelineStage(
+        stage_id="motley_fool_new_recs_batch_split",
+        title="Split Motley Fool new recommendations into bounded committee batches",
+        command=(
+            f"python {_quote(_script_path('longterm_research_universe.py'))} "
+            f"--research-ideas {_quote(ideas)} "
+            f"--batch-size {int(batch_size)} "
+            f"--output-dir {_quote(batch_dir)}"
+        ),
+        artifact_paths={
+            "motley_fool_new_recs_ideas": str(ideas),
+            "motley_fool_new_recs_batch_dir": str(batch_dir),
+            "motley_fool_new_recs_batch_split": str(split_output),
         },
         stdout_artifact_path=str(split_output),
     )
@@ -1161,6 +1259,10 @@ def _optional_text_arg(flag: str, value: str | None) -> str:
     return f" {flag} {_quote(value)}"
 
 
+def _repeat_text_args(flag: str, values: Iterable[str]) -> str:
+    return "".join(_optional_text_arg(flag, str(value)) for value in values if str(value or "").strip())
+
+
 def _research_provider_args(*, xai_grok: bool, skip_grok: bool, perplexity_research: bool) -> str:
     if perplexity_research:
         return " --perplexity-research"
@@ -1187,6 +1289,8 @@ __all__ = [
     "build_final_planning_action_plan_extract_stage",
     "build_final_planning_refresh_stage",
     "build_generated_committee_batch_runner_stage",
+    "build_motley_fool_new_recs_batch_split_stage",
+    "build_motley_fool_new_recs_committee_batch_runner_stage",
     "build_paper_preflight_stages",
     "build_portfolio_news_followup_committee_batch_runner_stage",
     "build_portfolio_news_followup_batch_split_stage",

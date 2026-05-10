@@ -171,6 +171,47 @@ def test_market_regime_snapshot_cli_supports_fredapi_provider_with_injected_fetc
     assert printed["mode"] == "fredapi"
 
 
+def test_market_regime_snapshot_cli_retries_transient_fredapi_failure(tmp_path, capsys):
+    output = tmp_path / "market_regime.json"
+    attempts = {"count": 0}
+
+    def flaky_fetcher(series_id, _api_key=None):
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise ValueError("FRED 500")
+        histories = {
+            "VIXCLS": _series([18, 19, 20]),
+            "SP500": _series([4500] * 200 + [5000]),
+            "DGS10": _series([4.0, 4.01, 4.02]),
+        }
+        return histories.get(series_id, [])
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--provider",
+                "fredapi",
+                "--output",
+                str(output),
+                "--fred-provider-attempts",
+                "2",
+                "--fred-provider-retry-delay-seconds",
+                "0",
+            ]
+        ),
+        fred_fetcher=flaky_fetcher,
+    )
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    printed = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert attempts["count"] > 1
+    assert payload["provider_status"] == "ok"
+    assert payload["provider_mode"] == "fredapi"
+    assert printed["mode"] == "fredapi"
+
+
 def test_market_regime_snapshot_cli_falls_back_to_yfinance_when_fredapi_fails(tmp_path, capsys, monkeypatch):
     output = tmp_path / "market_regime.json"
 
@@ -194,6 +235,8 @@ def test_market_regime_snapshot_cli_falls_back_to_yfinance_when_fredapi_fails(tm
                 "fredapi",
                 "--output",
                 str(output),
+                "--fred-provider-attempts",
+                "1",
             ]
         ),
         fred_fetcher=broken_fred_fetcher,
@@ -233,6 +276,8 @@ def test_market_regime_snapshot_cli_writes_safe_unavailable_snapshot_when_all_pr
                 "fredapi",
                 "--output",
                 str(output),
+                "--fred-provider-attempts",
+                "1",
             ]
         ),
         fred_fetcher=broken_fred_fetcher,

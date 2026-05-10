@@ -53,6 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
     grok.add_argument("--skip-grok", action="store_true")
 
     parser.add_argument("--facts-file", default="", help="Optional symbol-keyed free facts JSON for Grok.")
+    parser.add_argument("--kronos-advisory-file", default="", help="Optional Kronos advisory batch or symbol-keyed JSON.")
     parser.add_argument("--output", required=True)
     parser.add_argument("--summary-output", default="")
     parser.add_argument("--as-of-date", default="")
@@ -96,6 +97,11 @@ def run_cli(args: argparse.Namespace) -> int:
         news_provider=_news_provider(args),
         grok_client=_grok_client(args),
         free_facts_by_symbol=_load_symbol_keyed_json(args.facts_file) if args.facts_file else None,
+        kronos_advisory_by_symbol=(
+            _load_kronos_advisory_json(args.kronos_advisory_file)
+            if args.kronos_advisory_file
+            else None
+        ),
         as_of_date=args.as_of_date or None,
         limit=args.limit,
         max_news_items=args.max_news_items,
@@ -188,6 +194,19 @@ def _load_symbol_keyed_json(path: str | Path) -> dict[str, dict[str, Any]]:
     if not isinstance(payload, Mapping):
         raise ValueError("Symbol-keyed JSON file must contain an object.")
     return {str(symbol).upper(): dict(value) for symbol, value in payload.items() if isinstance(value, Mapping)}
+
+
+def _load_kronos_advisory_json(path: str | Path) -> dict[str, dict[str, Any]]:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if isinstance(payload, Mapping) and isinstance(payload.get("items"), list):
+        return {
+            str(item.get("symbol") or "").upper(): dict(item)
+            for item in payload["items"]
+            if isinstance(item, Mapping) and str(item.get("symbol") or "").strip()
+        }
+    if isinstance(payload, Mapping):
+        return {str(symbol).upper(): dict(value) for symbol, value in payload.items() if isinstance(value, Mapping)}
+    raise ValueError("Kronos advisory file must contain a batch object or symbol-keyed object.")
 
 
 def _load_symbol_articles(path: str | Path) -> dict[str, list[dict[str, Any]]]:

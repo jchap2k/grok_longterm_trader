@@ -15,6 +15,7 @@ from longterm.evidence_enrichment_pipeline import (
 from longterm.evidence_enrichment_pipeline_cli import (
     _fundamentals_snapshot,
     _grok_client,
+    _load_kronos_advisory_json,
     _load_ideas,
     _load_symbol_keyed_json,
     _news_provider,
@@ -45,6 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
     grok.add_argument("--skip-grok", action="store_true")
 
     parser.add_argument("--facts-file", default="", help="Optional symbol-keyed free facts JSON for Grok.")
+    parser.add_argument("--kronos-advisory-file", default="", help="Optional Kronos advisory batch or symbol-keyed JSON.")
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--batch-size", type=int, default=25)
     parser.add_argument("--max-batches", type=int, default=None)
@@ -98,6 +100,11 @@ def run_cli(args: argparse.Namespace, *, sleep=time.sleep) -> int:
     news_provider = _news_provider(args)
     grok_client = _grok_client(args)
     free_facts_by_symbol = _load_symbol_keyed_json(args.facts_file) if args.facts_file else None
+    kronos_advisory_by_symbol = (
+        _load_kronos_advisory_json(args.kronos_advisory_file)
+        if args.kronos_advisory_file
+        else None
+    )
 
     enriched: list[dict[str, Any]] = []
     batch_summaries: list[dict[str, Any]] = []
@@ -121,6 +128,7 @@ def run_cli(args: argparse.Namespace, *, sleep=time.sleep) -> int:
                 news_provider=news_provider,
                 grok_client=grok_client,
                 free_facts_by_symbol=free_facts_by_symbol,
+                kronos_advisory_by_symbol=kronos_advisory_by_symbol,
                 as_of_date=args.as_of_date or None,
                 max_news_items=args.max_news_items,
                 published_after=args.published_after or None,
@@ -165,6 +173,7 @@ def run_cli(args: argparse.Namespace, *, sleep=time.sleep) -> int:
         "batches_dir": str(batches_dir),
         "combined_output": str(output_dir / "campaign_enriched.json"),
         "combined_jsonl_output": str(output_dir / "campaign_enriched.jsonl"),
+        "kronos_mode": "snapshot" if kronos_advisory_by_symbol else "none",
         "research_model_usage": _usage_summary(grok_client),
         "batch_summaries": batch_summaries,
     }

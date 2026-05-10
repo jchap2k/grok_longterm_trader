@@ -11,6 +11,8 @@
     "auto_market_regime_snapshot": true,
     "market_regime_provider": "fredapi",
     "fred_api_key_env": "FRED_API_KEY",
+    "fred_provider_attempts": 4,
+    "fred_provider_retry_delay_seconds": 5,
     "portfolio_news_monitor": false,
     "portfolio_news_snapshot_file": "path/to/portfolio_news_snapshot.json",
     "position_review_queue": false,

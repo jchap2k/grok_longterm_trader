@@ -19,6 +19,8 @@ from longterm.research_to_paper_pipeline import (
     build_portfolio_news_followup_committee_batch_runner_stage,
     build_portfolio_news_followup_batch_split_stage,
     build_portfolio_news_monitor_ingest_stage,
+    build_motley_fool_new_recs_batch_split_stage,
+    build_motley_fool_new_recs_committee_batch_runner_stage,
     build_research_campaign_stages,
     run_pipeline_stages,
     validate_stage_command,
@@ -428,6 +430,41 @@ def test_portfolio_news_followup_batch_split_requires_positive_batch_size(tmp_pa
         build_portfolio_news_followup_batch_split_stage(output_dir=tmp_path, batch_size=0)
 
 
+def test_motley_fool_new_recs_batch_split_stage_creates_bounded_batches(tmp_path):
+    new_ideas = tmp_path / "motley_fool_new_recs_ideas.json"
+    write_json_artifact(
+        new_ideas,
+        [
+            {"symbol": "NVDA", "company_name": "NVIDIA", "idea_source": "motley_fool_new_recommendations"},
+            {"symbol": "ADBE", "company_name": "Adobe", "idea_source": "motley_fool_new_recommendations"},
+        ],
+    )
+
+    result = run_pipeline_stages(
+        [
+            build_motley_fool_new_recs_batch_split_stage(
+                output_dir=tmp_path,
+                new_recs_ideas=new_ideas,
+                batch_size=1,
+            )
+        ],
+        output_dir=tmp_path,
+        summary_output=tmp_path / "pipeline_summary.json",
+    )
+
+    stage = result.stage_results[0]
+    batch_dir = tmp_path / "motley_fool_new_recs_batches"
+    split = tmp_path / "motley_fool_new_recs_batch_split.json"
+    first_batch = json.loads((batch_dir / "research-batch-001.json").read_text(encoding="utf-8"))
+    assert result.status == "completed"
+    assert stage.stage_id == "motley_fool_new_recs_batch_split"
+    assert stage.artifact_paths["motley_fool_new_recs_ideas"] == str(new_ideas)
+    assert stage.artifact_paths["motley_fool_new_recs_batch_dir"] == str(batch_dir)
+    assert stage.artifact_paths["motley_fool_new_recs_batch_split"] == str(split)
+    assert split.exists()
+    assert first_batch[0]["symbol"] == "NVDA"
+
+
 def test_pipeline_artifact_health_reports_missing_and_malformed_artifacts(tmp_path):
     good = tmp_path / "good.json"
     bad = tmp_path / "bad.json"
@@ -741,7 +778,70 @@ def test_research_campaign_stages_prepare_selection_and_committee_batches(tmp_pa
     assert "research_selection" in stages[1].command
     assert "research_queue_selected.json" in stages[1].command
     assert stages[1].artifact_paths["committee_batch_dir"].endswith("committee_batches")
-    assert "--submit-paper-orders" not in commands
+
+
+def test_research_campaign_stages_can_enable_kronos_advisory(tmp_path):
+    source = tmp_path / "nasdaq.txt"
+    source.write_text("Symbol|Security Name\nMSFT|Microsoft\n", encoding="utf-8")
+
+    stages = build_research_campaign_stages(
+        output_dir=tmp_path / "pipeline",
+        source_file=source,
+        source_url="",
+        source="nasdaq_trader",
+        campaign_dir=tmp_path / "campaign",
+        kronos_advisory=True,
+        kronos_limit=12,
+        kronos_python=tmp_path / "kronos" / "python.exe",
+        kronos_root=tmp_path / "kronos",
+    )
+
+    command = stages[0].command
+    assert "--kronos-advisory" in command
+    assert "--kronos-limit 12" in command
+    assert "--kronos-python" in command
+    assert "--kronos-root" in command
+    assert "--submit-paper-orders" not in command
+
+
+def test_research_campaign_stages_separate_supplemental_args_from_campaign_dir(tmp_path):
+    source = tmp_path / "nasdaq.txt"
+    source.write_text("Symbol|Security Name\nMSFT|Microsoft\n", encoding="utf-8")
+    fool_ideas = tmp_path / "motley.json"
+
+    stages = build_research_campaign_stages(
+        output_dir=tmp_path / "pipeline",
+        source_file=source,
+        source_url="",
+        source="nasdaq_trader",
+        campaign_dir=tmp_path / "campaign",
+        supplemental_ideas_files=[f"motley_fool={fool_ideas}"],
+        supplemental_source_urls=["spy_holdings=https://example.test/sp500.csv"],
+        resume=True,
+        run_until="research_queue_ready",
+        watchlist_limit=305,
+        top_percent=10,
+        min_pass_count=10,
+        max_pass_count=50,
+        max_fundamental_fetches=100,
+        evidence_batch_size=25,
+        max_evidence_batches=2,
+        rate_limit_pause_seconds=69,
+        polygon_news=False,
+        xai_grok=False,
+        skip_grok=True,
+        selection_top_percent=20,
+        selection_min_count=10,
+        selection_max_count=50,
+        portfolio_state=tmp_path / "portfolio.json",
+        research_batch_size=5,
+    )
+
+    command = stages[0].command
+    assert "--supplemental-source-url spy_holdings=https://example.test/sp500.csv --supplemental-ideas-file" in command
+    assert f"motley_fool={fool_ideas} --campaign-dir" in command
+    assert f"motley_fool={fool_ideas}--campaign-dir" not in command
+    assert "--submit-paper-orders" not in command
 
 
 def test_research_campaign_stages_can_use_perplexity_research(tmp_path):
@@ -805,6 +905,7 @@ def test_generated_committee_batch_runner_stage_uses_campaign_batches(tmp_path):
     assert stage.stage_id == "generated_committee_batches"
     assert "scripts/longterm_committee_batch_runner.py" in stage.command
     assert "--committee-batch-dir" in stage.command
+    assert "--active-rules-stage weekly_full_scan" in stage.command
     assert "committee_batches" in stage.command
     assert "--resume" in stage.command
     assert "--submit-paper-orders" not in stage.command
@@ -827,6 +928,32 @@ def test_generated_committee_batch_runner_stage_can_use_explicit_batch_dir(tmp_p
     assert str(batch_dir) in stage.command
     assert "--resume" in stage.command
     assert stage.artifact_paths["committee_batch_dir"] == str(batch_dir)
+
+
+def test_generated_committee_batch_runner_stage_can_override_active_rules_stage(tmp_path):
+    stage = build_generated_committee_batch_runner_stage(
+        output_dir=tmp_path / "pipeline",
+        committee_batch_dir=tmp_path / "committee_batches",
+        journal_db=tmp_path / "journal.db",
+        portfolio_state=tmp_path / "portfolio.json",
+        active_rules_stage="decision",
+        resume=True,
+    )
+
+    assert "--active-rules-stage decision" in stage.command
+
+
+def test_committee_batch_runner_build_cycle_command_passes_active_rules_stage(tmp_path):
+    from longterm.committee_batch_runner import build_cycle_command
+
+    command = build_cycle_command(
+        batch_path=tmp_path / "batch.json",
+        journal_db=tmp_path / "journal.db",
+        portfolio_state=tmp_path / "portfolio.json",
+        active_rules_stage="weekly_full_scan",
+    )
+
+    assert "--active-rules-stage weekly_full_scan" in command
 
 
 def test_generated_committee_batch_runner_stage_can_limit_batches_per_run(tmp_path):
@@ -894,6 +1021,33 @@ def test_portfolio_news_followup_committee_batch_runner_requires_positive_cap(tm
             portfolio_state=tmp_path / "portfolio.json",
             max_batches=0,
         )
+
+
+def test_motley_fool_new_recs_committee_batch_runner_stage_is_capped_no_submit(tmp_path):
+    stage = build_motley_fool_new_recs_committee_batch_runner_stage(
+        output_dir=tmp_path / "pipeline",
+        batch_dir=tmp_path / "pipeline" / "motley_fool_new_recs_batches",
+        journal_db=tmp_path / "journal.db",
+        portfolio_state=tmp_path / "portfolio.json",
+        market_regime_file=tmp_path / "market.json",
+        motley_fool_config=tmp_path / "missing_fool.json",
+        profile_config=tmp_path / "profile.json",
+        agent_preset="decision_4",
+        max_batches=1,
+    )
+
+    assert stage.stage_id == "motley_fool_new_recs_committee_batches"
+    assert "scripts/longterm_committee_batch_runner.py" in stage.command
+    assert "--campaign-id motley_fool_new_recs" in stage.command
+    assert "--max-batches 1" in stage.command
+    assert "--resume" in stage.command
+    assert "--submit-paper-orders" not in stage.command
+    assert stage.artifact_paths["motley_fool_new_recs_batch_dir"].endswith(
+        "motley_fool_new_recs_batches"
+    )
+    assert stage.artifact_paths["motley_fool_new_recs_committee_batch_run_summary"].endswith(
+        "committee_batch_run_summary.json"
+    )
 
 
 def test_final_planning_action_plan_extract_stage_writes_action_plan(tmp_path):
@@ -966,6 +1120,53 @@ def test_pipeline_cli_print_plan_only_writes_json_summary(tmp_path, capsys):
     assert printed["status"] == "planned"
     assert saved["order_submission_enabled"] is False
     assert saved["stage_count"] == 13
+
+
+def test_pipeline_cli_can_skip_paper_preflight_for_research_only_plan(tmp_path, capsys):
+    rules_path = tmp_path / "active_rules.txt"
+    action_plan = tmp_path / "account_action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    source = tmp_path / "universe.csv"
+    for path in (rules_path, action_plan, portfolio):
+        path.write_text("{}", encoding="utf-8")
+    source.write_text("symbol\nAAPL\n", encoding="utf-8")
+    summary = tmp_path / "summary.json"
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--output-dir",
+                str(tmp_path / "pipeline"),
+                "--rules-path",
+                str(rules_path),
+                "--action-plan",
+                str(action_plan),
+                "--portfolio-state",
+                str(portfolio),
+                "--journal-db",
+                str(tmp_path / "journal.db"),
+                "--ledger-db",
+                str(tmp_path / "ledger.db"),
+                "--research-source-file",
+                str(source),
+                "--research-source",
+                "manual_watchlist",
+                "--research-campaign-dir",
+                str(tmp_path / "campaign"),
+                "--skip-paper-preflight",
+                "--print-plan-only",
+                "--summary-output",
+                str(summary),
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    stage_ids = [stage["stage_id"] for stage in printed["stages"]]
+    assert code == 0
+    assert stage_ids == ["research_campaign", "research_batch_split"]
+    assert printed["stage_count"] == 2
 
 
 def test_pipeline_cli_can_resolve_expected_cash_from_portfolio_state(tmp_path, capsys):
@@ -1326,6 +1527,58 @@ def test_pipeline_cli_can_prepend_research_campaign_stages(tmp_path, capsys):
     assert printed["artifact_paths"]["committee_batch_dir"].endswith("committee_batches")
 
 
+def test_pipeline_cli_can_enable_kronos_for_research_campaign(tmp_path, capsys):
+    source = tmp_path / "nasdaq.txt"
+    source.write_text("Symbol|Security Name\nMSFT|Microsoft\n", encoding="utf-8")
+    rules_path = tmp_path / "active_rules.txt"
+    action_plan = tmp_path / "account_action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    price_map = tmp_path / "prices.json"
+    for path in (rules_path, action_plan, portfolio, price_map):
+        path.write_text("{}", encoding="utf-8")
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--output-dir",
+                str(tmp_path / "pipeline"),
+                "--rules-path",
+                str(rules_path),
+                "--research-source-file",
+                str(source),
+                "--research-source",
+                "nasdaq_trader",
+                "--research-campaign-dir",
+                str(tmp_path / "research_campaign"),
+                "--kronos-advisory",
+                "--kronos-limit",
+                "7",
+                "--skip-grok",
+                "--action-plan",
+                str(action_plan),
+                "--portfolio-state",
+                str(portfolio),
+                "--journal-db",
+                str(tmp_path / "journal.db"),
+                "--ledger-db",
+                str(tmp_path / "ledger.db"),
+                "--price-map",
+                str(price_map),
+                "--skip-price-map",
+                "--print-plan-only",
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    command = printed["stages"][0]["command"]
+    assert code == 0
+    assert "--kronos-advisory" in command
+    assert "--kronos-limit 7" in command
+    assert "--submit-paper-orders" not in command
+
+
 def test_pipeline_cli_can_run_generated_committee_batches_between_research_and_preflight(tmp_path, capsys):
     source = tmp_path / "nasdaq.txt"
     source.write_text("Symbol|Security Name\nMSFT|Microsoft\n", encoding="utf-8")
@@ -1659,6 +1912,57 @@ def test_pipeline_cli_runs_capped_portfolio_news_followup_committee_after_split(
     ]
     assert "--max-batches 1" in printed["stages"][2]["command"]
     assert "--submit-paper-orders" not in printed["stages"][2]["command"].lower()
+
+
+def test_pipeline_cli_runs_capped_motley_fool_new_recs_committee_after_split(tmp_path, capsys):
+    rules_path = tmp_path / "active_rules.txt"
+    action_plan = tmp_path / "account_action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    price_map = tmp_path / "prices.json"
+    new_ideas = tmp_path / "motley_fool_new_recs_ideas.json"
+    for path in (rules_path, action_plan, portfolio, price_map):
+        path.write_text("{}", encoding="utf-8")
+    write_json_artifact(new_ideas, [{"symbol": "NVDA", "idea_source": "motley_fool_new_recommendations"}])
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--output-dir",
+                str(tmp_path / "pipeline"),
+                "--rules-path",
+                str(rules_path),
+                "--action-plan",
+                str(action_plan),
+                "--portfolio-state",
+                str(portfolio),
+                "--journal-db",
+                str(tmp_path / "journal.db"),
+                "--ledger-db",
+                str(tmp_path / "ledger.db"),
+                "--price-map",
+                str(price_map),
+                "--motley-fool-new-recs-ideas",
+                str(new_ideas),
+                "--motley-fool-new-recs-batches",
+                "--run-motley-fool-new-recs-committee-batches",
+                "--motley-fool-new-recs-max-batches",
+                "1",
+                "--skip-price-map",
+                "--print-plan-only",
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert [stage["stage_id"] for stage in printed["stages"][:3]] == [
+        "motley_fool_new_recs_batch_split",
+        "motley_fool_new_recs_committee_batches",
+        "preflight_rules",
+    ]
+    assert "--max-batches 1" in printed["stages"][1]["command"]
+    assert "--submit-paper-orders" not in printed["stages"][1]["command"].lower()
 
 
 def test_pipeline_cli_requires_cap_for_portfolio_news_followup_committee(tmp_path):

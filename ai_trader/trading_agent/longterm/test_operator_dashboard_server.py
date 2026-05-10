@@ -77,6 +77,13 @@ def test_dashboard_server_uses_decision_journal_as_evidence_fallback(tmp_path):
                 "Fundamentals: 3yr revenue growth 100.05%; P/E 40.2x; "
                 "gross margin 71.07%; operating margin 60.38%; TTM revenue $215.94B (+65.0%)."
             ),
+            reviewer_support=[
+                "MoatDurabilityReviewer: Moat evidence present: switching costs.",
+                "ManagementCapitalAllocationReviewer: Return on invested capital supports reinvestment discipline.",
+            ],
+            reviewer_objections=[
+                "MoatDurabilityReviewer: Moat decay risk present: platform dependency.",
+            ],
             source_notes=[
                 "Python quality-growth scorecard: deterministic composite from provider data.",
                 "Latest relevant news: Jensen Huang announced a major AI platform update; Nvidia earnings beat.",
@@ -115,6 +122,9 @@ def test_dashboard_server_uses_decision_journal_as_evidence_fallback(tmp_path):
     assert "motley_fool + wide_universe" in ticker_html
     assert "Superscore" in ticker_html
     assert "84.1" in ticker_html
+    assert "Book Reviewer Signals" in ticker_html
+    assert "MoatDurabilityReviewer" in ticker_html
+    assert "platform dependency" in ticker_html
     assert "100.05%" in ticker_html
     assert "Jensen Huang announced a major AI platform update" in ticker_html
     assert "NVDA" in index_html
@@ -210,6 +220,142 @@ def test_dashboard_server_exposes_api_usage_from_pipeline_summary(tmp_path):
     assert "API Usage" in html
     assert "Perplexity" in html
     assert "Tier 1 Remaining" in html
+
+
+def test_dashboard_server_normalizes_api_usage_cost_aliases(tmp_path):
+    action_plan = tmp_path / "action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    api_usage = tmp_path / "api_usage.json"
+    manifest_path = tmp_path / "dashboard_manifest.json"
+    action_plan.write_text(json.dumps({"intents": []}), encoding="utf-8")
+    portfolio.write_text(json.dumps({"holdings": []}), encoding="utf-8")
+    api_usage.write_text(
+        json.dumps(
+            {
+                "mode": "api_usage_summary",
+                "providers": [
+                    {
+                        "provider": "perplexity",
+                        "model": "sonar",
+                        "request_count": 3,
+                        "prompt_tokens": 2000,
+                        "completion_tokens": 1000,
+                        "total_tokens": 3000,
+                        "input_cost_usd": 0.002,
+                        "output_cost_usd": 0.001,
+                        "estimated_cost_usd": 0.018,
+                    }
+                ],
+                "totals": {"request_count": 3, "estimated_cost_usd": 0.018},
+                "order_submission_enabled": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest_path.write_text(
+        json.dumps(
+            build_dashboard_manifest(
+                action_plan=action_plan,
+                portfolio_state=portfolio,
+                api_usage=api_usage,
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    usage = build_api_usage_from_manifest(load_dashboard_manifest(manifest_path))
+    status, _, body = resolve_dashboard_request(manifest_path, "/")
+    html = body.decode("utf-8")
+
+    assert usage["status"] == "available"
+    assert usage["providers"][0]["input_token_cost_usd"] == 0.002
+    assert usage["providers"][0]["output_token_cost_usd"] == 0.001
+    assert usage["providers"][0]["estimated_total_cost_usd"] == 0.018
+    assert usage["totals"]["estimated_total_cost_usd"] == 0.018
+    assert status == 200
+    assert 'data-api-usage-total="estimated_total_cost_usd">$0.02' in html
+
+
+def test_dashboard_server_includes_xai_web_search_tool_cost(tmp_path):
+    action_plan = tmp_path / "action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    pipeline_summary = tmp_path / "pipeline_summary.json"
+    manifest_path = tmp_path / "dashboard_manifest.json"
+    action_plan.write_text(json.dumps({"intents": []}), encoding="utf-8")
+    portfolio.write_text(json.dumps({"holdings": []}), encoding="utf-8")
+    pipeline_summary.write_text(
+        json.dumps(
+            {
+                "status": "completed",
+                "research_model_usage": {
+                    "provider": "xai",
+                    "model": "grok-4.3",
+                    "request_count": 1,
+                    "prompt_tokens": 1000,
+                    "completion_tokens": 2000,
+                    "input_cost_usd": 0.00125,
+                    "output_cost_usd": 0.005,
+                    "estimated_total_cost_usd": 0.0,
+                    "web_search_call_count": 3,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest_path.write_text(
+        json.dumps(
+            build_dashboard_manifest(
+                action_plan=action_plan,
+                portfolio_state=portfolio,
+                pipeline_summary=pipeline_summary,
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    usage = build_api_usage_from_manifest(load_dashboard_manifest(manifest_path))
+    status, _, body = resolve_dashboard_request(manifest_path, "/")
+    html = body.decode("utf-8")
+    provider = usage["providers"][0]
+
+    assert provider["web_search_call_count"] == 3
+    assert provider["tool_invocation_count"] == 3
+    assert provider["web_search_cost_usd"] == 0.015
+    assert provider["tool_cost_usd"] == 0.015
+    assert provider["estimated_total_cost_usd"] == 0.02125
+    assert usage["totals"]["tool_invocation_count"] == 3
+    assert usage["totals"]["tool_cost_usd"] == 0.015
+    assert usage["totals"]["estimated_total_cost_usd"] == 0.02125
+    assert status == 200
+    assert "3 tools" in html
+
+
+def test_dashboard_server_does_not_show_zero_cost_when_api_usage_is_unavailable(tmp_path):
+    action_plan = tmp_path / "action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    manifest_path = tmp_path / "dashboard_manifest.json"
+    action_plan.write_text(json.dumps({"intents": []}), encoding="utf-8")
+    portfolio.write_text(json.dumps({"holdings": []}), encoding="utf-8")
+    manifest_path.write_text(
+        json.dumps(
+            build_dashboard_manifest(
+                action_plan=action_plan,
+                portfolio_state=portfolio,
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    status, _, body = resolve_dashboard_request(manifest_path, "/")
+    html = body.decode("utf-8")
+
+    assert status == 200
+    assert 'data-api-usage-total="estimated_total_cost_usd">n/a' in html
+    assert 'data-api-usage-total="request_count">n/a' in html
+    assert 'data-api-usage-total="total_tokens">n/a' in html
+    assert '<span>Usage Unavailable</span>' in html
+    assert "<strong>n/a</strong>" in html
+    assert "No usage artifact is linked, so current model spend is unknown." in html
 
 
 def test_dashboard_server_exposes_scheduler_policy_from_manifest(tmp_path):

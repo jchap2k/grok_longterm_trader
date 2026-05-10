@@ -713,10 +713,24 @@ def test_operator_dashboard_ticker_page_shows_python_scorecard_and_earnings_alia
                     "quality_score": 100.0,
                     "growth_score": 57.0,
                     "valuation_score": 100.0,
+                    "valuation_sanity_score": 83.0,
+                    "valuation_sanity_reasons": [
+                        "FCF yield 5.6% supports valuation sanity",
+                        "earnings yield 5.0% supports price discipline",
+                    ],
                     "safety_score": 68.0,
                     "market_attention_score": 56.6,
                     "investing_type": "Moderate Compounder",
                     "score_reasons": ["strong gross margin", "reasonable P/E"],
+                },
+                "book_reviewer_signals": {
+                    "support": [
+                        "MoatDurabilityReviewer: Moat evidence present: switching costs.",
+                        "ManagementCapitalAllocationReviewer: Return on invested capital supports reinvestment discipline.",
+                    ],
+                    "objections": [
+                        "MoatDurabilityReviewer: Moat decay risk present: platform dependency.",
+                    ],
                 },
                 "python_first_pass_scan": {
                     "rank_score": 76.6,
@@ -730,6 +744,13 @@ def test_operator_dashboard_ticker_page_shows_python_scorecard_and_earnings_alia
                     "summary": "AI-driven earnings growth and resilient subscription revenue supported the thesis.",
                     "key_financial_takeaways": ["Revenue: $23.77B (+10.53%)"],
                 },
+                "kronos_advisory": {
+                    "provider_status": "ok",
+                    "forecast_direction": "down",
+                    "forecast_return_pct": -1.072,
+                    "forecast_horizon_rows": 5,
+                    "policy_boundary": "advisory only; not a trade trigger",
+                },
             }
         ],
     )
@@ -741,6 +762,12 @@ def test_operator_dashboard_ticker_page_shows_python_scorecard_and_earnings_alia
     assert "100" in html
     assert "Growth" in html
     assert "57" in html
+    assert "Valuation Sanity" in html
+    assert "83" in html
+    assert "FCF yield 5.6%" in html
+    assert "Book Reviewer Signals" in html
+    assert "MoatDurabilityReviewer" in html
+    assert "platform dependency" in html
     assert "First-Pass Scan" in html
     assert "Moneyball" in html
     assert "74.1" in html
@@ -754,6 +781,10 @@ def test_operator_dashboard_ticker_page_shows_python_scorecard_and_earnings_alia
     assert "Permanent Loss" in html
     assert "starter_position" in html
     assert "overpayment" in html
+    assert "Kronos Advisory" in html
+    assert "5-row return" in html
+    assert "-1.07%" in html
+    assert "not a trade trigger" in html
 
 
 def test_operator_dashboard_cli_can_fetch_price_history_for_site(tmp_path, capsys):

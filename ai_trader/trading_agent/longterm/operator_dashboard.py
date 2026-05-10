@@ -1810,12 +1810,20 @@ def _api_usage_panel(api_usage: Mapping[str, Any] | None) -> str:
     providers = [dict(item) for item in usage.get("providers") or [] if isinstance(item, Mapping)]
     totals = usage.get("totals") if isinstance(usage.get("totals"), Mapping) else {}
     tier = usage.get("tier_tracking") if isinstance(usage.get("tier_tracking"), Mapping) else {}
+    usage_available = _api_usage_is_available(usage, providers=providers)
     if not providers:
+        empty_label = "No Paid Usage Yet" if usage_available else "Usage Unavailable"
+        empty_value = "$0.00" if usage_available else "n/a"
+        empty_note = (
+            "No tracked paid model calls were found in the current usage artifact."
+            if usage_available
+            else "No usage artifact is linked, so current model spend is unknown."
+        )
         provider_cards = (
             "<div class=\"usage-provider-card usage-provider-empty\">"
-            "<span>No Paid Usage Yet</span>"
-            "<strong>$0.00</strong>"
-            "<small>Run a Perplexity or Grok enrichment artifact with usage tracking to populate this panel.</small>"
+            f"<span>{escape(empty_label)}</span>"
+            f"<strong>{escape(empty_value)}</strong>"
+            f"<small>{escape(empty_note)}</small>"
             "</div>"
         )
     else:
@@ -1823,6 +1831,9 @@ def _api_usage_panel(api_usage: Mapping[str, Any] | None) -> str:
     progress = max(0.0, min(100.0, _number(tier.get("progress_percent"))))
     remaining = tier.get("estimated_remaining_to_tier_1_usd")
     remaining_text = _money_cents(remaining) if remaining not in (None, "") else "n/a"
+    cost_text = _money_cents(totals.get("estimated_total_cost_usd")) if usage_available else "n/a"
+    request_text = str(int(_number(totals.get("request_count")))) if usage_available else "n/a"
+    token_text = f"{int(_number(totals.get('total_tokens'))):,}" if usage_available else "n/a"
     return (
         "<section class=\"panel\" id=\"api-usage\">"
         "<div class=\"section-heading\">"
@@ -1832,9 +1843,9 @@ def _api_usage_panel(api_usage: Mapping[str, Any] | None) -> str:
         "<p>Broad enrichment should prefer Python, Finnhub, Polygon, and cached artifacts first; paid model calls are tracked here so Perplexity and Grok 4.3 usage stays deliberate.</p>"
         "<div class=\"api-usage-card\" data-api-usage>"
         "<div class=\"api-usage-total-grid\">"
-        f"<div><span>Estimated Cost</span><strong data-api-usage-total=\"estimated_total_cost_usd\">{escape(_money_cents(totals.get('estimated_total_cost_usd')))}</strong></div>"
-        f"<div><span>Requests</span><strong data-api-usage-total=\"request_count\">{int(_number(totals.get('request_count')))}</strong></div>"
-        f"<div><span>Tokens</span><strong data-api-usage-total=\"total_tokens\">{int(_number(totals.get('total_tokens'))):,}</strong></div>"
+        f"<div><span>Estimated Cost</span><strong data-api-usage-total=\"estimated_total_cost_usd\">{escape(cost_text)}</strong></div>"
+        f"<div><span>Requests</span><strong data-api-usage-total=\"request_count\">{escape(request_text)}</strong></div>"
+        f"<div><span>Tokens</span><strong data-api-usage-total=\"total_tokens\">{escape(token_text)}</strong></div>"
         f"<div><span>Tier 1 Remaining</span><strong data-api-usage-tier=\"remaining\">{escape(remaining_text)}</strong></div>"
         "</div>"
         f"<div class=\"usage-progress\" aria-label=\"Perplexity tier progress\"><i data-api-usage-progress style=\"width:{progress:.1f}%\"></i></div>"
@@ -1847,16 +1858,29 @@ def _api_usage_panel(api_usage: Mapping[str, Any] | None) -> str:
     )
 
 
+def _api_usage_is_available(usage: Mapping[str, Any], *, providers: list[Mapping[str, Any]]) -> bool:
+    status = str(usage.get("status") or "").strip().lower()
+    if status == "available":
+        return True
+    if providers:
+        return True
+    return False
+
+
 def _api_usage_provider_card(provider: Mapping[str, Any]) -> str:
     provider_label = _provider_display_label(provider.get("provider"))
     model = str(provider.get("model") or "unknown")
     cost = _money_cents(provider.get("estimated_total_cost_usd"))
     requests = int(_number(provider.get("request_count")))
     tokens = int(_number(provider.get("total_tokens")))
+    tool_invocations = int(_number(provider.get("tool_invocation_count")))
+    tool_cost = _number(provider.get("tool_cost_usd"))
     context = str(provider.get("search_context_size") or "").strip()
     detail = f"{requests} requests / {tokens:,} tokens"
     if context:
         detail = f"{detail} / {context} context"
+    if tool_invocations:
+        detail = f"{detail} / {tool_invocations:,} tools ({_money_cents(tool_cost)})"
     return (
         "<div class=\"usage-provider-card\">"
         f"<span>{escape(provider_label)}</span>"
@@ -2261,20 +2285,28 @@ def _api_usage_refresh_script() -> str:
   function providerCard(provider) {
     const requests = Number(provider.request_count || 0);
     const tokens = Number(provider.total_tokens || 0);
+    const tools = Number(provider.tool_invocation_count || 0);
+    const toolCost = Number(provider.tool_cost_usd || 0);
     const context = provider.search_context_size ? ` / ${escapeHtml(provider.search_context_size)} context` : "";
-    return `<div class="usage-provider-card"><span>${escapeHtml(providerLabel(provider.provider))}</span><strong>${money(provider.estimated_total_cost_usd)}</strong><small>${escapeHtml(provider.model || "unknown")} - ${requests} requests / ${tokens.toLocaleString()} tokens${context}</small></div>`;
+    const toolDetail = tools ? ` / ${tools.toLocaleString()} tools (${money(toolCost)})` : "";
+    return `<div class="usage-provider-card"><span>${escapeHtml(providerLabel(provider.provider))}</span><strong>${money(provider.estimated_total_cost_usd)}</strong><small>${escapeHtml(provider.model || "unknown")} - ${requests} requests / ${tokens.toLocaleString()} tokens${context}${toolDetail}</small></div>`;
   }
   function render(payload) {
     const totals = payload.totals || {};
     const tier = payload.tier_tracking || {};
-    if (totalCost) totalCost.textContent = money(totals.estimated_total_cost_usd);
-    if (requestCount) requestCount.textContent = String(totals.request_count || 0);
-    if (totalTokens) totalTokens.textContent = Number(totals.total_tokens || 0).toLocaleString();
+    const providers = Array.isArray(payload.providers) ? payload.providers : [];
+    const usageAvailable = payload.status === "available" || providers.length > 0;
+    if (totalCost) totalCost.textContent = usageAvailable ? money(totals.estimated_total_cost_usd) : "n/a";
+    if (requestCount) requestCount.textContent = usageAvailable ? String(totals.request_count || 0) : "n/a";
+    if (totalTokens) totalTokens.textContent = usageAvailable ? Number(totals.total_tokens || 0).toLocaleString() : "n/a";
     if (remaining) remaining.textContent = tier.estimated_remaining_to_tier_1_usd == null ? "n/a" : money(tier.estimated_remaining_to_tier_1_usd);
     if (progress) progress.style.width = `${Math.max(0, Math.min(100, Number(tier.progress_percent || 0)))}%`;
     if (providerGrid) {
-      const providers = Array.isArray(payload.providers) ? payload.providers : [];
-      providerGrid.innerHTML = providers.length ? providers.map(providerCard).join("") : '<div class="usage-provider-card usage-provider-empty"><span>No Paid Usage Yet</span><strong>$0.00</strong><small>Run enrichment with usage tracking to populate this panel.</small></div>';
+      providerGrid.innerHTML = providers.length ? providers.map(providerCard).join("") : (
+        usageAvailable
+          ? '<div class="usage-provider-card usage-provider-empty"><span>No Paid Usage Yet</span><strong>$0.00</strong><small>No tracked paid model calls were found in the current usage artifact.</small></div>'
+          : '<div class="usage-provider-card usage-provider-empty"><span>Usage Unavailable</span><strong>n/a</strong><small>No usage artifact is linked, so current model spend is unknown.</small></div>'
+      );
     }
     if (updated) updated.textContent = `Checked from local API usage endpoint: ${titleCase(payload.status || "unknown")}.`;
   }
@@ -2399,8 +2431,10 @@ def _ticker_page_html(
     promotion = intent.get("promotion_review") if isinstance(intent.get("promotion_review"), Mapping) else {}
     scorecard = evidence.get("quality_growth_scorecard") if isinstance(evidence.get("quality_growth_scorecard"), Mapping) else {}
     fundamentals = evidence.get("fundamental_metrics") if isinstance(evidence.get("fundamental_metrics"), Mapping) else {}
+    book_signals = evidence.get("book_reviewer_signals") if isinstance(evidence.get("book_reviewer_signals"), Mapping) else {}
     earnings = _latest_earnings_for_evidence(evidence)
     first_pass_scan = evidence.get("python_first_pass_scan") if isinstance(evidence.get("python_first_pass_scan"), Mapping) else {}
+    kronos = evidence.get("kronos_advisory") if isinstance(evidence.get("kronos_advisory"), Mapping) else {}
     articles = evidence.get("article_evidence_summaries") or evidence.get("relevant_news") or []
     return _html_shell(
         title=f"{symbol} Research Tear Sheet",
@@ -2433,8 +2467,11 @@ def _ticker_page_html(
           {_metric_tile("Margin of Safety", promotion.get("margin_of_safety_score"))}
           {_metric_tile("Permanent Loss", promotion.get("permanent_loss_score"))}
           {_metric_tile("Historical Max Drawdown", _drawdown_cell(_historical_max_drawdown_pct(price_history)))}
+          {_metric_tile("Kronos 5-Row", _kronos_return_label(kronos))}
         </section>
+        {_kronos_advisory_panel(kronos)}
         {_graham_panel(promotion)}
+        {_book_reviewer_panel(book_signals)}
         <section class="panel two-column">
           {_score_panel(scorecard, first_pass_scan=first_pass_scan)}
           {_earnings_panel(earnings)}
@@ -2477,6 +2514,28 @@ def _graham_panel(promotion: Mapping[str, Any]) -> str:
             for label, value in rows
         )
         + "</div>"
+        "</section>"
+    )
+
+
+def _book_reviewer_panel(book_signals: Mapping[str, Any]) -> str:
+    support = [str(item) for item in book_signals.get("support") or [] if str(item).strip()]
+    objections = [str(item) for item in book_signals.get("objections") or [] if str(item).strip()]
+    if not support and not objections:
+        return ""
+    support_items = "".join(f"<li>{escape(_short_text(item, 220))}</li>" for item in support[:5])
+    objection_items = "".join(f"<li>{escape(_short_text(item, 220))}</li>" for item in objections[:5])
+    return (
+        "<section class=\"panel\">"
+        "<div class=\"section-heading\"><p class=\"eyebrow\">Book Principles</p><h2>Book Reviewer Signals</h2></div>"
+        "<div class=\"two-column\">"
+        "<div><h3>Support</h3><ul class=\"article-list\">"
+        f"{support_items or '<li>No book-review support captured.</li>'}"
+        "</ul></div>"
+        "<div><h3>Objections</h3><ul class=\"article-list\">"
+        f"{objection_items or '<li>No book-review objections captured.</li>'}"
+        "</ul></div>"
+        "</div>"
         "</section>"
     )
 
@@ -3936,6 +3995,14 @@ def _score_panel(scorecard: Mapping[str, Any], *, first_pass_scan: Mapping[str, 
             rows.append(
                 f"<li><strong>{escape(label)}</strong><span>{numeric:g}</span><div class=\"bar\"><i style=\"width:{max(0, min(100, numeric)):.0f}%\"></i></div></li>"
             )
+    sanity_reasons = [str(item) for item in scorecard.get("valuation_sanity_reasons") or [] if str(item).strip()]
+    sanity_html = ""
+    if sanity_reasons:
+        sanity_html = (
+            "<div class=\"scan-card\"><h3>Valuation Sanity</h3><ul>"
+            + "".join(f"<li>{escape(_short_text(reason, 160))}</li>" for reason in sanity_reasons[:4])
+            + "</ul></div>"
+        )
     first_pass_scan = first_pass_scan or {}
     scan_html = ""
     if first_pass_scan:
@@ -3961,6 +4028,7 @@ def _score_panel(scorecard: Mapping[str, Any], *, first_pass_scan: Mapping[str, 
         "<div><div class=\"section-heading\"><p class=\"eyebrow\">Scores</p><h2>Scorecard</h2></div>"
         f"<p>Superscore: <strong>{escape(str(scorecard.get('superscore') or 'n/a'))}</strong></p>"
         f"<ul class=\"score-list\">{''.join(rows) or '<li>No analysis bars available.</li>'}</ul>"
+        f"{sanity_html}"
         f"{scan_html}</div>"
     )
 
@@ -3981,6 +4049,37 @@ def _earnings_panel(earnings: Mapping[str, Any]) -> str:
     )
 
 
+def _kronos_return_label(kronos: Mapping[str, Any]) -> str:
+    if not kronos:
+        return "n/a"
+    value = kronos.get("forecast_return_pct")
+    if value in (None, ""):
+        return "n/a"
+    return _signed_percent(value)
+
+
+def _kronos_advisory_panel(kronos: Mapping[str, Any]) -> str:
+    if not kronos:
+        return ""
+    direction = _display_label(kronos.get("forecast_direction") or "unknown")
+    status = _display_label(kronos.get("provider_status") or "unknown")
+    rows = kronos.get("forecast_rows") or kronos.get("forecast_horizon_rows")
+    horizon = f"{rows}-row return" if rows not in (None, "") else "horizon return"
+    return_label = _kronos_return_label(kronos)
+    boundary = str(kronos.get("policy_boundary") or "advisory only; not a trade trigger")
+    return (
+        "<section class=\"panel\">"
+        "<div class=\"section-heading\"><p class=\"eyebrow\">Technical Timing</p><h2>Kronos Advisory</h2></div>"
+        "<div class=\"metric-grid\">"
+        f"<div class=\"metric-tile\"><span>Direction</span><strong>{escape(direction)}</strong></div>"
+        f"<div class=\"metric-tile\"><span>{escape(horizon)}</span><strong>{escape(return_label)}</strong></div>"
+        f"<div class=\"metric-tile\"><span>Provider Status</span><strong>{escape(status)}</strong></div>"
+        "</div>"
+        f"<p class=\"safety-note\"><strong>Policy boundary:</strong> {escape(boundary)}.</p>"
+        "</section>"
+    )
+
+
 def _latest_earnings_for_evidence(evidence: Mapping[str, Any]) -> Mapping[str, Any]:
     for key in ("latest_earnings", "latest_earnings_enrichment", "recent_earnings"):
         value = evidence.get(key)
@@ -3994,6 +4093,7 @@ def _scorecard_bar_values(scorecard: Mapping[str, Any], analysis: Mapping[str, A
         ("Quality", _first_present(analysis.get("quality"), scorecard.get("quality_score"))),
         ("Growth", _first_present(analysis.get("growth"), scorecard.get("growth_score"))),
         ("Valuation", _first_present(analysis.get("valuation"), scorecard.get("valuation_score"))),
+        ("Valuation Sanity", _first_present(analysis.get("valuation_sanity"), scorecard.get("valuation_sanity_score"))),
         ("Safety", _first_present(analysis.get("safety"), scorecard.get("safety_score"))),
         (
             "Market Buzz",

@@ -309,11 +309,11 @@ def _provider_usage_review(
         }
     providers = _usage_providers(usage)
     request_count = int(sum(_number(item.get("request_count")) for item in providers))
-    estimated_cost = round(sum(_number(item.get("estimated_cost_usd")) for item in providers), 4)
+    estimated_cost = round(sum(_usage_cost(item) for item in providers), 4)
     totals = usage.get("totals") if isinstance(usage.get("totals"), Mapping) else {}
     if totals:
         request_count = int(_number(totals.get("request_count")) or request_count)
-        estimated_cost = round(_number(totals.get("estimated_cost_usd")) or estimated_cost, 4)
+        estimated_cost = round(_usage_cost(totals) or estimated_cost, 4)
     tier_tracking = _tier_tracking(providers, usage)
     return {
         "status": "tracked",
@@ -338,9 +338,28 @@ def _usage_providers(usage: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     providers = usage.get("providers")
     if isinstance(providers, list):
         return [item for item in providers if isinstance(item, Mapping)]
-    if any(key in usage for key in ("provider", "model_provider", "request_count", "estimated_cost_usd")):
+    if any(
+        key in usage
+        for key in ("provider", "model_provider", "request_count", "estimated_cost_usd", "estimated_total_cost_usd")
+    ):
         return [usage]
     return []
+
+
+def _usage_cost(usage: Mapping[str, Any]) -> float:
+    explicit = _number(usage.get("estimated_total_cost_usd") or usage.get("estimated_cost_usd"))
+    if explicit > 0:
+        return explicit
+    return (
+        _number(usage.get("request_fees_usd") or usage.get("request_fee_usd"))
+        + _number(usage.get("input_token_cost_usd") or usage.get("input_cost_usd"))
+        + _number(usage.get("output_token_cost_usd") or usage.get("output_cost_usd"))
+        + _number(
+            usage.get("tool_cost_usd")
+            or usage.get("tool_invocation_cost_usd")
+            or usage.get("server_side_tool_cost_usd")
+        )
+    )
 
 
 def _tier_tracking(providers: list[Mapping[str, Any]], usage: Mapping[str, Any]) -> dict[str, Any]:

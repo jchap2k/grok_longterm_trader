@@ -46,6 +46,7 @@ class ResearchPacket:
     reviewer_objections: List[str] = field(default_factory=list)
     source_notes: List[str] = field(default_factory=list)
     evidence_brief: str = ""
+    fundamental_metrics: Dict[str, Any] = field(default_factory=dict)
     macro_regime_context: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -69,6 +70,7 @@ class ResearchPacket:
         self.reviewer_objections = list(self.reviewer_objections or [])
         self.source_notes = list(self.source_notes or [])
         self.evidence_brief = self.evidence_brief or ""
+        self.fundamental_metrics = dict(self.fundamental_metrics or {})
         self.macro_regime_context = dict(self.macro_regime_context or {})
 
         if self.combined_attractiveness_score is None:

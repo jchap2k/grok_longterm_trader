@@ -48,6 +48,29 @@ def test_committee_batch_runner_runs_batches_in_order_and_writes_summary(tmp_pat
     assert Path(result["summary_output"]).exists()
 
 
+def test_committee_batch_runner_defaults_to_disabled_motley_fool_config(tmp_path):
+    batch_dir = tmp_path / "batches"
+    batch_dir.mkdir()
+    _write_batch(batch_dir / "research-batch-001.json", "MSFT")
+    commands: list[str] = []
+
+    result = run_committee_batch_dir(
+        committee_batch_dir=batch_dir,
+        output_dir=tmp_path / "out",
+        journal_db=tmp_path / "journal.db",
+        portfolio_state=tmp_path / "portfolio.json",
+        command_runner=lambda command: commands.append(command) or (0, "{}", ""),
+    )
+
+    disabled_config = tmp_path / "out" / "disabled_motley_fool_capture.json"
+    saved_config = json.loads(disabled_config.read_text(encoding="utf-8"))
+    assert result["status"] == "completed"
+    assert "--motley-fool-config" in commands[0]
+    assert str(disabled_config) in commands[0]
+    assert saved_config["motley_fool"]["enabled"] is False
+    assert saved_config["motley_fool"]["cookie_ready"] is False
+
+
 def test_committee_batch_runner_resume_skips_completed_batches(tmp_path):
     batch_dir = tmp_path / "batches"
     batch_dir.mkdir()

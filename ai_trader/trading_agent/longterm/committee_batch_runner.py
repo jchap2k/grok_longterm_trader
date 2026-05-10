@@ -22,6 +22,7 @@ def run_committee_batch_dir(
     market_regime_file: str | Path | None = None,
     motley_fool_config: str | Path | None = None,
     agent_preset: str = "decision_4",
+    active_rules_stage: str = "decision",
     profile_config: str | Path | None = None,
     campaign_id: str = "",
     resume: bool = False,
@@ -41,6 +42,11 @@ def run_committee_batch_dir(
     batch_dir = Path(committee_batch_dir)
     root = Path(output_dir)
     root.mkdir(parents=True, exist_ok=True)
+    effective_motley_fool_config = (
+        Path(motley_fool_config)
+        if motley_fool_config
+        else _ensure_disabled_motley_fool_config(root)
+    )
     summary_path = Path(summary_output) if summary_output else root / "committee_batch_run_summary.json"
     previous_completed = _completed_batches(summary_path) if resume else set()
     batches = sorted(batch_dir.glob("*.json"))
@@ -132,8 +138,9 @@ def run_committee_batch_dir(
             journal_db=journal_db,
             portfolio_state=portfolio_state,
             market_regime_file=market_regime_file,
-            motley_fool_config=motley_fool_config,
+            motley_fool_config=effective_motley_fool_config,
             agent_preset=agent_preset,
+            active_rules_stage=active_rules_stage,
             profile_config=profile_config,
         )
         _validate_command(command)
@@ -279,6 +286,27 @@ def _write_summary(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
+def _ensure_disabled_motley_fool_config(output_dir: Path) -> Path:
+    path = output_dir / "disabled_motley_fool_capture.json"
+    if not path.exists():
+        path.write_text(
+            json.dumps(
+                {
+                    "motley_fool": {
+                        "enabled": False,
+                        "cookie_ready": False,
+                        "open_login_when_cookie_missing": False,
+                        "sources": [],
+                    }
+                },
+                indent=2,
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+    return path
+
+
 def build_cycle_command(
     *,
     batch_path: str | Path,
@@ -287,6 +315,7 @@ def build_cycle_command(
     market_regime_file: str | Path | None = None,
     motley_fool_config: str | Path | None = None,
     agent_preset: str = "decision_4",
+    active_rules_stage: str = "decision",
     profile_config: str | Path | None = None,
 ) -> str:
     """Build the existing no-submit one-cycle command for a committee batch."""
@@ -296,6 +325,7 @@ def build_cycle_command(
         f"--journal-db {_quote(journal_db)} "
         f"--portfolio-state {_quote(portfolio_state)} "
         f"--agent-preset {agent_preset} --quiet"
+        f"{_optional_text_arg('--active-rules-stage', active_rules_stage)}"
         f"{_optional_path_arg('--market-regime-file', market_regime_file)}"
         f"{_optional_path_arg('--motley-fool-config', motley_fool_config)}"
         f"{_optional_path_arg('--profile-config', profile_config)}"
@@ -341,6 +371,12 @@ def _quote(value: str | Path) -> str:
 
 
 def _optional_path_arg(flag: str, value: str | Path | None) -> str:
+    if not value:
+        return ""
+    return f" {flag} {_quote(value)}"
+
+
+def _optional_text_arg(flag: str, value: str | None) -> str:
     if not value:
         return ""
     return f" {flag} {_quote(value)}"

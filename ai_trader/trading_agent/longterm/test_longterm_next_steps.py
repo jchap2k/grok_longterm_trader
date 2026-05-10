@@ -99,7 +99,7 @@ def test_runner_run_and_record_uses_robust_response_parser(monkeypatch, tmp_path
         def __init__(self, **kwargs):
             pass
 
-        def call_with_context(self, task_prompt, context_sections=None):
+        def call_with_context(self, task_prompt, context_sections=None, **_kwargs):
             return '```json\n{"recommendation":"PASS","confidence":"61"}\n```'
 
     monkeypatch.setattr("longterm.research_runner.CheapGrokHeavy", FakeCheapGrokHeavy)

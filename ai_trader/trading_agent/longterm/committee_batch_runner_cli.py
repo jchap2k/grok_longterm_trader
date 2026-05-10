@@ -19,6 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--market-regime-file", default="")
     parser.add_argument("--motley-fool-config", default="")
     parser.add_argument("--agent-preset", default="decision_4")
+    parser.add_argument("--active-rules-stage", default="decision")
     parser.add_argument("--profile-config", default=str(DEFAULT_PROFILE_PATH))
     parser.add_argument("--campaign-id", default="")
     parser.add_argument("--resume", action="store_true")
@@ -43,6 +44,7 @@ def run_cli(args: argparse.Namespace) -> int:
         market_regime_file=args.market_regime_file or None,
         motley_fool_config=args.motley_fool_config or None,
         agent_preset=args.agent_preset,
+        active_rules_stage=args.active_rules_stage,
         profile_config=args.profile_config,
         campaign_id=args.campaign_id,
         resume=args.resume,

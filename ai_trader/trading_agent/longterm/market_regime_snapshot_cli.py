@@ -7,6 +7,7 @@ from dataclasses import replace
 import json
 from pathlib import Path
 import sys
+import time
 from typing import Any, Mapping
 
 from longterm.idle_cash_policy import MarketRegimeSnapshot
@@ -45,6 +46,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fred-cpi-series", default=DEFAULT_FRED_CPI_SERIES)
     parser.add_argument("--fred-yield-curve-series", default=DEFAULT_FRED_YIELD_CURVE_SERIES)
     parser.add_argument("--fred-credit-spread-series", default=DEFAULT_FRED_CREDIT_SPREAD_SERIES)
+    parser.add_argument(
+        "--fred-provider-attempts",
+        type=int,
+        default=3,
+        help="Number of attempts before treating the FRED provider as unavailable.",
+    )
+    parser.add_argument(
+        "--fred-provider-retry-delay-seconds",
+        type=float,
+        default=2.0,
+        help="Delay between failed FRED provider attempts.",
+    )
     return parser
 
 
@@ -61,15 +74,10 @@ def run_cli(args: argparse.Namespace, *, fred_fetcher=None) -> int:
         import os
 
         try:
-            snapshot = build_fred_market_regime_snapshot(
-                fetch_fred_history=fred_fetcher,
+            snapshot = _build_fred_snapshot_with_retries(
+                args,
                 api_key=os.environ.get(args.fred_api_key_env),
-                vix_series=args.fred_vix_series,
-                sp500_series=args.fred_sp500_series,
-                ten_year_series=args.fred_ten_year_series,
-                cpi_series=args.fred_cpi_series,
-                yield_curve_series=args.fred_yield_curve_series,
-                credit_spread_series=args.fred_credit_spread_series,
+                fred_fetcher=fred_fetcher,
             )
             mode = args.provider
         except Exception as fred_exc:
@@ -124,6 +132,42 @@ def run_cli(args: argparse.Namespace, *, fred_fetcher=None) -> int:
     output_path.write_text(json.dumps(snapshot_json, indent=2, sort_keys=True), encoding="utf-8")
     print(json.dumps({"mode": mode, "output": str(output_path), **snapshot_json}, indent=2, sort_keys=True))
     return 0
+
+
+def _build_fred_snapshot_with_retries(
+    args: argparse.Namespace,
+    *,
+    api_key: str | None,
+    fred_fetcher=None,
+) -> MarketRegimeSnapshot:
+    attempts = max(1, int(args.fred_provider_attempts))
+    delay_seconds = max(0.0, float(args.fred_provider_retry_delay_seconds))
+    last_exc: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return build_fred_market_regime_snapshot(
+                fetch_fred_history=fred_fetcher,
+                api_key=api_key,
+                vix_series=args.fred_vix_series,
+                sp500_series=args.fred_sp500_series,
+                ten_year_series=args.fred_ten_year_series,
+                cpi_series=args.fred_cpi_series,
+                yield_curve_series=args.fred_yield_curve_series,
+                credit_spread_series=args.fred_credit_spread_series,
+            )
+        except Exception as exc:
+            last_exc = exc
+            if attempt >= attempts:
+                break
+            print(
+                f"FRED market-regime provider attempt {attempt}/{attempts} failed: {_safe_error(exc)}; retrying.",
+                file=sys.stderr,
+            )
+            if delay_seconds:
+                time.sleep(delay_seconds)
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("FRED market-regime provider failed without an exception.")
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -8,7 +8,9 @@ from longterm.review_cadence import ReviewCadencePolicy
 from longterm.reviewers import (
     BalanceSheetReviewer,
     BusinessStoryReviewer,
+    ManagementCapitalAllocationReviewer,
     MarginOfSafetyReviewer,
+    MoatDurabilityReviewer,
     QualityDurabilityReviewer,
     QualityAtReasonablePriceReviewer,
 )
@@ -145,6 +147,80 @@ def test_quality_durability_reviewer_rewards_patterns_and_flags_quality_traps():
     assert fragile_result.passed is False
     assert fragile_result.score < durable_result.score
     assert any("dependency" in item.lower() for item in fragile_result.objections)
+
+
+def test_moat_durability_reviewer_requires_evidence_and_flags_decay_risk():
+    reviewer = MoatDurabilityReviewer()
+    durable = create_research_packet_from_idea(
+        {
+            "symbol": "MSFT",
+            "business_summary": "Enterprise platform with switching costs, network effects, and distribution advantage.",
+            "thesis_summary": "Pricing power and installed base expansion can support durable market share gains.",
+            "industry_context": "Stable oligopoly with rational competition and high cost to replicate.",
+            "confirming_signals": ["Retention remains high", "Share gains continue"],
+        }
+    )
+    decaying = create_research_packet_from_idea(
+        {
+            "symbol": "LEGACY",
+            "business_summary": "Hardware vendor facing commoditization and good-enough substitutes.",
+            "thesis_summary": "Management hopes a refresh cycle offsets churn and share loss.",
+            "industry_context": "Price-war market with platform dependency and technological disruption.",
+        }
+    )
+
+    durable_result = reviewer.review(durable)
+    decaying_result = reviewer.review(decaying)
+
+    assert durable_result.passed is True
+    assert durable_result.score >= 75
+    assert any("switching costs" in item.lower() for item in durable_result.support)
+    assert decaying_result.passed is False
+    assert decaying_result.score < durable_result.score
+    assert any("moat decay" in item.lower() for item in decaying_result.objections)
+
+
+def test_management_capital_allocation_reviewer_uses_text_and_metrics_with_missing_metrics_fallback():
+    reviewer = ManagementCapitalAllocationReviewer()
+    aligned = create_research_packet_from_idea(
+        {
+            "symbol": "AAPL",
+            "business_summary": "Platform company with disciplined capital allocation and owner-aligned management.",
+            "thesis_summary": "High ROIC, recurring cash flow, and buybacks at reasonable valuation support owners.",
+            "balance_sheet_assessment": "Net cash and strong free cash flow.",
+            "fundamental_metrics": {
+                "profitability_ttm": {
+                    "return_on_invested_capital": "31.00%",
+                    "return_on_capital": "28.00%",
+                    "free_cash_flow_margin": "24.00%",
+                },
+                "financials_ttm": {
+                    "free_cash_flow": "$110.00B",
+                    "total_cash": "$150.00B",
+                    "total_debt": "$95.00B",
+                },
+            },
+            "source_notes": ["Management has a long record of reinvestment discipline."],
+        }
+    )
+    weak = create_research_packet_from_idea(
+        {
+            "symbol": "ROLLUP",
+            "business_summary": "Serial acquisitions and empire building have increased complexity.",
+            "thesis_summary": "Dilution, SBC, leverage-funded buybacks, and weak cash conversion pressure owners.",
+            "balance_sheet_assessment": "High leverage and refinancing risk.",
+        }
+    )
+
+    aligned_result = reviewer.review(aligned)
+    weak_result = reviewer.review(weak)
+
+    assert aligned_result.passed is True
+    assert any("capital allocation" in item.lower() for item in aligned_result.support)
+    assert any("return on invested capital" in item.lower() or "roic" in item.lower() for item in aligned_result.support)
+    assert weak_result.passed is False
+    assert weak_result.score < aligned_result.score
+    assert any("dilution" in item.lower() for item in weak_result.objections)
 
 
 def test_review_cadence_policy_varies_by_company_category_and_risk():

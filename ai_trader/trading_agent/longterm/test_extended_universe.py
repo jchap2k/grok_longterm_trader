@@ -33,6 +33,24 @@ def test_prepare_extended_universe_exports_watchlist_ideas_and_batches():
     assert "longterm_evidence_enrichment_pipeline.py" in result.summary["next_enrichment_command"]
 
 
+def test_prepare_extended_universe_accepts_nasdaq_trader_source_alias():
+    candidates = [
+        {"symbol": "AAPL", "company_name": "Apple", "source": "nasdaq_trader"},
+        {"symbol": "MSFT", "company_name": "Microsoft", "source": "nasdaq_trader"},
+    ]
+
+    result = prepare_extended_universe(
+        candidates,
+        source="nasdaq_trader",
+        watchlist_limit=10,
+        batch_size=5,
+    )
+
+    assert result.summary["source"] == "nasdaq_trader"
+    assert result.summary["watchlist_count"] == 2
+    assert [idea["symbol"] for idea in result.watchlist_ideas] == ["AAPL", "MSFT"]
+
+
 def test_prepare_extended_universe_can_filter_and_order_symbols():
     candidates = [
         {"symbol": "AAL", "company_name": "American Airlines", "source": "nasdaq_listed"},
@@ -51,6 +69,72 @@ def test_prepare_extended_universe_can_filter_and_order_symbols():
     assert result.summary["candidate_count"] == 2
     assert result.summary["include_symbols"] == ["MSFT", "AAPL"]
     assert [idea["symbol"] for idea in result.watchlist_ideas] == ["MSFT", "AAPL"]
+
+
+def test_prepare_extended_universe_merges_supplemental_spy_and_motley_fool_sources():
+    result = prepare_extended_universe(
+        [
+            {"symbol": "AAPL", "company_name": "Apple", "source": "nasdaq_trader"},
+            {"symbol": "MSFT", "company_name": "Microsoft", "source": "nasdaq_trader"},
+        ],
+        source="nasdaq_trader",
+        supplemental_candidates=[
+            [
+                {
+                    "symbol": "JNJ",
+                    "company_name": "Johnson & Johnson",
+                    "source": "spy_holdings",
+                    "source_score": 1.2,
+                },
+            ],
+            [
+                {
+                    "symbol": "ADBE",
+                    "company_name": "Adobe",
+                    "source": "motley_fool",
+                    "source_fresh_recommendation": True,
+                    "source_priority_reason": "fresh_motley_fool_recommendation",
+                },
+            ],
+        ],
+        watchlist_limit=10,
+        batch_size=5,
+    )
+
+    symbols = [idea["symbol"] for idea in result.watchlist_ideas]
+    adbe = next(idea for idea in result.watchlist_ideas if idea["symbol"] == "ADBE")
+    assert "JNJ" in symbols
+    assert "ADBE" in symbols
+    assert result.summary["supplemental_source_count"] == 2
+    assert result.summary["supplemental_candidate_count"] == 2
+    assert "fresh source recommendation" in " ".join(adbe["source_notes"])
+
+
+def test_prepare_extended_universe_keeps_all_sp500_and_motley_fool_names_for_pre_llm_enrichment():
+    result = prepare_extended_universe(
+        [
+            {"symbol": "AAPL", "company_name": "Apple", "source": "nasdaq_trader"},
+            {"symbol": "MSFT", "company_name": "Microsoft", "source": "nasdaq_trader"},
+        ],
+        source="nasdaq_trader",
+        supplemental_candidates=[
+            [
+                {"symbol": "JNJ", "company_name": "Johnson & Johnson", "source": "spy_holdings"},
+                {"symbol": "PFE", "company_name": "Pfizer", "source": "sp500"},
+            ],
+            [
+                {"symbol": "ADBE", "company_name": "Adobe", "source": "motley_fool"},
+            ],
+        ],
+        watchlist_limit=1,
+        batch_size=10,
+    )
+
+    symbols = [idea["symbol"] for idea in result.watchlist_ideas]
+    assert "JNJ" in symbols
+    assert "PFE" in symbols
+    assert "ADBE" in symbols
+    assert result.summary["always_enrich_count"] == 3
 
 
 def test_extended_universe_cli_writes_ideas_batches_and_summary(tmp_path, monkeypatch, capsys):

@@ -288,6 +288,25 @@ def test_scheduler_policy_warns_when_active_rules_hash_changed(tmp_path):
     assert "active_rules_changed" in decision["cadence_recommendations"]["final_planning_reasons"]
 
 
+def test_scheduler_policy_warns_and_runs_full_research_when_research_rules_hash_changed(tmp_path):
+    rules = _rules(tmp_path / "active_rules.txt")
+    research_rules = tmp_path / "weekly_full_scan_rules.txt"
+    research_rules.write_text("<weekly_full_scan_rules>new scan rubric</weekly_full_scan_rules>", encoding="utf-8")
+
+    decision = build_pipeline_scheduler_policy_decision(
+        rules_path=rules,
+        research_rules_path=research_rules,
+        now=NOW,
+        policy_state={**_fresh_state(), "research_rules_sha256": "old-research-hash"},
+    )
+
+    assert "research_rules_changed" in decision["warnings"]
+    assert decision["research_rules_path"] == str(research_rules)
+    assert decision["research_rules_sha256"] != "old-research-hash"
+    assert decision["cadence_recommendations"]["full_research_due"] is True
+    assert "research_rules_changed" in decision["cadence_recommendations"]["reasons"]
+
+
 def test_scheduler_policy_cli_writes_json_report(tmp_path, capsys):
     rules = _rules(tmp_path / "active_rules.txt")
     report = tmp_path / "policy.json"
@@ -320,6 +339,8 @@ def test_scheduler_policy_cli_writes_json_report(tmp_path, capsys):
 
 def test_scheduler_policy_cli_treats_missing_optional_state_artifacts_as_empty(tmp_path, capsys):
     rules = _rules(tmp_path / "active_rules.txt")
+    research_rules = tmp_path / "weekly_full_scan_rules.txt"
+    research_rules.write_text("<weekly_full_scan_rules />", encoding="utf-8")
     report = tmp_path / "policy.json"
     state_output = tmp_path / "state_next.json"
 
@@ -328,6 +349,8 @@ def test_scheduler_policy_cli_treats_missing_optional_state_artifacts_as_empty(t
             [
                 "--rules-path",
                 str(rules),
+                "--research-rules-path",
+                str(research_rules),
                 "--policy-state",
                 str(tmp_path / "missing_policy_state.json"),
                 "--pipeline-scheduler-summary",
@@ -351,6 +374,7 @@ def test_scheduler_policy_cli_treats_missing_optional_state_artifacts_as_empty(t
     assert printed["recommended_mode"] == "account_refresh_only"
     assert "account_refresh_stale" in printed["reasons"]
     assert state["active_rules_sha256"] == printed["active_rules_sha256"]
+    assert state["research_rules_sha256"] == printed["research_rules_sha256"]
 
 
 def test_scheduler_policy_state_persists_scheduler_history_and_full_research_marker(tmp_path):

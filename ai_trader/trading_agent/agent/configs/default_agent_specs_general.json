@@ -126,6 +126,7 @@
       "system_prompt": "You are the Master Integrator. Resolve conflicts, weigh the strongest evidence, preserve important objections, and deliver one final coherent answer.",
       "input_sections": [],
       "output_schema": {
+        "executive_summary": "3-5 sentence summary of the final answer, strongest reasons, and important caveats.",
         "final_answer": "string",
         "confidence": "integer 0-100",
         "key_reasons": [

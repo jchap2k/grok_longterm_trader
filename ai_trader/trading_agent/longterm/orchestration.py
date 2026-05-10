@@ -99,6 +99,7 @@ def run_longterm_cycle(
     report_limit: int = 10,
     agent_config_path: str | Path = DEFAULT_AGENT_CONFIG_PATH,
     agent_preset: str = "decision_4",
+    active_rules_stage: str = "decision",
     verbose: bool = False,
 ) -> LongTermCycleResult:
     """Run one long-term research cycle in dry-run-safe mode.
@@ -167,6 +168,7 @@ def run_longterm_cycle(
         runner = LongTermResearchRunner(
             config_path=str(agent_config_path),
             agent_preset=agent_preset,
+            active_rules_stage=active_rules_stage,
             verbose=verbose,
         )
 

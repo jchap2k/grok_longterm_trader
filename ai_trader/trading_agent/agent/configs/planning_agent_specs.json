@@ -95,6 +95,7 @@
       "system_prompt": "You integrate the planning outputs into one concise execution plan. Preserve important cautions and give the next concrete action.",
       "input_sections": [],
       "output_schema": {
+        "executive_summary": "3-5 sentence summary of the chosen plan, major risk, and next concrete action.",
         "recommended_plan": [
           "string"
         ],

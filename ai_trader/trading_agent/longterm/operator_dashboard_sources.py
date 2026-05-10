@@ -136,6 +136,10 @@ def _journal_row_to_evidence_item(row: Mapping[str, Any]) -> dict[str, Any]:
             "investing_type": _investing_type_from_text(thesis) or packet.get("company_category") or "journal-backed",
             "score_reasons": source_notes[:8] or [str(packet.get("evidence_brief") or "")],
         },
+        "book_reviewer_signals": {
+            "support": _reviewer_lines(packet.get("reviewer_support")),
+            "objections": _reviewer_lines(packet.get("reviewer_objections")),
+        },
         "python_first_pass_scan": {
             "score": packet.get("combined_attractiveness_score"),
             "rank_score": selection_score,
@@ -198,6 +202,12 @@ def _article_summaries_from_source_notes(source_notes: list[str]) -> list[dict[s
         if note.startswith(("Python quality-growth scorecard:", "Python fundamental metrics:", "Extended-universe Python first pass:")):
             articles.append({"title": note.split(":", 1)[0], "summary": note.split(":", 1)[-1].strip()})
     return articles
+
+
+def _reviewer_lines(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item).strip()]
 
 
 def _append_symbol(symbols: list[str], value: Any) -> None:

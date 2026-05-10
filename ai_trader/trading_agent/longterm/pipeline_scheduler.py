@@ -38,12 +38,16 @@ class PipelineSchedulerInputs:
     output_dir: str | Path
     pipeline_command_template: str
     rules_path: str | Path
+    research_rules_path: str | Path | None = None
     pre_pipeline_refresh_command_template: str = ""
     market_regime_command_template: str = ""
     portfolio_news_monitor_command_template: str = ""
+    motley_fool_new_recs_capture_command_template: str = ""
+    motley_fool_new_recs_delta_command_template: str = ""
     position_review_queue_command_template: str = ""
     committee_preset_policy_command_template: str = ""
     scheduler_policy_command_template: str = ""
+    full_research_command_template: str = ""
     account_refresh_command_template: str = ""
     post_run_verification_command_template: str = ""
     scheduler_review_bundle_command_template: str = ""
@@ -88,6 +92,18 @@ class PipelineSchedulerRunRecord:
     portfolio_news_monitor_exit_code: int | None = None
     portfolio_news_monitor_stdout_path: str = ""
     portfolio_news_monitor_stderr_path: str = ""
+    motley_fool_new_recs_capture_path: str = ""
+    motley_fool_new_recs_capture_command: str = ""
+    motley_fool_new_recs_capture_exit_code: int | None = None
+    motley_fool_new_recs_capture_stdout_path: str = ""
+    motley_fool_new_recs_capture_stderr_path: str = ""
+    motley_fool_new_recs_delta_path: str = ""
+    motley_fool_new_recs_ideas_path: str = ""
+    motley_fool_new_recs_state_path: str = ""
+    motley_fool_new_recs_delta_command: str = ""
+    motley_fool_new_recs_delta_exit_code: int | None = None
+    motley_fool_new_recs_delta_stdout_path: str = ""
+    motley_fool_new_recs_delta_stderr_path: str = ""
     position_review_queue_path: str = ""
     position_review_queue_command: str = ""
     position_review_queue_exit_code: int | None = None
@@ -106,6 +122,13 @@ class PipelineSchedulerRunRecord:
     scheduler_policy_exit_code: int | None = None
     scheduler_policy_stdout_path: str = ""
     scheduler_policy_stderr_path: str = ""
+    full_research_path: str = ""
+    full_research_output_dir: str = ""
+    full_research_summary_path: str = ""
+    full_research_command: str = ""
+    full_research_exit_code: int | None = None
+    full_research_stdout_path: str = ""
+    full_research_stderr_path: str = ""
     account_refresh_command: str = ""
     account_refresh_exit_code: int | None = None
     account_refresh_stdout_path: str = ""
@@ -156,6 +179,7 @@ def run_pipeline_scheduler(
     output_dir = Path(inputs.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     rules_path = Path(inputs.rules_path).expanduser().resolve()
+    research_rules_path = Path(inputs.research_rules_path).expanduser().resolve() if inputs.research_rules_path else None
     summary_output_path = _summary_output_path(inputs, output_dir)
     scheduler_policy_state_path = output_dir / "scheduler_policy_state.json"
     runner = command_runner or _run_command
@@ -184,6 +208,23 @@ def run_pipeline_scheduler(
             command_kind="portfolio_news_monitor",
             rules_path=rules_path,
         )
+    if bool(inputs.motley_fool_new_recs_capture_command_template) != bool(
+        inputs.motley_fool_new_recs_delta_command_template
+    ):
+        raise ValueError(
+            "Motley Fool new-recommendation monitoring requires both capture and delta command templates."
+        )
+    if inputs.motley_fool_new_recs_capture_command_template:
+        validate_scheduler_command_template(
+            inputs.motley_fool_new_recs_capture_command_template,
+            command_kind="motley_fool_new_recs_capture",
+            rules_path=rules_path,
+        )
+        validate_scheduler_command_template(
+            inputs.motley_fool_new_recs_delta_command_template,
+            command_kind="motley_fool_new_recs_delta",
+            rules_path=rules_path,
+        )
     if inputs.position_review_queue_command_template:
         validate_scheduler_command_template(
             inputs.position_review_queue_command_template,
@@ -208,6 +249,12 @@ def run_pipeline_scheduler(
             command_kind="scheduler_policy",
             rules_path=rules_path,
         )
+    if inputs.full_research_command_template:
+        validate_scheduler_command_template(
+            inputs.full_research_command_template,
+            command_kind="full_research",
+            rules_path=rules_path,
+        )
     if inputs.post_run_verification_command_template:
         validate_scheduler_command_template(
             inputs.post_run_verification_command_template,
@@ -227,7 +274,9 @@ def run_pipeline_scheduler(
         )
 
     records: list[PipelineSchedulerRunRecord] = []
-    for run_number in range(1, scheduler_config.max_runs + 1):
+    first_run_number = _next_run_number(output_dir)
+    for offset in range(scheduler_config.max_runs):
+        run_number = first_run_number + offset
         started = now()
         run_dir = output_dir / f"run_{run_number:03d}"
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -254,6 +303,7 @@ def run_pipeline_scheduler(
                 started=started,
                 run_dir=run_dir,
                 rules_path=rules_path,
+                research_rules_path=research_rules_path,
                 scheduler_summary_path=summary_output_path,
                 scheduler_policy_state_path=scheduler_policy_state_path,
                 command_runner=runner,
@@ -264,6 +314,7 @@ def run_pipeline_scheduler(
                 scheduler_policy_state_path,
                 record=record,
                 rules_path=rules_path,
+                research_rules_path=research_rules_path,
             )
             write_pipeline_scheduler_summary(_build_summary(output_dir=output_dir, records=records), summary_output_path)
             verified_record = _run_post_run_verification_after_summary(
@@ -295,7 +346,7 @@ def run_pipeline_scheduler(
                 pass
         if records[-1].status == "failed" and scheduler_config.stop_on_error:
             break
-        if run_number < scheduler_config.max_runs:
+        if offset < scheduler_config.max_runs - 1:
             sleeper(scheduler_config.interval_seconds)
 
     summary = _build_summary(output_dir=output_dir, records=records)
@@ -335,6 +386,14 @@ def validate_scheduler_command_template(
             raise ValueError("Scheduler policy command must call scripts/longterm_pipeline_scheduler_policy.py.")
         _require_flag(command_template, "--rules-path")
         _require_flag(command_template, "--report-output")
+    elif command_kind == "full_research":
+        if "longterm_research_to_paper_pipeline.py" not in lowered:
+            raise ValueError("Full research command must call scripts/longterm_research_to_paper_pipeline.py.")
+        _require_flag(command_template, "--journal-db")
+        _require_flag(command_template, "--portfolio-state")
+        if "--research-source-file" not in command_template and "--research-source-url" not in command_template:
+            raise ValueError("Full research command must include a research source file or research source URL.")
+        _require_flag(command_template, "--research-campaign-dir")
     elif command_kind == "committee_preset_policy":
         if "longterm_committee_preset_policy.py" not in lowered:
             raise ValueError("Committee preset policy command must call scripts/longterm_committee_preset_policy.py.")
@@ -351,6 +410,21 @@ def validate_scheduler_command_template(
         if "longterm_portfolio_news_monitor.py" not in lowered:
             raise ValueError("Portfolio news monitor command must call scripts/longterm_portfolio_news_monitor.py.")
         _require_flag(command_template, "--output")
+    elif command_kind == "motley_fool_new_recs_capture":
+        if "longterm_motley_fool_capture.py" not in lowered:
+            raise ValueError("Motley Fool new-recs capture command must call scripts/longterm_motley_fool_capture.py.")
+        _require_flag(command_template, "--output")
+        if "new_recommendations" not in lowered:
+            raise ValueError("Motley Fool new-recs capture command must use --source new_recommendations.")
+    elif command_kind == "motley_fool_new_recs_delta":
+        if "longterm_motley_fool_new_recs_state.py" not in lowered:
+            raise ValueError(
+                "Motley Fool new-recs delta command must call scripts/longterm_motley_fool_new_recs_state.py."
+            )
+        _require_flag(command_template, "--ideas-file")
+        _require_flag(command_template, "--state-file")
+        _require_flag(command_template, "--output")
+        _require_flag(command_template, "--new-ideas-output")
     elif command_kind == "position_review_queue":
         if "longterm_position_review_queue.py" not in lowered:
             raise ValueError("Position review queue command must call scripts/longterm_position_review_queue.py.")
@@ -389,6 +463,7 @@ def _run_one_scheduler_cycle(
     started: datetime,
     run_dir: Path,
     rules_path: Path,
+    research_rules_path: Path | None,
     scheduler_summary_path: Path,
     scheduler_policy_state_path: Path,
     command_runner: CommandRunner,
@@ -401,9 +476,16 @@ def _run_one_scheduler_cycle(
     portfolio_state_path = run_dir / "paper_portfolio_state.json"
     market_regime_path = run_dir / "market_regime.json"
     portfolio_news_monitor_path = run_dir / "portfolio_news_monitor.json"
+    motley_fool_new_recs_capture_path = run_dir / "motley_fool_new_recs_capture.json"
+    motley_fool_new_recs_delta_path = run_dir / "motley_fool_new_recs_delta.json"
+    motley_fool_new_recs_ideas_path = run_dir / "motley_fool_new_recs_ideas.json"
+    motley_fool_new_recs_state_path = Path(inputs.output_dir) / "motley_fool_new_recs_state.json"
     position_review_queue_path = run_dir / "position_review_queue.json"
     committee_preset_policy_path = run_dir / "committee_preset_policy.json"
     scheduler_policy_path = run_dir / "scheduler_policy.json"
+    full_research_output_dir = run_dir / "full_research"
+    full_research_summary_path = run_dir / "full_research_summary.json"
+    full_research_campaign_dir = full_research_output_dir / "research_campaign"
     account_refresh_output_dir = run_dir / "paper_account_refresh"
     post_run_verification_path = run_dir / "scheduler_cadence_verification.json"
     scheduler_review_bundle_output_dir = run_dir / "scheduler_review_bundle"
@@ -420,9 +502,16 @@ def _run_one_scheduler_cycle(
         portfolio_state_path=portfolio_state_path,
         market_regime_path=market_regime_path,
         portfolio_news_monitor_path=portfolio_news_monitor_path,
+        motley_fool_new_recs_capture_path=motley_fool_new_recs_capture_path,
+        motley_fool_new_recs_delta_path=motley_fool_new_recs_delta_path,
+        motley_fool_new_recs_ideas_path=motley_fool_new_recs_ideas_path,
+        motley_fool_new_recs_state_path=motley_fool_new_recs_state_path,
         position_review_queue_path=position_review_queue_path,
         committee_preset_policy_path=committee_preset_policy_path,
         scheduler_policy_path=scheduler_policy_path,
+        full_research_output_dir=full_research_output_dir,
+        full_research_summary_path=full_research_summary_path,
+        full_research_campaign_dir=full_research_campaign_dir,
         account_refresh_output_dir=account_refresh_output_dir,
         post_run_verification_path=post_run_verification_path,
         scheduler_review_bundle_output_dir=scheduler_review_bundle_output_dir,
@@ -433,6 +522,7 @@ def _run_one_scheduler_cycle(
         dashboard_site_output_dir=dashboard_site_output_dir,
         scheduler_run_id=scheduler_run_id,
         rules_path=rules_path,
+        research_rules_path=research_rules_path,
         scheduler_summary_path=scheduler_summary_path,
         scheduler_policy_state_path=scheduler_policy_state_path,
     )
@@ -458,6 +548,16 @@ def _run_one_scheduler_cycle(
         if inputs.portfolio_news_monitor_command_template
         else ""
     )
+    motley_fool_new_recs_capture_command = (
+        _render_command(inputs.motley_fool_new_recs_capture_command_template, context)
+        if inputs.motley_fool_new_recs_capture_command_template
+        else ""
+    )
+    motley_fool_new_recs_delta_command = (
+        _render_command(inputs.motley_fool_new_recs_delta_command_template, context)
+        if inputs.motley_fool_new_recs_delta_command_template
+        else ""
+    )
     position_review_queue_command = (
         _render_command(inputs.position_review_queue_command_template, context)
         if inputs.position_review_queue_command_template
@@ -469,6 +569,28 @@ def _run_one_scheduler_cycle(
         "portfolio_news_monitor_exit_code": None,
         "portfolio_news_monitor_stdout_path": "",
         "portfolio_news_monitor_stderr_path": "",
+    }
+    motley_fool_new_recs_fields = {
+        "motley_fool_new_recs_capture_path": str(motley_fool_new_recs_capture_path)
+        if motley_fool_new_recs_capture_command
+        else "",
+        "motley_fool_new_recs_capture_command": motley_fool_new_recs_capture_command,
+        "motley_fool_new_recs_capture_exit_code": None,
+        "motley_fool_new_recs_capture_stdout_path": "",
+        "motley_fool_new_recs_capture_stderr_path": "",
+        "motley_fool_new_recs_delta_path": str(motley_fool_new_recs_delta_path)
+        if motley_fool_new_recs_delta_command
+        else "",
+        "motley_fool_new_recs_ideas_path": str(motley_fool_new_recs_ideas_path)
+        if motley_fool_new_recs_delta_command
+        else "",
+        "motley_fool_new_recs_state_path": str(motley_fool_new_recs_state_path)
+        if motley_fool_new_recs_delta_command
+        else "",
+        "motley_fool_new_recs_delta_command": motley_fool_new_recs_delta_command,
+        "motley_fool_new_recs_delta_exit_code": None,
+        "motley_fool_new_recs_delta_stdout_path": "",
+        "motley_fool_new_recs_delta_stderr_path": "",
     }
     position_review_fields = {
         "position_review_queue_path": str(position_review_queue_path) if position_review_queue_command else "",
@@ -483,6 +605,20 @@ def _run_one_scheduler_cycle(
         if inputs.scheduler_policy_command_template
         else ""
     )
+    full_research_command = (
+        _prepare_full_research_command(inputs.full_research_command_template, context)
+        if inputs.full_research_command_template
+        else ""
+    )
+    full_research_fields = {
+        "full_research_path": str(full_research_summary_path) if full_research_command else "",
+        "full_research_output_dir": str(full_research_output_dir) if full_research_command else "",
+        "full_research_summary_path": str(full_research_summary_path) if full_research_command else "",
+        "full_research_command": full_research_command,
+        "full_research_exit_code": None,
+        "full_research_stdout_path": "",
+        "full_research_stderr_path": "",
+    }
     committee_command = (
         _render_command(inputs.committee_preset_policy_command_template, context)
         if inputs.committee_preset_policy_command_template
@@ -520,7 +656,7 @@ def _run_one_scheduler_cycle(
         "scheduler_review_bundle_stdout_path": "",
         "scheduler_review_bundle_stderr_path": "",
     }
-    resource_controls = derive_scheduler_resource_controls(pipeline_command)
+    resource_controls = derive_scheduler_resource_controls(f"{pipeline_command} {full_research_command}".strip())
     if config.print_plan_only:
         return PipelineSchedulerRunRecord(
             run_number=run_number,
@@ -535,12 +671,14 @@ def _run_one_scheduler_cycle(
             pre_pipeline_refresh_command=pre_pipeline_refresh_command,
             **market_regime_fields,
             **monitor_fields,
+            **motley_fool_new_recs_fields,
             **position_review_fields,
             pipeline_command=pipeline_command,
             committee_preset_policy_path=str(committee_preset_policy_path) if committee_command else "",
             committee_preset_policy_command=committee_command,
             scheduler_policy_path=str(scheduler_policy_path) if policy_command else "",
             scheduler_policy_command=policy_command,
+            **full_research_fields,
             account_refresh_command=refresh_command,
             post_run_verification_path=str(post_run_verification_path) if post_run_verification_command else "",
             post_run_verification_command=post_run_verification_command,
@@ -576,12 +714,14 @@ def _run_one_scheduler_cycle(
                 pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
                 **market_regime_fields,
                 **monitor_fields,
+                **motley_fool_new_recs_fields,
                 **position_review_fields,
                 pipeline_command=pipeline_command,
                 committee_preset_policy_path=str(committee_preset_policy_path) if committee_command else "",
                 committee_preset_policy_command=committee_command,
                 scheduler_policy_path=str(scheduler_policy_path) if policy_command else "",
                 scheduler_policy_command=policy_command,
+                **full_research_fields,
                 account_refresh_command=refresh_command,
                 **scheduler_review_bundle_fields,
                 blocker="pre_pipeline_refresh_command_failed",
@@ -618,12 +758,14 @@ def _run_one_scheduler_cycle(
                 pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
                 **market_regime_fields,
                 **monitor_fields,
+                **motley_fool_new_recs_fields,
                 **position_review_fields,
                 pipeline_command=pipeline_command,
                 committee_preset_policy_path=str(committee_preset_policy_path) if committee_command else "",
                 committee_preset_policy_command=committee_command,
                 scheduler_policy_path=str(scheduler_policy_path) if policy_command else "",
                 scheduler_policy_command=policy_command,
+                **full_research_fields,
                 account_refresh_command=refresh_command,
                 **scheduler_review_bundle_fields,
                 blocker="market_regime_command_failed",
@@ -660,14 +802,107 @@ def _run_one_scheduler_cycle(
                 pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
                 **market_regime_fields,
                 **monitor_fields,
+                **motley_fool_new_recs_fields,
                 pipeline_command=pipeline_command,
                 committee_preset_policy_path=str(committee_preset_policy_path) if committee_command else "",
                 committee_preset_policy_command=committee_command,
                 scheduler_policy_path=str(scheduler_policy_path) if policy_command else "",
                 scheduler_policy_command=policy_command,
+                **full_research_fields,
                 account_refresh_command=refresh_command,
                 **scheduler_review_bundle_fields,
                 blocker="portfolio_news_monitor_command_failed",
+                resource_controls=resource_controls,
+            )
+
+    if motley_fool_new_recs_capture_command:
+        capture_stdout = run_dir / "motley_fool_new_recs_capture_stdout.txt"
+        capture_stderr = run_dir / "motley_fool_new_recs_capture_stderr.txt"
+        capture_exit_code, stdout, stderr = command_runner(motley_fool_new_recs_capture_command)
+        _write_text(capture_stdout, stdout)
+        _write_text(capture_stderr, stderr)
+        motley_fool_new_recs_fields = {
+            **motley_fool_new_recs_fields,
+            "motley_fool_new_recs_capture_path": str(motley_fool_new_recs_capture_path),
+            "motley_fool_new_recs_capture_command": motley_fool_new_recs_capture_command,
+            "motley_fool_new_recs_capture_exit_code": capture_exit_code,
+            "motley_fool_new_recs_capture_stdout_path": str(capture_stdout),
+            "motley_fool_new_recs_capture_stderr_path": str(capture_stderr),
+        }
+        if capture_exit_code != 0:
+            return PipelineSchedulerRunRecord(
+                run_number=run_number,
+                scheduler_run_id=scheduler_run_id,
+                started_at=_format_timestamp(started),
+                finished_at=_format_timestamp(now_func()),
+                status="failed",
+                run_dir=str(run_dir),
+                pipeline_output_dir=str(pipeline_output_dir),
+                pipeline_summary_path=str(pipeline_summary_path),
+                pipeline_health_path=str(pipeline_health_path),
+                pre_pipeline_refresh_command=pre_pipeline_refresh_command,
+                pre_pipeline_refresh_exit_code=pre_refresh_exit_code,
+                pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
+                pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
+                **market_regime_fields,
+                **monitor_fields,
+                **motley_fool_new_recs_fields,
+                **position_review_fields,
+                pipeline_command=pipeline_command,
+                committee_preset_policy_path=str(committee_preset_policy_path) if committee_command else "",
+                committee_preset_policy_command=committee_command,
+                scheduler_policy_path=str(scheduler_policy_path) if policy_command else "",
+                scheduler_policy_command=policy_command,
+                **full_research_fields,
+                account_refresh_command=refresh_command,
+                **scheduler_review_bundle_fields,
+                blocker="motley_fool_new_recs_capture_command_failed",
+                resource_controls=resource_controls,
+            )
+
+        delta_stdout = run_dir / "motley_fool_new_recs_delta_stdout.txt"
+        delta_stderr = run_dir / "motley_fool_new_recs_delta_stderr.txt"
+        delta_exit_code, stdout, stderr = command_runner(motley_fool_new_recs_delta_command)
+        _write_text(delta_stdout, stdout)
+        _write_text(delta_stderr, stderr)
+        motley_fool_new_recs_fields = {
+            **motley_fool_new_recs_fields,
+            "motley_fool_new_recs_delta_path": str(motley_fool_new_recs_delta_path),
+            "motley_fool_new_recs_ideas_path": str(motley_fool_new_recs_ideas_path),
+            "motley_fool_new_recs_state_path": str(motley_fool_new_recs_state_path),
+            "motley_fool_new_recs_delta_command": motley_fool_new_recs_delta_command,
+            "motley_fool_new_recs_delta_exit_code": delta_exit_code,
+            "motley_fool_new_recs_delta_stdout_path": str(delta_stdout),
+            "motley_fool_new_recs_delta_stderr_path": str(delta_stderr),
+        }
+        if delta_exit_code != 0:
+            return PipelineSchedulerRunRecord(
+                run_number=run_number,
+                scheduler_run_id=scheduler_run_id,
+                started_at=_format_timestamp(started),
+                finished_at=_format_timestamp(now_func()),
+                status="failed",
+                run_dir=str(run_dir),
+                pipeline_output_dir=str(pipeline_output_dir),
+                pipeline_summary_path=str(pipeline_summary_path),
+                pipeline_health_path=str(pipeline_health_path),
+                pre_pipeline_refresh_command=pre_pipeline_refresh_command,
+                pre_pipeline_refresh_exit_code=pre_refresh_exit_code,
+                pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
+                pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
+                **market_regime_fields,
+                **monitor_fields,
+                **motley_fool_new_recs_fields,
+                **position_review_fields,
+                pipeline_command=pipeline_command,
+                committee_preset_policy_path=str(committee_preset_policy_path) if committee_command else "",
+                committee_preset_policy_command=committee_command,
+                scheduler_policy_path=str(scheduler_policy_path) if policy_command else "",
+                scheduler_policy_command=policy_command,
+                **full_research_fields,
+                account_refresh_command=refresh_command,
+                **scheduler_review_bundle_fields,
+                blocker="motley_fool_new_recs_delta_command_failed",
                 resource_controls=resource_controls,
             )
 
@@ -701,12 +936,14 @@ def _run_one_scheduler_cycle(
                 pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
                 **market_regime_fields,
                 **monitor_fields,
+                **motley_fool_new_recs_fields,
                 **position_review_fields,
                 pipeline_command=pipeline_command,
                 committee_preset_policy_path=str(committee_preset_policy_path) if committee_command else "",
                 committee_preset_policy_command=committee_command,
                 scheduler_policy_path=str(scheduler_policy_path) if policy_command else "",
                 scheduler_policy_command=policy_command,
+                **full_research_fields,
                 account_refresh_command=refresh_command,
                 **scheduler_review_bundle_fields,
                 blocker="position_review_queue_command_failed",
@@ -737,6 +974,7 @@ def _run_one_scheduler_cycle(
             pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
             **market_regime_fields,
             **monitor_fields,
+            **motley_fool_new_recs_fields,
             **position_review_fields,
             pipeline_command=pipeline_command,
             pipeline_exit_code=exit_code,
@@ -746,6 +984,7 @@ def _run_one_scheduler_cycle(
             committee_preset_policy_command=committee_command,
             scheduler_policy_path=str(scheduler_policy_path) if policy_command else "",
             scheduler_policy_command=policy_command,
+            **full_research_fields,
             account_refresh_command=refresh_command,
             **scheduler_review_bundle_fields,
             blocker="pipeline_command_failed",
@@ -780,6 +1019,7 @@ def _run_one_scheduler_cycle(
                 pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
                 **market_regime_fields,
                 **monitor_fields,
+                **motley_fool_new_recs_fields,
                 **position_review_fields,
                 pipeline_command=pipeline_command,
                 pipeline_exit_code=exit_code,
@@ -792,6 +1032,7 @@ def _run_one_scheduler_cycle(
                 committee_preset_policy_stderr_path=committee_stderr_path,
                 scheduler_policy_path=str(scheduler_policy_path) if policy_command else "",
                 scheduler_policy_command=policy_command,
+                **full_research_fields,
                 account_refresh_command=refresh_command,
                 **scheduler_review_bundle_fields,
                 blocker="committee_preset_policy_command_failed",
@@ -826,6 +1067,7 @@ def _run_one_scheduler_cycle(
                 pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
                 **market_regime_fields,
                 **monitor_fields,
+                **motley_fool_new_recs_fields,
                 **position_review_fields,
                 pipeline_command=pipeline_command,
                 pipeline_exit_code=exit_code,
@@ -841,9 +1083,70 @@ def _run_one_scheduler_cycle(
                 scheduler_policy_exit_code=policy_exit_code,
                 scheduler_policy_stdout_path=policy_stdout_path,
                 scheduler_policy_stderr_path=policy_stderr_path,
+                **full_research_fields,
                 account_refresh_command=refresh_command,
                 **scheduler_review_bundle_fields,
                 blocker="scheduler_policy_command_failed",
+                resource_controls=resource_controls,
+            )
+
+    full_research_exit_code: int | None = None
+    full_research_stdout_path = ""
+    full_research_stderr_path = ""
+    if full_research_command and _scheduler_policy_requests_full_research(scheduler_policy_path):
+        full_research_stdout = run_dir / "full_research_stdout.txt"
+        full_research_stderr = run_dir / "full_research_stderr.txt"
+        full_research_exit_code, stdout, stderr = command_runner(full_research_command)
+        _write_text(full_research_stdout, stdout)
+        _write_text(full_research_stderr, stderr)
+        full_research_stdout_path = str(full_research_stdout)
+        full_research_stderr_path = str(full_research_stderr)
+        full_research_fields = {
+            "full_research_path": str(full_research_summary_path),
+            "full_research_output_dir": str(full_research_output_dir),
+            "full_research_summary_path": str(full_research_summary_path),
+            "full_research_command": full_research_command,
+            "full_research_exit_code": full_research_exit_code,
+            "full_research_stdout_path": full_research_stdout_path,
+            "full_research_stderr_path": full_research_stderr_path,
+        }
+        if full_research_exit_code != 0:
+            return PipelineSchedulerRunRecord(
+                run_number=run_number,
+                scheduler_run_id=scheduler_run_id,
+                started_at=_format_timestamp(started),
+                finished_at=_format_timestamp(now_func()),
+                status="failed",
+                run_dir=str(run_dir),
+                pipeline_output_dir=str(pipeline_output_dir),
+                pipeline_summary_path=str(pipeline_summary_path),
+                pipeline_health_path=str(pipeline_health_path),
+                pre_pipeline_refresh_command=pre_pipeline_refresh_command,
+                pre_pipeline_refresh_exit_code=pre_refresh_exit_code,
+                pre_pipeline_refresh_stdout_path=pre_refresh_stdout_path,
+                pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
+                **market_regime_fields,
+                **monitor_fields,
+                **motley_fool_new_recs_fields,
+                **position_review_fields,
+                pipeline_command=pipeline_command,
+                pipeline_exit_code=exit_code,
+                pipeline_stdout_path=str(pipeline_stdout_path),
+                pipeline_stderr_path=str(pipeline_stderr_path),
+                committee_preset_policy_path=str(committee_preset_policy_path) if committee_command else "",
+                committee_preset_policy_command=committee_command,
+                committee_preset_policy_exit_code=committee_exit_code,
+                committee_preset_policy_stdout_path=committee_stdout_path,
+                committee_preset_policy_stderr_path=committee_stderr_path,
+                scheduler_policy_path=str(scheduler_policy_path) if policy_command else "",
+                scheduler_policy_command=policy_command,
+                scheduler_policy_exit_code=policy_exit_code,
+                scheduler_policy_stdout_path=policy_stdout_path,
+                scheduler_policy_stderr_path=policy_stderr_path,
+                **full_research_fields,
+                account_refresh_command=refresh_command,
+                **scheduler_review_bundle_fields,
+                blocker="full_research_command_failed",
                 resource_controls=resource_controls,
             )
 
@@ -875,6 +1178,7 @@ def _run_one_scheduler_cycle(
                 pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
                 **market_regime_fields,
                 **monitor_fields,
+                **motley_fool_new_recs_fields,
                 **position_review_fields,
                 pipeline_command=pipeline_command,
                 pipeline_exit_code=exit_code,
@@ -890,6 +1194,7 @@ def _run_one_scheduler_cycle(
                 scheduler_policy_exit_code=policy_exit_code,
                 scheduler_policy_stdout_path=policy_stdout_path,
                 scheduler_policy_stderr_path=policy_stderr_path,
+                **full_research_fields,
                 account_refresh_command=refresh_command,
                 account_refresh_exit_code=refresh_exit_code,
                 account_refresh_stdout_path=refresh_stdout_path,
@@ -915,6 +1220,7 @@ def _run_one_scheduler_cycle(
         pre_pipeline_refresh_stderr_path=pre_refresh_stderr_path,
         **market_regime_fields,
         **monitor_fields,
+        **motley_fool_new_recs_fields,
         **position_review_fields,
         pipeline_command=pipeline_command,
         pipeline_exit_code=exit_code,
@@ -930,6 +1236,7 @@ def _run_one_scheduler_cycle(
         scheduler_policy_exit_code=policy_exit_code,
         scheduler_policy_stdout_path=policy_stdout_path,
         scheduler_policy_stderr_path=policy_stderr_path,
+        **full_research_fields,
         account_refresh_command=refresh_command,
         account_refresh_exit_code=refresh_exit_code,
         account_refresh_stdout_path=refresh_stdout_path,
@@ -1020,6 +1327,17 @@ def _prepare_pipeline_command(command_template: str, context: dict[str, str]) ->
     return command
 
 
+def _prepare_full_research_command(command_template: str, context: dict[str, str]) -> str:
+    command = _render_command(command_template, context)
+    if "--summary-output" not in command:
+        command = f"{command} --summary-output {context['full_research_summary']}"
+    if "--rules-path" not in command:
+        command = f"{command} --rules-path {context['rules_path']}"
+    if "{" in command or "}" in command:
+        raise ValueError(f"Unresolved placeholder in scheduler command: {command}")
+    return command
+
+
 def _split_command(command: str) -> list[str]:
     try:
         return [token.strip('"') for token in shlex.split(command, posix=False)]
@@ -1097,9 +1415,16 @@ def _render_context(
     portfolio_state_path: Path,
     market_regime_path: Path,
     portfolio_news_monitor_path: Path,
+    motley_fool_new_recs_capture_path: Path,
+    motley_fool_new_recs_delta_path: Path,
+    motley_fool_new_recs_ideas_path: Path,
+    motley_fool_new_recs_state_path: Path,
     position_review_queue_path: Path,
     committee_preset_policy_path: Path,
     scheduler_policy_path: Path,
+    full_research_output_dir: Path,
+    full_research_summary_path: Path,
+    full_research_campaign_dir: Path,
     account_refresh_output_dir: Path,
     post_run_verification_path: Path,
     scheduler_review_bundle_output_dir: Path,
@@ -1110,6 +1435,7 @@ def _render_context(
     dashboard_site_output_dir: Path,
     scheduler_run_id: str,
     rules_path: Path,
+    research_rules_path: Path | None,
     scheduler_summary_path: Path,
     scheduler_policy_state_path: Path,
 ) -> dict[str, str]:
@@ -1121,9 +1447,16 @@ def _render_context(
         "portfolio_state": _quote(portfolio_state_path),
         "market_regime": _quote(market_regime_path),
         "portfolio_news_monitor": _quote(portfolio_news_monitor_path),
+        "motley_fool_new_recs_capture": _quote(motley_fool_new_recs_capture_path),
+        "motley_fool_new_recs_delta": _quote(motley_fool_new_recs_delta_path),
+        "motley_fool_new_recs_ideas": _quote(motley_fool_new_recs_ideas_path),
+        "motley_fool_new_recs_state": _quote(motley_fool_new_recs_state_path),
         "position_review_queue": _quote(position_review_queue_path),
         "committee_preset_policy": _quote(committee_preset_policy_path),
         "scheduler_policy": _quote(scheduler_policy_path),
+        "full_research_output_dir": _quote(full_research_output_dir),
+        "full_research_summary": _quote(full_research_summary_path),
+        "full_research_campaign_dir": _quote(full_research_campaign_dir),
         "account_refresh_output_dir": _quote(account_refresh_output_dir),
         "post_run_verification": _quote(post_run_verification_path),
         "scheduler_review_bundle_output_dir": _quote(scheduler_review_bundle_output_dir),
@@ -1134,6 +1467,7 @@ def _render_context(
         "dashboard_site_output_dir": _quote(dashboard_site_output_dir),
         "scheduler_run_id": scheduler_run_id,
         "rules_path": _quote(rules_path),
+        "research_rules_path": _quote(research_rules_path) if research_rules_path else "",
         "scheduler_summary": _quote(scheduler_summary_path),
         "scheduler_policy_state": _quote(scheduler_policy_state_path),
     }
@@ -1195,6 +1529,7 @@ def _update_scheduler_policy_state_after_record(
     *,
     record: PipelineSchedulerRunRecord,
     rules_path: Path,
+    research_rules_path: Path | None,
 ) -> None:
     if record.status != "completed" and record.portfolio_news_monitor_exit_code != 0:
         return
@@ -1202,8 +1537,15 @@ def _update_scheduler_policy_state_after_record(
     state["schema_version"] = 1
     state["updated_at"] = record.finished_at
     state["active_rules_sha256"] = hashlib.sha256(rules_path.read_bytes()).hexdigest()
+    if research_rules_path is not None and research_rules_path.exists():
+        state["research_rules_sha256"] = hashlib.sha256(research_rules_path.read_bytes()).hexdigest()
     if record.portfolio_news_monitor_exit_code == 0:
         state["last_news_monitor_at"] = record.finished_at
+    if (
+        record.motley_fool_new_recs_capture_exit_code == 0
+        and record.motley_fool_new_recs_delta_exit_code == 0
+    ):
+        state["last_motley_fool_new_recs_at"] = record.finished_at
     if record.position_review_queue_exit_code == 0:
         state["last_position_review_at"] = record.finished_at
     if record.status != "completed":
@@ -1219,6 +1561,12 @@ def _update_scheduler_policy_state_after_record(
         state["last_followup_batch_split_at"] = record.finished_at
     if _pipeline_summary_has_successful_followup_committee(record.pipeline_summary_path):
         state["last_followup_committee_at"] = record.finished_at
+    if (
+        record.full_research_exit_code == 0
+        and record.full_research_summary_path
+        and _pipeline_summary_has_successful_full_research(record.full_research_summary_path)
+    ):
+        state["last_full_research_at"] = record.finished_at
     _write_json(path, state)
 
 
@@ -1336,6 +1684,28 @@ def _pipeline_summary_has_successful_followup_committee(path_value: str) -> bool
     return False
 
 
+def _pipeline_summary_has_successful_full_research(path_value: str) -> bool:
+    payload = _load_json_dict(Path(path_value))
+    if str(payload.get("status") or "") != "completed":
+        return False
+    if _int_value(payload.get("blocker_count")) != 0:
+        return False
+    passed_stage_ids = {
+        str(stage.get("stage_id") or "")
+        for stage in payload.get("stages") or []
+        if isinstance(stage, dict) and str(stage.get("status") or "") in {"passed", "completed"}
+    }
+    return "research_campaign" in passed_stage_ids
+
+
+def _scheduler_policy_requests_full_research(path: Path) -> bool:
+    payload = _load_json_dict(path)
+    cadence = payload.get("cadence_recommendations")
+    if isinstance(cadence, dict) and bool(cadence.get("full_research_due")):
+        return True
+    return str(payload.get("recommended_mode") or "") == "full_research_cycle"
+
+
 def _load_json_dict(path: Path) -> dict[str, object]:
     if not path.exists():
         return {}
@@ -1359,6 +1729,18 @@ def _summary_output_path(inputs: PipelineSchedulerInputs, output_dir: Path) -> P
 
 def _scheduler_run_id(started: datetime, run_number: int) -> str:
     return f"pipeline_scheduler_{started.strftime('%Y%m%dT%H%M%SZ')}_run{run_number:03d}"
+
+
+def _next_run_number(output_dir: Path) -> int:
+    highest = 0
+    for child in output_dir.glob("run_*"):
+        if not child.is_dir():
+            continue
+        suffix = child.name.removeprefix("run_")
+        if not suffix.isdigit():
+            continue
+        highest = max(highest, int(suffix))
+    return highest + 1
 
 
 def _format_timestamp(value: datetime) -> str:

@@ -111,12 +111,30 @@ def _grok_snapshot():
     }
 
 
+def _kronos_snapshot():
+    return {
+        "source_type": "kronos_advisory_batch",
+        "items": [
+            {
+                "symbol": "AMZN",
+                "provider_status": "ok",
+                "provider_mode": "kronos_subagent",
+                "forecast_direction": "up",
+                "forecast_return_pct": 1.42,
+                "forecast_horizon_rows": 5,
+                "provider_warning": "",
+            }
+        ],
+    }
+
+
 def test_evidence_enrichment_pipeline_builds_versioned_briefs():
     result = run_evidence_enrichment_pipeline(
         [_idea()],
         fundamentals_by_symbol=_fundamentals(),
         news_provider=FakeNewsProvider(_articles()),
         grok_client=FakeGrokResearchClient(_grok_snapshot()),
+        kronos_advisory_by_symbol={"AMZN": _kronos_snapshot()["items"][0]},
         as_of_date="2026-05-02",
     )
 
@@ -130,6 +148,8 @@ def test_evidence_enrichment_pipeline_builds_versioned_briefs():
     assert enriched["evidence_brief"].startswith("research_evidence_brief_v1 | AMZN")
     assert "Article evidence:" in enriched["evidence_brief"]
     assert "AWS AI infrastructure demand" in enriched["evidence_brief"]
+    assert "Kronos timing:" in enriched["evidence_brief"]
+    assert enriched["kronos_advisory"]["forecast_direction"] == "up"
     assert enriched["quality_growth_scorecard"]["source_type"] == "python_quality_growth_scorecard"
 
 
@@ -138,12 +158,14 @@ def test_evidence_enrichment_pipeline_cli_writes_enriched_batch_from_snapshots(t
     fundamentals = tmp_path / "fundamentals.json"
     news = tmp_path / "news.json"
     grok = tmp_path / "grok.json"
+    kronos = tmp_path / "kronos.json"
     output = tmp_path / "enriched.json"
     summary_output = tmp_path / "summary.json"
     ideas.write_text(json.dumps([_idea()]), encoding="utf-8")
     fundamentals.write_text(json.dumps(_fundamentals()), encoding="utf-8")
     news.write_text(json.dumps(_articles()), encoding="utf-8")
     grok.write_text(json.dumps(_grok_snapshot()), encoding="utf-8")
+    kronos.write_text(json.dumps(_kronos_snapshot()), encoding="utf-8")
 
     code = run_cli(
         build_parser().parse_args(
@@ -156,6 +178,8 @@ def test_evidence_enrichment_pipeline_cli_writes_enriched_batch_from_snapshots(t
                 str(news),
                 "--grok-snapshot-file",
                 str(grok),
+                "--kronos-advisory-file",
+                str(kronos),
                 "--output",
                 str(output),
                 "--summary-output",
@@ -173,8 +197,49 @@ def test_evidence_enrichment_pipeline_cli_writes_enriched_batch_from_snapshots(t
     assert code == 0
     assert payload[0]["symbol"] == "AMZN"
     assert "research_evidence_brief_v1 | AMZN" in payload[0]["evidence_brief"]
+    assert "Kronos timing:" in payload[0]["evidence_brief"]
+    assert summary["kronos_mode"] == "snapshot"
     assert summary["output"] == str(output)
     assert printed["summary_output"] == str(summary_output)
+
+
+def test_evidence_enrichment_campaign_cli_forwards_kronos_snapshot(tmp_path, capsys):
+    from longterm.evidence_enrichment_campaign_cli import build_parser as build_campaign_parser
+    from longterm.evidence_enrichment_campaign_cli import run_cli as run_campaign_cli
+
+    ideas = tmp_path / "ideas.json"
+    fundamentals = tmp_path / "fundamentals.json"
+    kronos = tmp_path / "kronos.json"
+    output_dir = tmp_path / "campaign"
+    ideas.write_text(json.dumps([_idea()]), encoding="utf-8")
+    fundamentals.write_text(json.dumps(_fundamentals()), encoding="utf-8")
+    kronos.write_text(json.dumps(_kronos_snapshot()), encoding="utf-8")
+
+    code = run_campaign_cli(
+        build_campaign_parser().parse_args(
+            [
+                "--idea-batch",
+                str(ideas),
+                "--fundamentals-snapshot-file",
+                str(fundamentals),
+                "--kronos-advisory-file",
+                str(kronos),
+                "--skip-grok",
+                "--output-dir",
+                str(output_dir),
+                "--batch-size",
+                "1",
+            ]
+        )
+    )
+
+    enriched = json.loads((output_dir / "campaign_enriched.json").read_text(encoding="utf-8"))
+    summary = json.loads((output_dir / "campaign_summary.json").read_text(encoding="utf-8"))
+    printed = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert enriched[0]["kronos_advisory"]["forecast_direction"] == "up"
+    assert summary["batch_summaries"][0]["kronos_mode"] == "snapshot"
+    assert printed["enriched_count"] == 1
 
 
 def test_evidence_enrichment_pipeline_cli_exposes_perplexity_research_mode():

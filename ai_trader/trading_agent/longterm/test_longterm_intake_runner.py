@@ -125,9 +125,10 @@ def test_longterm_research_runner_builds_context_and_calls_grok_helper(monkeypat
         def __init__(self, **kwargs):
             captured["init_kwargs"] = kwargs
 
-        def call_with_context(self, task_prompt, context_sections=None):
+        def call_with_context(self, task_prompt, context_sections=None, **kwargs):
             captured["task_prompt"] = task_prompt
             captured["context_sections"] = context_sections or {}
+            captured["call_kwargs"] = kwargs
             return '{"recommendation":"BUY","confidence":81}'
 
     monkeypatch.setattr(
@@ -182,7 +183,12 @@ def test_longterm_research_runner_builds_context_and_calls_grok_helper(monkeypat
     )
     assert "research_principles" in captured["context_sections"]
     assert "business first" in captured["context_sections"]["research_principles"]
+    assert "shared_system_context" in captured["call_kwargs"]
+    assert "cache_conversation_id" in captured["call_kwargs"]
+    assert captured["call_kwargs"]["cache_conversation_id"].startswith("longterm-decision-")
     assert "BusinessStoryReviewer" in captured["context_sections"]["deterministic_reviews"]
+    assert "MoatDurabilityReviewer" in captured["context_sections"]["deterministic_reviews"]
+    assert "ManagementCapitalAllocationReviewer" in captured["context_sections"]["deterministic_reviews"]
     assert "MarginOfSafetyReviewer" in captured["context_sections"]["deterministic_reviews"]
     assert "Bull case:" in captured["context_sections"]["thesis_challenge"]
     assert "Bear case:" in captured["context_sections"]["thesis_challenge"]
@@ -198,7 +204,7 @@ def test_longterm_research_runner_passes_evidence_brief_as_dedicated_context(mon
         def __init__(self, **kwargs):
             pass
 
-        def call_with_context(self, task_prompt, context_sections=None):
+        def call_with_context(self, task_prompt, context_sections=None, **_kwargs):
             captured["context_sections"] = context_sections or {}
             return '{"recommendation":"PASS","confidence":75}'
 
@@ -233,7 +239,7 @@ def test_longterm_research_runner_passes_evidence_brief_as_dedicated_context(mon
     assert "3yr revenue growth 11.73%" in captured["context_sections"]["research_evidence_brief"]
 
 
-def test_longterm_research_runner_includes_active_rules_context(monkeypatch, tmp_path):
+def test_longterm_research_runner_passes_active_rules_as_shared_cache_context(monkeypatch, tmp_path):
     captured = {}
     rules_path = tmp_path / "active_rules.txt"
     rules_path.write_text(
@@ -246,8 +252,9 @@ def test_longterm_research_runner_includes_active_rules_context(monkeypatch, tmp
         def __init__(self, **kwargs):
             pass
 
-        def call_with_context(self, task_prompt, context_sections=None):
+        def call_with_context(self, task_prompt, context_sections=None, **kwargs):
             captured["context_sections"] = context_sections or {}
+            captured["call_kwargs"] = kwargs
             return '{"recommendation":"PASS","confidence":75}'
 
     monkeypatch.setattr(
@@ -272,9 +279,58 @@ def test_longterm_research_runner_includes_active_rules_context(monkeypatch, tmp
 
     runner.run(packet)
 
-    assert "active_rules_context" in captured["context_sections"]
-    assert "Long-term quality-growth active sleeve" in captured["context_sections"]["active_rules_context"]
-    assert "FXAIX is protected" in captured["context_sections"]["active_rules_context"]
+    assert "active_rules_context" not in captured["context_sections"]
+    assert "Long-term quality-growth active sleeve" in captured["call_kwargs"]["shared_system_context"]
+    assert "FXAIX is protected" in captured["call_kwargs"]["shared_system_context"]
+    assert captured["call_kwargs"]["cache_conversation_id"].startswith("longterm-decision-")
+
+
+def test_longterm_research_runner_can_use_weekly_full_scan_rules_stage(monkeypatch):
+    captured = {}
+
+    class FakeRulesProvider:
+        def load_for_stage(self, stage):
+            captured["rules_stage"] = stage
+            return (
+                "<weekly_full_scan_rules>"
+                "scan_stage=weekly_full_scan"
+                "</weekly_full_scan_rules>"
+            )
+
+    class FakeCheapGrokHeavy:
+        def __init__(self, **kwargs):
+            pass
+
+        def call_with_context(self, task_prompt, context_sections=None, **kwargs):
+            captured["call_kwargs"] = kwargs
+            return '{"recommendation":"PASS","confidence":75}'
+
+    monkeypatch.setattr(
+        "longterm.research_runner.CheapGrokHeavy",
+        FakeCheapGrokHeavy,
+    )
+
+    packet = create_research_packet_from_idea(
+        {
+            "symbol": "NVDA",
+            "company_name": "Nvidia",
+            "business_summary": "Accelerated compute platform.",
+            "thesis_summary": "Data center AI demand supports growth.",
+        }
+    )
+    runner = LongTermResearchRunner(
+        api_key="test-key",
+        config_path="dummy-config.json",
+        active_rules_provider=FakeRulesProvider(),
+        active_rules_stage="weekly_full_scan",
+        verbose=False,
+    )
+
+    runner.run(packet)
+
+    assert captured["rules_stage"] == "weekly_full_scan"
+    assert "scan_stage=weekly_full_scan" in captured["call_kwargs"]["shared_system_context"]
+    assert captured["call_kwargs"]["cache_conversation_id"].startswith("longterm-weekly-full-scan-")
 
 
 def test_longterm_research_runner_includes_current_portfolio_context(monkeypatch):
@@ -284,7 +340,7 @@ def test_longterm_research_runner_includes_current_portfolio_context(monkeypatch
         def __init__(self, **kwargs):
             pass
 
-        def call_with_context(self, task_prompt, context_sections=None):
+        def call_with_context(self, task_prompt, context_sections=None, **_kwargs):
             captured["context_sections"] = context_sections or {}
             return '{"recommendation":"PASS","confidence":75}'
 
@@ -356,7 +412,7 @@ def test_longterm_research_runner_records_structured_decision(monkeypatch, tmp_p
         def __init__(self, **kwargs):
             pass
 
-        def call_with_context(self, task_prompt, context_sections=None):
+        def call_with_context(self, task_prompt, context_sections=None, **_kwargs):
             return (
                 '{"recommendation":"BUY","confidence":84,'
                 '"suggested_size_pct":6.0,"key_thesis":"Durable compounder."}'
