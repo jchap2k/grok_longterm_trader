@@ -11,8 +11,8 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-09 by Codex after adding FRED provider health and
-persisting macro-regime context with research decisions.
+Last updated: 2026-05-10 by Codex after pushing the CGH native xAI SDK
+backend/cost-tracking branch and refreshing long-term operator context.
 
 ## 1. Project Identity
 
@@ -95,6 +95,23 @@ Grok 4.1 fast models are being deprecated on 2026-05-15. Current policy:
 - Use Perplexity Sonar as explicit opt-in broad enrichment when deterministic
   data and free sources are insufficient.
 - Keep paid enrichment capped, resumable, and tracked for cost/API usage.
+
+CheapGrokHeavy / CGH state:
+- Current pushed CGH branch is `codex/cgh-xai-sdk-cost-tracking`.
+- CGH commit `3083bf2` switched `agent/utils/cheap_grok_heavy.py` to use the
+  native `xai_sdk` backend by default through `api_backend="xai_sdk"`.
+- Follow-up commit `cbe40bf` clarified stale comments/test names so the code no
+  longer reads as OpenAI-based by default.
+- `openai_compat` remains available only as an explicit diagnostic fallback via
+  `api_backend="openai_compat"`; it is not the default path.
+- The native SDK adapter preserves the internal `chat.completions.create` shape,
+  supports temperature, maps provider-reported cost/tool usage when exposed, and
+  adds web-search tool-cost accounting when only tool counts are available.
+- CGH verbose cost output now includes worker calls plus master synthesis,
+  cached prompt tokens, provider-reported actual cost when present, and
+  estimated token/tool cost when actual cost is absent.
+- Focused CGH validation on the pushed branch: `python -m pytest
+  agent\utils\test_cheap_grok_heavy_config.py -q` reported `27 passed`.
 
 Future local model candidate:
 - Kronos is cloned locally at `S:\LLM_files\other_github\Kronos` and queued
@@ -506,6 +523,22 @@ Book-principle context:
   deterministic review stack passed to the CGH committee. It is advisory and
   scores valuation support, normalized earnings/cash-flow evidence, overpayment
   risk, and permanent capital-loss risk.
+- `longterm/reviewers.py` also includes `MoatDurabilityReviewer` and
+  `ManagementCapitalAllocationReviewer` in the deterministic review stack.
+  They are advisory and surface explicit moat evidence, moat-decay risks,
+  owner-alignment/capital-allocation support, dilution/SBC/serial-acquisition
+  risks, and available ROIC/ROC, FCF-margin, and cash/debt context.
+- `longterm/quality_growth_scorecard.py` now emits an additive
+  `valuation_sanity_score` with FCF yield, earnings yield, PEG, return on
+  invested capital, FCF/share growth, and cash/debt reasons without replacing
+  the existing `valuation_score` contract.
+- `research/research_evidence_brief.py` includes valuation-sanity score and
+  reasons in the compact scorecard brief, and `longterm/operator_dashboard.py`
+  renders valuation sanity on ticker score panels.
+- Journal-backed dashboard evidence now carries `reviewer_support` and
+  `reviewer_objections` into a ticker-page `Book Reviewer Signals` panel, so
+  moat and management/capital-allocation reviewer support/objections are
+  visible during operator review.
 - `longterm/buy_promotion.py` now records `margin_of_safety_score` and routes a
   first-pass BUY/ADD with weak margin-of-safety support to
   `WATCHLIST_PENDING_CONFIRMATION` via `margin_of_safety_review`, rather than
