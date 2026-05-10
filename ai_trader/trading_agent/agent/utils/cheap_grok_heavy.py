@@ -36,7 +36,7 @@ Design notes:
   - xai_sdk now exposes temperature; OpenAI-compatible REST remains available as fallback
   - agent_count=4 default: cost-controlled council for pricier Grok 4.3 calls
   - max_concurrent=4 default: asyncio.Semaphore caps burst to prevent 429s
-  - AsyncOpenAI client created once in __init__ and reused (not recreated per call)
+  - API client adapter created once in __init__ and reused (not recreated per call)
   - Synthesis at temp=0.1 (focused/consistent), max_tokens = agent_max_tokens * 2
   - Agents at max_tokens=2048 (configurable via agent_max_tokens param)
   - Failed agents are excluded from synthesis (warning logged)
@@ -211,8 +211,8 @@ def _xai_server_side_tool_counts(response) -> dict[str, int]:
     return counts
 
 
-def _openai_style_response_from_xai_sdk_response(response):
-    """Adapt a native xAI SDK response to the small OpenAI shape CGH expects."""
+def _chat_completion_response_from_xai_sdk_response(response):
+    """Adapt a native xAI SDK response to the small chat-completion shape CGH expects."""
     usage = _attr_or_key(response, "usage")
     prompt_tokens = _safe_int(
         _attr_or_key(usage, "prompt_tokens")
@@ -245,7 +245,7 @@ def _openai_style_response_from_xai_sdk_response(response):
 
 
 class _XaiSdkChatCompletions:
-    """Small async adapter exposing the OpenAI chat.completions.create shape."""
+    """Small async adapter exposing the chat.completions.create shape used internally."""
 
     def __init__(self, api_key: str):
         from xai_sdk import Client
@@ -281,7 +281,7 @@ class _XaiSdkChatCompletions:
             temperature=kwargs.get("temperature"),
             conversation_id=conversation_id,
         )
-        return _openai_style_response_from_xai_sdk_response(chat.sample())
+        return _chat_completion_response_from_xai_sdk_response(chat.sample())
 
 
 class _XaiSdkClientAdapter:
@@ -364,7 +364,9 @@ class CheapGrokHeavy:
     """
     Ensemble wrapper: N parallel calls + master synthesis.
 
-    Uses the xAI OpenAI-compatible REST API (same pattern as grok_client.py).
+    Uses the native xAI SDK by default so provider-reported costs and server-side
+    tool usage can be captured. The OpenAI-compatible xAI endpoint remains
+    available only as an explicit fallback via api_backend="openai_compat".
     Temperature variation creates agent diversity without needing different models.
     An asyncio.Semaphore caps concurrent requests to prevent API rate limiting.
 

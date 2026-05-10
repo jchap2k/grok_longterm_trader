@@ -10,7 +10,7 @@ from agent.utils.cheap_grok_heavy import (
     CheapGrokHeavy,
     format_cli_run_header,
     load_agent_specs_from_file,
-    _openai_style_response_from_xai_sdk_response,
+    _chat_completion_response_from_xai_sdk_response,
     parse_context_file_args,
     resolve_agent_specs,
 )
@@ -304,7 +304,7 @@ def test_build_agent_messages_prepends_shared_system_context_for_cacheable_prefi
     assert first_messages[1] == {"role": "user", "content": "Review AAPL."}
 
 
-def test_cached_prompt_tokens_are_extracted_from_openai_style_usage_details():
+def test_cached_prompt_tokens_are_extracted_from_chat_completion_usage_details():
     client = CheapGrokHeavy(api_key="test-key", verbose=False)
     usage = SimpleNamespace(
         prompt_tokens=123,
@@ -324,7 +324,7 @@ def test_cache_conversation_id_builds_x_grok_conv_id_header():
     }
 
 
-def test_call_agent_records_cached_tokens_with_fake_openai_client():
+def test_call_agent_records_cached_tokens_with_fake_chat_completion_client():
     class FakeCompletions:
         def __init__(self):
             self.kwargs = None
@@ -390,7 +390,7 @@ def test_xai_sdk_response_adapter_extracts_authoritative_cost_and_tool_usage():
         server_side_tool_usage={"web_search": 3},
     )
 
-    adapted = _openai_style_response_from_xai_sdk_response(response)
+    adapted = _chat_completion_response_from_xai_sdk_response(response)
 
     assert adapted.choices[0].message.content == "ok"
     assert adapted.usage.prompt_tokens == 1000
@@ -447,7 +447,7 @@ def test_print_cost_adds_tool_cost_to_token_estimate_when_actual_cost_missing(ca
     assert "estimated $0.0212" in output
 
 
-def test_call_agent_omits_cache_header_by_default_with_fake_openai_client():
+def test_call_agent_omits_cache_header_by_default_with_fake_chat_completion_client():
     class FakeCompletions:
         def __init__(self):
             self.kwargs = None
@@ -475,7 +475,7 @@ def test_call_agent_omits_cache_header_by_default_with_fake_openai_client():
     assert fake_completions.kwargs["extra_headers"] == {}
 
 
-def test_synthesis_logs_cached_prompt_tokens_with_fake_openai_client(capsys):
+def test_synthesis_logs_cached_prompt_tokens_with_fake_chat_completion_client(capsys):
     class FakeCompletions:
         async def create(self, **_kwargs):
             return SimpleNamespace(
