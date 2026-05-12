@@ -222,6 +222,59 @@ def test_dashboard_server_exposes_api_usage_from_pipeline_summary(tmp_path):
     assert "Tier 1 Remaining" in html
 
 
+def test_dashboard_server_uses_decision_journal_usage_when_no_usage_artifact(tmp_path):
+    action_plan = tmp_path / "action_plan.json"
+    portfolio = tmp_path / "portfolio.json"
+    journal_path = tmp_path / "journal.db"
+    manifest_path = tmp_path / "dashboard_manifest.json"
+    action_plan.write_text(json.dumps({"intents": []}), encoding="utf-8")
+    portfolio.write_text(json.dumps({"holdings": []}), encoding="utf-8")
+    journal = LongTermDecisionJournal(journal_path)
+    journal.record_decision(
+        ResearchPacket(
+            symbol="AAPL",
+            company_name="Apple",
+            business_summary="Consumer ecosystem.",
+            thesis_summary="Services and hardware ecosystem durability.",
+            idea_source="weekly_full_scan",
+        ),
+        decision={"recommendation": "PASS", "confidence": 68, "key_thesis": "Needs better entry."},
+        usage={
+            "api_backend": "xai_sdk",
+            "model": "grok-4.3",
+            "request_count": 5,
+            "total_input_tokens": 1200,
+            "total_output_tokens": 350,
+            "grand_total_cost_usd": 0.0245,
+            "total_web_search_call_count": 0,
+            "occurred_at": "2026-05-11T16:40:00Z",
+        },
+    )
+    manifest_path.write_text(
+        json.dumps(
+            build_dashboard_manifest(
+                action_plan=action_plan,
+                portfolio_state=portfolio,
+                decision_journal_path=journal_path,
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    usage = build_api_usage_from_manifest(load_dashboard_manifest(manifest_path))
+    status, _, body = resolve_dashboard_request(manifest_path, "/")
+    html = body.decode("utf-8")
+
+    assert usage["status"] == "available"
+    assert usage["source_path"].endswith("journal.db")
+    assert usage["totals"]["request_count"] == 5
+    assert usage["totals"]["total_tokens"] == 1550
+    assert usage["totals"]["estimated_total_cost_usd"] == 0.0245
+    assert usage["cost_history"]["current_month_spend_usd"] == 0.0245
+    assert status == 200
+    assert 'data-api-usage-total="estimated_total_cost_usd">$0.02' in html
+
+
 def test_dashboard_server_normalizes_api_usage_cost_aliases(tmp_path):
     action_plan = tmp_path / "action_plan.json"
     portfolio = tmp_path / "portfolio.json"

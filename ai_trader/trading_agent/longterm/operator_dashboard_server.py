@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -254,13 +255,30 @@ def build_api_usage_from_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]
     explicit_usage = _resolve_manifest_path(base_dir, manifest.get("api_usage"))
     pipeline_summary = _resolve_manifest_path(base_dir, manifest.get("pipeline_summary"))
     pipeline_scheduler_summary = _resolve_manifest_path(base_dir, manifest.get("pipeline_scheduler_summary"))
-    source_path = explicit_usage or pipeline_summary
-    if not source_path:
-        return _empty_api_usage("api_usage_artifact_missing")
-    payload = _load_json_optional(source_path)
-    if not payload:
-        return _empty_api_usage("api_usage_artifact_unreadable", source_path=source_path)
-    return _normalize_api_usage_payload(payload, source_path=source_path)
+    first_unavailable: dict[str, Any] | None = None
+    for source_path in (explicit_usage, pipeline_summary, pipeline_scheduler_summary):
+        if not source_path:
+            continue
+        payload = _load_json_optional(source_path)
+        if not payload:
+            first_unavailable = first_unavailable or _empty_api_usage(
+                "api_usage_artifact_unreadable",
+                source_path=source_path,
+            )
+            continue
+        usage = _normalize_api_usage_payload(payload, source_path=source_path)
+        if usage.get("status") == "available" or usage.get("providers"):
+            return usage
+        first_unavailable = first_unavailable or usage
+
+    journal_usage = _api_usage_from_decision_journal(
+        _resolve_manifest_path(base_dir, manifest.get("decision_journal_path"))
+    )
+    if journal_usage:
+        return journal_usage
+    if first_unavailable:
+        return first_unavailable
+    return _empty_api_usage("api_usage_artifact_missing")
 
 
 def build_portfolio_summary_from_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
@@ -966,6 +984,139 @@ def _api_usage_summary_from_providers(providers: list[dict[str, Any]], *, source
         "next_safe_action": "review_usage_before_large_paid_enrichment_runs",
         "order_submission_enabled": False,
     }
+
+
+def _api_usage_from_decision_journal(journal_path: Path | None) -> dict[str, Any]:
+    """Build usage from decision journal rows when no explicit usage artifact exists."""
+    if not journal_path or not journal_path.exists():
+        return {}
+    rows: list[tuple[str, str]] = []
+    try:
+        with sqlite3.connect(journal_path) as conn:
+            table_names = {
+                str(row[0])
+                for row in conn.execute("select name from sqlite_master where type = 'table'")
+            }
+            if "longterm_decision_journal" not in table_names:
+                return {}
+            columns = {
+                str(row[1])
+                for row in conn.execute("pragma table_info(longterm_decision_journal)")
+            }
+            if "usage_json" not in columns:
+                return {}
+            timestamp_column = "timestamp" if "timestamp" in columns else ""
+            if timestamp_column:
+                cursor = conn.execute(
+                    """
+                    select timestamp, usage_json
+                    from longterm_decision_journal
+                    where usage_json is not null and trim(usage_json) != ''
+                    order by timestamp asc
+                    """
+                )
+            else:
+                cursor = conn.execute(
+                    """
+                    select '', usage_json
+                    from longterm_decision_journal
+                    where usage_json is not null and trim(usage_json) != ''
+                    """
+                )
+            rows = [(str(row[0] or ""), str(row[1] or "")) for row in cursor.fetchall()]
+    except sqlite3.Error:
+        return {}
+
+    providers: list[dict[str, Any]] = []
+    for timestamp, usage_json in rows:
+        try:
+            raw = json.loads(usage_json)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(raw, Mapping):
+            continue
+        raw_provider = dict(raw)
+        raw_provider.setdefault("occurred_at", timestamp)
+        providers.extend(_usage_providers_from_payload({"providers": [raw_provider]}))
+    if not providers:
+        return {}
+    return _api_usage_summary_from_providers(
+        _aggregate_api_usage_providers(providers),
+        source_path=journal_path,
+    )
+
+
+def _aggregate_api_usage_providers(providers: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Aggregate journal usage rows by provider/model/month to keep dashboard cards compact."""
+    grouped: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    for provider in providers:
+        month = _usage_month_key(str(provider.get("occurred_at") or "")) or "unknown"
+        key = (
+            str(provider.get("provider") or "unknown"),
+            str(provider.get("model") or ""),
+            str(provider.get("search_context_size") or ""),
+            month,
+        )
+        target = grouped.setdefault(
+            key,
+            {
+                "provider": key[0],
+                "model": key[1],
+                "search_context_size": key[2],
+                "request_count": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "request_fees_usd": 0.0,
+                "input_token_cost_usd": 0.0,
+                "output_token_cost_usd": 0.0,
+                "tool_invocation_count": 0,
+                "web_search_call_count": 0,
+                "tool_cost_usd": 0.0,
+                "web_search_cost_usd": 0.0,
+                "estimated_total_cost_usd": 0.0,
+                "occurred_at": f"{month}-01T00:00:00Z" if month != "unknown" else "",
+                "credits_purchased_to_date_usd": None,
+                "tier_1_credit_target_usd": None,
+                "estimated_progress_to_tier_1_usd": None,
+                "estimated_remaining_to_tier_1_usd": None,
+                "console_check_required": False,
+                "tier_note": "",
+            },
+        )
+        for field in (
+            "request_count",
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens",
+            "tool_invocation_count",
+            "web_search_call_count",
+        ):
+            target[field] += int(_number(provider.get(field)))
+        for field in (
+            "request_fees_usd",
+            "input_token_cost_usd",
+            "output_token_cost_usd",
+            "tool_cost_usd",
+            "web_search_cost_usd",
+            "estimated_total_cost_usd",
+        ):
+            target[field] = round(float(target[field]) + float(_number(provider.get(field))), 6)
+        for field in (
+            "credits_purchased_to_date_usd",
+            "tier_1_credit_target_usd",
+            "estimated_progress_to_tier_1_usd",
+            "estimated_remaining_to_tier_1_usd",
+        ):
+            value = _optional_number(provider.get(field))
+            if value is not None:
+                target[field] = value
+        target["console_check_required"] = bool(
+            target["console_check_required"] or provider.get("console_check_required")
+        )
+        if provider.get("tier_note"):
+            target["tier_note"] = str(provider.get("tier_note") or "")
+    return list(grouped.values())
 
 
 def _api_usage_totals_from_providers(providers: list[Mapping[str, Any]]) -> dict[str, Any]:
