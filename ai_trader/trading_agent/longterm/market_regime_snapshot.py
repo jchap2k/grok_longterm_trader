@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
+from datetime import UTC, datetime, timedelta
+import json
 import os
 from typing import Any
+import urllib.error
+import urllib.parse
+import urllib.request
 
 from longterm.idle_cash_policy import MarketRegimeSnapshot
 from longterm.macro_regime_interpreter import interpret_macro_regime
@@ -22,10 +27,17 @@ DEFAULT_FRED_TEN_YEAR_SERIES = "DGS10"
 DEFAULT_FRED_CPI_SERIES = "CPIAUCSL"
 DEFAULT_FRED_YIELD_CURVE_SERIES = "T10Y2Y"
 DEFAULT_FRED_CREDIT_SPREAD_SERIES = "BAMLH0A0HYM2"
+FRED_REST_OBSERVATIONS_URL = "https://api.stlouisfed.org/fred/series/observations"
 VIX_ELEVATED_THRESHOLD = 22.0
 VIX_STRESS_THRESHOLD = 30.0
 CPI_ANNUALIZED_PRESSURE_THRESHOLD_PCT = 4.0
 CREDIT_SPREAD_ELEVATED_THRESHOLD_PCT = 5.0
+FRED_PROVIDER_OK_MODES = {"fredapi", "fred_rest", "fredapi_rest_fallback"}
+FRED_REST_HISTORY_DAYS = {
+    DEFAULT_FRED_SP500_SERIES: 420,
+    DEFAULT_FRED_CPI_SERIES: 750,
+}
+DEFAULT_FRED_REST_HISTORY_DAYS = 120
 
 
 def build_market_regime_snapshot(
@@ -81,6 +93,7 @@ def build_market_regime_snapshot_from_fred_histories(
     cpi_series: str = DEFAULT_FRED_CPI_SERIES,
     yield_curve_series: str = DEFAULT_FRED_YIELD_CURVE_SERIES,
     credit_spread_series: str = DEFAULT_FRED_CREDIT_SPREAD_SERIES,
+    provider_mode: str = "fredapi",
 ) -> MarketRegimeSnapshot:
     """Classify market regime from FRED histories and macro stress signals."""
     vix_rows = list(fred_histories.get(vix_series) or [])
@@ -145,7 +158,7 @@ def build_market_regime_snapshot_from_fred_histories(
         {
             "risk_regime": base.risk_regime,
             "provider_status": "ok",
-            "provider_mode": "fredapi",
+            "provider_mode": provider_mode,
             "vix_level": vix_level,
             "spy_above_200d": sp500_above_200d,
             "ten_year_yield_trend": yield_trend,
@@ -176,7 +189,7 @@ def build_market_regime_snapshot_from_fred_histories(
         macro_signals=macro_signals,
         macro_regime_label=interpretation["macro_regime_label"],
         provider_status="ok",
-        provider_mode="fredapi",
+        provider_mode=provider_mode,
     )
 
 
@@ -190,6 +203,7 @@ def build_fred_market_regime_snapshot(
     cpi_series: str = DEFAULT_FRED_CPI_SERIES,
     yield_curve_series: str = DEFAULT_FRED_YIELD_CURVE_SERIES,
     credit_spread_series: str = DEFAULT_FRED_CREDIT_SPREAD_SERIES,
+    provider_mode: str = "fredapi",
 ) -> MarketRegimeSnapshot:
     """Fetch FRED series through fredapi and classify the macro regime."""
     fetcher = fetch_fred_history or fetch_fredapi_history
@@ -210,6 +224,7 @@ def build_fred_market_regime_snapshot(
         cpi_series=cpi_series,
         yield_curve_series=yield_curve_series,
         credit_spread_series=credit_spread_series,
+        provider_mode=provider_mode,
     )
 
 
@@ -251,6 +266,60 @@ def fetch_fredapi_history(series_id: str, api_key: str | None = None) -> list[di
             rows.append({"date": str(index)[:10], "close": float(value)})
         except (TypeError, ValueError):
             continue
+    return rows
+
+
+def fetch_fred_rest_history(
+    series_id: str,
+    api_key: str | None = None,
+    *,
+    observation_start: str | None = None,
+    timeout_seconds: float = 30.0,
+) -> list[dict[str, Any]]:
+    """Fetch a bounded FRED observation history directly through the REST API."""
+    key = api_key or os.environ.get("FRED_API_KEY")
+    if not key:
+        raise RuntimeError("Set FRED_API_KEY to build FRED market-regime snapshots.")
+    start = observation_start or _fred_rest_observation_start(series_id)
+    params = urllib.parse.urlencode(
+        {
+            "series_id": series_id,
+            "api_key": key,
+            "file_type": "json",
+            "sort_order": "asc",
+            "observation_start": start,
+        }
+    )
+    request = urllib.request.Request(
+        f"{FRED_REST_OBSERVATIONS_URL}?{params}",
+        headers={"User-Agent": "grok-longterm-trader-fred/1.0", "Accept": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            charset = response.headers.get_content_charset() or "utf-8"
+            payload = json.loads(response.read().decode(charset, errors="replace"))
+    except urllib.error.HTTPError as exc:
+        detail = _fred_http_error_detail(exc)
+        raise RuntimeError(f"FRED REST HTTP {exc.code}: {detail}") from exc
+    rows: list[dict[str, Any]] = []
+    for item in payload.get("observations") or []:
+        if not isinstance(item, Mapping):
+            continue
+        value = item.get("value")
+        if value in {None, "", "."}:
+            continue
+        try:
+            row = {
+                "date": str(item.get("date") or ""),
+                "close": float(value),
+            }
+        except (TypeError, ValueError):
+            continue
+        if item.get("realtime_start"):
+            row["realtime_start"] = str(item.get("realtime_start"))
+        if item.get("realtime_end"):
+            row["realtime_end"] = str(item.get("realtime_end"))
+        rows.append(row)
     return rows
 
 
@@ -305,6 +374,23 @@ def market_regime_to_dict(snapshot: MarketRegimeSnapshot) -> dict[str, Any]:
 def _last_close(rows: list[Mapping[str, Any]]) -> float | None:
     closes = _closes(rows)
     return closes[-1] if closes else None
+
+
+def is_fred_provider_ok(provider_mode: str, provider_status: str) -> bool:
+    return str(provider_status or "").lower() == "ok" and str(provider_mode or "").lower() in FRED_PROVIDER_OK_MODES
+
+
+def _fred_rest_observation_start(series_id: str) -> str:
+    days = FRED_REST_HISTORY_DAYS.get(series_id, DEFAULT_FRED_REST_HISTORY_DAYS)
+    return (datetime.now(UTC).date() - timedelta(days=days)).isoformat()
+
+
+def _fred_http_error_detail(exc: urllib.error.HTTPError) -> str:
+    try:
+        raw = exc.read(4000)
+        return raw.decode("utf-8", errors="replace")[:1000]
+    except Exception:
+        return str(exc)
 
 
 def _closes(rows: Iterable[Mapping[str, Any]]) -> list[float]:
@@ -470,11 +556,14 @@ __all__ = [
     "DEFAULT_SPY_SYMBOL",
     "DEFAULT_TEN_YEAR_YIELD_SYMBOL",
     "DEFAULT_VIX_SYMBOL",
+    "FRED_PROVIDER_OK_MODES",
     "build_fred_market_regime_snapshot",
     "build_market_regime_snapshot",
     "build_market_regime_snapshot_from_fred_histories",
     "build_market_regime_snapshot_from_histories",
     "fetch_fredapi_history",
+    "fetch_fred_rest_history",
     "fetch_yfinance_history",
+    "is_fred_provider_ok",
     "market_regime_to_dict",
 ]

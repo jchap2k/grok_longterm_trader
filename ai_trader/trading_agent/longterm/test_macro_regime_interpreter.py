@@ -52,3 +52,19 @@ def test_macro_regime_interpreter_marks_fallback_as_provider_attention():
     assert result["provider_healthy"] is False
     assert result["review_trigger"] is False
     assert "provider_status_degraded_fallback" in result["reasons"]
+
+
+def test_macro_regime_interpreter_treats_fred_rest_as_healthy():
+    result = interpret_macro_regime(
+        {
+            "risk_regime": "normal",
+            "provider_status": "ok",
+            "provider_mode": "fredapi_rest_fallback",
+            "vix_level": 18.0,
+            "spy_above_200d": True,
+        }
+    )
+
+    assert result["macro_regime_label"] == "normal"
+    assert result["provider_healthy"] is True
+    assert not any(reason.startswith("provider_status_") for reason in result["reasons"])

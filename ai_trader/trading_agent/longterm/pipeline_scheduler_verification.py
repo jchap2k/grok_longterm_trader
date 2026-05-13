@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from longterm.market_regime_snapshot import is_fred_provider_ok
+
 
 SUBMIT_CAPABLE_FRAGMENTS = (
     "--submit-paper-orders",
@@ -309,7 +311,10 @@ def _check_market_regime(
         return
     if not require_fred_provider:
         return
-    if market_regime.get("provider_status") != "ok" or market_regime.get("provider_mode") != "fredapi":
+    if not is_fred_provider_ok(
+        str(market_regime.get("provider_mode") or ""),
+        str(market_regime.get("provider_status") or ""),
+    ):
         blockers.append("market_regime_provider_not_fredapi_ok")
 
 

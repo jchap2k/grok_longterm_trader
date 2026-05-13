@@ -276,3 +276,37 @@ def test_scheduler_verification_can_require_true_fred_provider(tmp_path, capsys)
     printed = json.loads(capsys.readouterr().out)
     assert code == 1
     assert "market_regime_provider_not_fredapi_ok" in printed["blockers"]
+
+
+def test_scheduler_verification_accepts_fred_rest_provider(tmp_path, capsys):
+    scheduler_summary, _, policy_state = _ready_fixture(tmp_path)
+    payload = json.loads(scheduler_summary.read_text(encoding="utf-8"))
+    market_regime = Path(payload["runs"][0]["market_regime_path"])
+    market_regime.write_text(
+        json.dumps(
+            {
+                "risk_regime": "normal",
+                "provider_status": "ok",
+                "provider_mode": "fredapi_rest_fallback",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--pipeline-scheduler-summary",
+                str(scheduler_summary),
+                "--policy-state",
+                str(policy_state),
+                "--require-fred-provider",
+                "--json",
+            ]
+        )
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert printed["status"] == "ready"
+    assert "market_regime_provider_not_fredapi_ok" not in printed["blockers"]

@@ -11,9 +11,9 @@ not rely on stale chat memory or day/swing trader context. Inspect source files
 only after this file has been loaded and only when the specific review needs
 deeper verification.
 
-Last updated: 2026-05-10 by Codex after merging CGH/native xAI SDK cost
-tracking into `main` and wiring usage persistence through journal, dashboard,
-and scheduler launch review surfaces.
+Last updated: 2026-05-12 by Codex after hardening the FRED market-regime
+snapshot path against transient `fredapi` 500s with a direct FRED REST fallback
+that remains verifier-accepted as true FRED data.
 
 ## 1. Project Identity
 
@@ -223,6 +223,11 @@ Scheduler-readiness features now exist:
 - Pipeline scheduler can run no-submit research/paper refresh chains.
 - The recurring no-submit Windows task is `LongTermTraderNoSubmit`. It remains
   separate from dashboard startup and keeps `order_submission_enabled=false`.
+- Market-regime snapshots prefer `fredapi`, then direct FRED REST
+  `fred/series/observations`, then degraded yfinance fallback. Scheduler
+  verification accepts `provider_mode=fredapi` and
+  `provider_mode=fredapi_rest_fallback` only when `provider_status=ok`; yfinance
+  fallback remains degraded and verifier-blocking.
 - First registered-task verification is complete. The original same-day trigger
   did not backfill because the task was registered after 09:30, so Codex
   manually started `LongTermTraderNoSubmit` once. Windows reported

@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+FRED_PROVIDER_OK_MODES = {"fredapi", "fred_rest", "fredapi_rest_fallback"}
+
 
 def interpret_macro_regime(context: Mapping[str, Any] | None) -> dict[str, Any]:
     """Turn raw macro fields into a compact advisory decision context."""
@@ -30,7 +32,7 @@ def interpret_macro_regime(context: Mapping[str, Any] | None) -> dict[str, Any]:
 
     provider_status = str(payload.get("provider_status") or "unknown").lower()
     provider_mode = str(payload.get("provider_mode") or "").lower()
-    provider_healthy = provider_status == "ok" and provider_mode == "fredapi"
+    provider_healthy = provider_status == "ok" and provider_mode in FRED_PROVIDER_OK_MODES
     if not provider_healthy:
         reasons.append(f"provider_status_{provider_status or 'unknown'}")
 

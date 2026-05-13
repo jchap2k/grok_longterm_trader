@@ -5,9 +5,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from longterm.market_regime_snapshot import (
+    build_fred_market_regime_snapshot,
     build_market_regime_snapshot_from_fred_histories,
     build_market_regime_snapshot,
     build_market_regime_snapshot_from_histories,
+    fetch_fred_rest_history,
     market_regime_to_dict,
 )
 from longterm.market_regime_snapshot_cli import build_parser, run_cli
@@ -212,11 +214,137 @@ def test_market_regime_snapshot_cli_retries_transient_fredapi_failure(tmp_path, 
     assert printed["mode"] == "fredapi"
 
 
+def test_market_regime_snapshot_cli_uses_rest_fallback_when_fredapi_fails(tmp_path, capsys):
+    output = tmp_path / "market_regime.json"
+    calls = []
+
+    def broken_fred_fetcher(_series_id, _api_key=None):
+        raise ValueError("Internal Server Error")
+
+    def rest_fetcher(series_id, _api_key=None):
+        calls.append(series_id)
+        histories = {
+            "VIXCLS": _series([18, 19, 20]),
+            "SP500": _series([4500] * 200 + [5000]),
+            "DGS10": _series([4.0, 4.01, 4.02]),
+            "CPIAUCSL": _series([300, 301, 302, 303, 304, 305, 306]),
+            "T10Y2Y": _series([0.3, 0.4, 0.5]),
+            "BAMLH0A0HYM2": _series([2.7, 2.8, 2.9]),
+        }
+        return histories.get(series_id, [])
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--provider",
+                "fredapi",
+                "--output",
+                str(output),
+                "--fred-provider-attempts",
+                "1",
+                "--fred-provider-rest-fallback-attempts",
+                "1",
+            ]
+        ),
+        fred_fetcher=broken_fred_fetcher,
+        fred_rest_fetcher=rest_fetcher,
+    )
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    printed = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert sorted(calls) == sorted(["VIXCLS", "SP500", "DGS10", "CPIAUCSL", "T10Y2Y", "BAMLH0A0HYM2"])
+    assert payload["provider_status"] == "ok"
+    assert payload["provider_mode"] == "fredapi_rest_fallback"
+    assert payload["macro_regime_interpretation"]["provider_healthy"] is True
+    assert printed["mode"] == "fredapi_rest_fallback"
+
+
+def test_fred_rest_history_parses_observations_with_realtime_metadata(monkeypatch):
+    captured_urls = []
+
+    class FakeResponse:
+        headers = type("Headers", (), {"get_content_charset": lambda self: "utf-8"})()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return json.dumps(
+                {
+                    "observations": [
+                        {
+                            "date": "2026-05-10",
+                            "realtime_start": "2026-05-11",
+                            "realtime_end": "2026-05-11",
+                            "value": ".",
+                        },
+                        {
+                            "date": "2026-05-11",
+                            "realtime_start": "2026-05-12",
+                            "realtime_end": "2026-05-12",
+                            "value": "18.5",
+                        },
+                    ]
+                }
+            ).encode("utf-8")
+
+    def fake_urlopen(request, timeout=0):
+        captured_urls.append(request.full_url)
+        return FakeResponse()
+
+    monkeypatch.setattr("longterm.market_regime_snapshot.urllib.request.urlopen", fake_urlopen)
+
+    rows = fetch_fred_rest_history("VIXCLS", "test-key", observation_start="2026-01-01", timeout_seconds=12)
+
+    assert rows == [
+        {
+            "date": "2026-05-11",
+            "close": 18.5,
+            "realtime_start": "2026-05-12",
+            "realtime_end": "2026-05-12",
+        }
+    ]
+    assert "series_id=VIXCLS" in captured_urls[0]
+    assert "observation_start=2026-01-01" in captured_urls[0]
+    assert "sort_order=asc" in captured_urls[0]
+
+
+def test_fred_snapshot_can_label_rest_provider_mode():
+    def fetcher(series_id, _api_key=None):
+        histories = {
+            "VIXCLS": _series([18, 19, 20]),
+            "SP500": _series([4500] * 200 + [5000]),
+            "DGS10": _series([4.0, 4.01, 4.02]),
+            "CPIAUCSL": _series([300, 301, 302, 303, 304, 305, 306]),
+            "T10Y2Y": _series([0.3, 0.4, 0.5]),
+            "BAMLH0A0HYM2": _series([2.7, 2.8, 2.9]),
+        }
+        return histories.get(series_id, [])
+
+    snapshot = build_fred_market_regime_snapshot(
+        fetch_fred_history=fetcher,
+        provider_mode="fredapi_rest_fallback",
+    )
+    payload = market_regime_to_dict(snapshot)
+
+    assert payload["provider_mode"] == "fredapi_rest_fallback"
+    assert payload["provider_status"] == "ok"
+    assert payload["macro_regime_interpretation"]["provider_healthy"] is True
+
+
 def test_market_regime_snapshot_cli_falls_back_to_yfinance_when_fredapi_fails(tmp_path, capsys, monkeypatch):
     output = tmp_path / "market_regime.json"
 
     def broken_fred_fetcher(_series_id, _api_key=None):
         raise ValueError("Internal Server Error")
+
+    def broken_rest_fetcher(_series_id, _api_key=None):
+        raise RuntimeError("REST unavailable")
 
     def yfinance_fetcher(symbol, _period):
         histories = {
@@ -240,6 +368,7 @@ def test_market_regime_snapshot_cli_falls_back_to_yfinance_when_fredapi_fails(tm
             ]
         ),
         fred_fetcher=broken_fred_fetcher,
+        fred_rest_fetcher=broken_rest_fetcher,
     )
 
     payload = json.loads(output.read_text(encoding="utf-8"))
@@ -264,6 +393,9 @@ def test_market_regime_snapshot_cli_writes_safe_unavailable_snapshot_when_all_pr
     def broken_fred_fetcher(_series_id, _api_key=None):
         raise ValueError("Internal Server Error")
 
+    def broken_rest_fetcher(_series_id, _api_key=None):
+        raise RuntimeError("REST unavailable")
+
     def broken_yfinance_fetcher(_symbol, _period):
         raise RuntimeError("network unavailable")
 
@@ -281,6 +413,7 @@ def test_market_regime_snapshot_cli_writes_safe_unavailable_snapshot_when_all_pr
             ]
         ),
         fred_fetcher=broken_fred_fetcher,
+        fred_rest_fetcher=broken_rest_fetcher,
     )
 
     payload = json.loads(output.read_text(encoding="utf-8"))
