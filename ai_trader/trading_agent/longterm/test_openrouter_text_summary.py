@@ -9,6 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from longterm.openrouter_text_summary import (
     OpenRouterTextSummaryClient,
     build_openrouter_text_summary_messages,
+    build_openrouter_summary_synthesis_messages,
+    summarize_with_dual_openrouter_models,
 )
 
 
@@ -169,3 +171,151 @@ def test_openrouter_text_summary_auth_error_does_not_log_key(monkeypatch):
     message = str(excinfo.value)
     assert "OPENROUTER_API_KEY" in message
     assert "secret-value" not in message
+
+
+def test_openrouter_summary_synthesis_prompt_compares_model_outputs():
+    messages = build_openrouter_summary_synthesis_messages(
+        {
+            "symbol": "TSLA",
+            "title": "Tesla chatter spikes online",
+            "url": "https://example.com/tsla-chatter",
+        },
+        primary_summary={
+            "model": "xiaomi/mimo-v2-flash",
+            "summary": "Social-media posts claimed a robotaxi launch date without official citation.",
+            "warnings": ["thin source"],
+        },
+        comparison_summary={
+            "model": "google/gemini-2.5-flash-lite",
+            "summary": "Tesla robotaxi launch rumors sparked trader discussion without company verification.",
+            "warnings": ["low confidence"],
+        },
+        as_of_date="2026-05-13",
+    )
+    joined = "\n".join(message["content"] for message in messages)
+
+    assert "Compare two independent structured summaries" in joined
+    assert "Do not browse" in joined
+    assert "Do not re-summarize the original article text" in joined
+    assert "Do not make buy, sell, hold, add, reduce, rebalance, or sizing recommendations" in joined
+    assert "human_review_required" in joined
+    assert "xiaomi/mimo-v2-flash" in joined
+    assert "google/gemini-2.5-flash-lite" in joined
+    assert "Social-media posts claimed" in joined
+
+
+def test_openrouter_text_summary_client_synthesizes_outputs(monkeypatch):
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "usage": {
+                    "prompt_tokens": 320,
+                    "completion_tokens": 140,
+                    "total_tokens": 460,
+                    "cost": 0.000074,
+                },
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "symbol": "TSLA",
+                                    "executive_summary": (
+                                        "Both summaries agree the robotaxi date is an unverified rumor."
+                                    ),
+                                    "consensus_facts": [
+                                        "Social media claimed a robotaxi launch date.",
+                                        "No official company source was cited.",
+                                    ],
+                                    "disagreement_notes": [],
+                                    "strongest_risk_flags": ["unverified_rumor"],
+                                    "confidence": 0.42,
+                                    "human_review_required": True,
+                                    "warnings": ["thin_source"],
+                                }
+                            )
+                        }
+                    }
+                ],
+            }
+
+    calls = []
+
+    def fake_post(url, *, headers, json, timeout):
+        calls.append(json)
+        return FakeResponse()
+
+    monkeypatch.setattr("requests.post", fake_post)
+    client = OpenRouterTextSummaryClient(api_key="test-key", model="xiaomi/mimo-v2-flash")
+
+    result = client.synthesize_summaries(
+        {
+            "symbol": "TSLA",
+            "title": "Tesla chatter spikes online",
+            "url": "https://example.com/tsla-chatter",
+        },
+        primary_summary={"model": "xiaomi/mimo-v2-flash", "summary": "unverified rumor"},
+        comparison_summary={"model": "google/gemini-2.5-flash-lite", "summary": "not official"},
+        as_of_date="2026-05-13",
+    )
+
+    assert calls[0]["model"] == "xiaomi/mimo-v2-flash"
+    assert calls[0]["response_format"] == {"type": "json_object"}
+    assert result["source_type"] == "openrouter_summary_synthesis"
+    assert result["symbol"] == "TSLA"
+    assert result["human_review_required"] is True
+    assert result["confidence"] == 0.42
+    assert result["strongest_risk_flags"] == ["unverified_rumor"]
+    assert client.usage_summary()["estimated_total_cost_usd"] == 0.000074
+
+
+def test_dual_openrouter_summary_eval_totals_stage_usage():
+    class FakeClient:
+        def __init__(self, model, result, usage):
+            self.model = model
+            self._result = result
+            self._usage = usage
+
+        def summarize(self, source, *, as_of_date=None):
+            return dict(self._result)
+
+        def synthesize_summaries(self, source, *, primary_summary, comparison_summary, as_of_date=None):
+            return dict(self._result)
+
+        def usage_summary(self):
+            return dict(self._usage)
+
+    primary = FakeClient(
+        "xiaomi/mimo-v2-flash",
+        {"summary": "MiMo summary", "warnings": []},
+        {"estimated_total_cost_usd": 0.0001, "prompt_tokens": 100, "completion_tokens": 40, "total_tokens": 140},
+    )
+    comparison = FakeClient(
+        "google/gemini-2.5-flash-lite",
+        {"summary": "Gemini summary", "warnings": []},
+        {"estimated_total_cost_usd": 0.00016, "prompt_tokens": 110, "completion_tokens": 45, "total_tokens": 155},
+    )
+    synth = FakeClient(
+        "xiaomi/mimo-v2-flash",
+        {"executive_summary": "Consensus summary", "warnings": []},
+        {"estimated_total_cost_usd": 0.00005, "prompt_tokens": 80, "completion_tokens": 30, "total_tokens": 110},
+    )
+
+    result = summarize_with_dual_openrouter_models(
+        {"symbol": "MSFT", "text": "source"},
+        primary_client=primary,
+        comparison_client=comparison,
+        synth_client=synth,
+        as_of_date="2026-05-13",
+    )
+
+    assert [stage["stage"] for stage in result["stages"]] == ["primary_summary", "comparison_summary", "synthesis"]
+    assert result["totals"]["estimated_total_cost_usd"] == 0.00031
+    assert result["totals"]["prompt_tokens"] == 290
+    assert result["totals"]["completion_tokens"] == 115
+    assert result["totals"]["total_tokens"] == 405

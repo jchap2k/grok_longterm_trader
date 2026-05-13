@@ -193,6 +193,13 @@ Perplexity state:
   and fetched text first, then MiMo v2 Flash turns that supplied text into
   snippet-grounded evidence summaries. It is not wired into the scheduler yet
   and must not make trade, sizing, or submit decisions.
+- A live diagnostics harness exists at
+  `scripts/longterm_openrouter_summary_eval.py` for testing a two-agent plus
+  synthesis pattern: primary MiMo summary, comparison Gemini 2.5 Flash Lite
+  summary, and MiMo synthesis of the compact outputs. It records per-stage
+  elapsed time, token usage, OpenRouter-reported cost, optional pricing-table
+  estimates, and `order_submission_enabled=false`. This is a model-selection
+  test tool only, not a scheduler stage.
 - `longterm_portfolio_news_monitor.py` now provides a deterministic daily
   portfolio/watchlist news-monitor artifact. It reuses relevant-news scoring,
   excludes protected holdings by default, links queued portfolio symbols to the
