@@ -18,7 +18,12 @@ def _write_json(path: Path, payload: dict) -> Path:
     return path
 
 
-def _ready_artifacts(tmp_path: Path, *, generated_at: str | None = None) -> tuple[Path, Path, Path]:
+def _ready_artifacts(
+    tmp_path: Path,
+    *,
+    generated_at: str | None = None,
+    success_count: int = 3,
+) -> tuple[Path, Path, Path]:
     generated_at = generated_at or datetime.now(UTC).isoformat().replace("+00:00", "Z")
     handoff = _write_json(
         tmp_path / "scheduler_handoff.json",
@@ -37,10 +42,13 @@ def _ready_artifacts(tmp_path: Path, *, generated_at: str | None = None) -> tupl
         {
             "mode": "pipeline_scheduler",
             "status": "completed",
-            "success_count": 1,
+            "success_count": success_count,
             "error_count": 0,
             "order_submission_enabled": False,
-            "runs": [{"status": "completed", "position_review_queue_exit_code": 0}],
+            "runs": [
+                {"status": "completed", "position_review_queue_exit_code": 0}
+                for _ in range(success_count)
+            ],
         },
     )
     position_queue = _write_json(
@@ -78,8 +86,28 @@ def test_submit_mode_plan_reports_ready_without_emitting_submit_command(tmp_path
     assert report["runnable_submit_command_emitted"] is False
     assert "submit_command" not in report
     assert report["checks"]["scheduler_handoff"] == "ready"
+    assert report["checks"]["no_submit_scheduler_soak"] == "ready"
     assert report["checks"]["position_review_queue"] == "ready"
     assert report["next_safe_action"] == "manual_review_required_before_submit_profile"
+
+
+def test_submit_mode_plan_blocks_until_min_clean_scheduler_runs(tmp_path):
+    handoff, scheduler, position_queue = _ready_artifacts(tmp_path, success_count=2)
+
+    report = build_paper_submit_mode_plan(
+        PaperSubmitModePlanInputs(
+            scheduler_handoff=handoff,
+            pipeline_scheduler_summary=scheduler,
+            position_review_queue=position_queue,
+        ),
+        now_func=lambda: datetime(2026, 5, 8, 16, tzinfo=UTC),
+    )
+
+    assert report["status"] == "blocked"
+    assert "no_submit_clean_run_count_below_minimum" in report["blockers"]
+    assert report["checks"]["no_submit_scheduler_soak"] == "blocked"
+    assert report["scheduler_soak"]["required_clean_runs"] == 3
+    assert report["scheduler_soak"]["observed_clean_runs"] == 2
 
 
 def test_submit_mode_plan_blocks_missing_or_stale_handoff(tmp_path):
@@ -157,6 +185,8 @@ def test_submit_mode_plan_cli_writes_json(tmp_path, capsys):
                 str(scheduler),
                 "--position-review-queue",
                 str(position_queue),
+                "--min-clean-scheduler-runs",
+                "3",
                 "--output",
                 str(output),
                 "--json",

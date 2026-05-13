@@ -21,6 +21,7 @@ class PaperSubmitModePlanInputs:
     pipeline_scheduler_summary: str | Path
     position_review_queue: str | Path
     max_handoff_age_hours: int = 24
+    min_clean_scheduler_runs: int = 3
 
 
 def build_paper_submit_mode_plan(
@@ -47,6 +48,8 @@ def build_paper_submit_mode_plan(
         warnings=warnings,
     )
     _check_scheduler_summary(scheduler=scheduler, blockers=blockers)
+    soak = _scheduler_soak_summary(scheduler, min_clean_runs=inputs.min_clean_scheduler_runs)
+    _check_scheduler_soak(soak=soak, blockers=blockers)
     _check_position_review_queue(position_queue=position_queue, blockers=blockers)
     _check_submission_boundary(
         handoff=handoff,
@@ -67,9 +70,11 @@ def build_paper_submit_mode_plan(
         "checks": {
             "scheduler_handoff": "ready" if _handoff_ready(handoff, blockers) else "blocked",
             "no_submit_scheduler_summary": "ready" if _scheduler_ready(scheduler, blockers) else "blocked",
+            "no_submit_scheduler_soak": "ready" if _scheduler_soak_ready(blockers) else "blocked",
             "position_review_queue": "ready" if _position_queue_ready(position_queue, blockers) else "blocked",
             "order_submission_boundary": "ready" if not _has_submission_boundary_blocker(blockers) else "blocked",
         },
+        "scheduler_soak": soak,
         "blockers": sorted(set(blockers)),
         "warnings": warnings,
         "order_submission_enabled": False,
@@ -95,6 +100,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pipeline-scheduler-summary", required=True)
     parser.add_argument("--position-review-queue", required=True)
     parser.add_argument("--max-handoff-age-hours", type=int, default=24)
+    parser.add_argument(
+        "--min-clean-scheduler-runs",
+        type=int,
+        default=3,
+        help="Minimum clean completed no-submit scheduler runs before submit-mode manual review.",
+    )
     parser.add_argument("--output", default="")
     parser.add_argument("--json", action="store_true")
     return parser
@@ -107,6 +118,7 @@ def run_cli(args: argparse.Namespace) -> int:
             pipeline_scheduler_summary=args.pipeline_scheduler_summary,
             position_review_queue=args.position_review_queue,
             max_handoff_age_hours=args.max_handoff_age_hours,
+            min_clean_scheduler_runs=args.min_clean_scheduler_runs,
         )
     )
     if args.output:
@@ -160,6 +172,11 @@ def _check_scheduler_summary(*, scheduler: Mapping[str, Any], blockers: list[str
         blockers.append("position_review_queue_stage_failed")
 
 
+def _check_scheduler_soak(*, soak: Mapping[str, Any], blockers: list[str]) -> None:
+    if int(soak.get("observed_clean_runs") or 0) < int(soak.get("required_clean_runs") or 0):
+        blockers.append("no_submit_clean_run_count_below_minimum")
+
+
 def _check_position_review_queue(*, position_queue: Mapping[str, Any], blockers: list[str]) -> None:
     if not position_queue:
         blockers.append("position_review_queue_missing_or_unreadable")
@@ -199,6 +216,10 @@ def _scheduler_ready(scheduler: Mapping[str, Any], blockers: list[str]) -> bool:
     if not scheduler:
         return False
     return not any(blocker.startswith("pipeline_scheduler") for blocker in blockers)
+
+
+def _scheduler_soak_ready(blockers: list[str]) -> bool:
+    return not any(blocker.startswith("no_submit_clean_run") for blocker in blockers)
 
 
 def _position_queue_ready(position_queue: Mapping[str, Any], blockers: list[str]) -> bool:
@@ -243,6 +264,39 @@ def _latest_mapping(items: list[Any]) -> dict[str, Any]:
         if isinstance(item, Mapping):
             return dict(item)
     return {}
+
+
+def _scheduler_soak_summary(scheduler: Mapping[str, Any], *, min_clean_runs: int) -> dict[str, Any]:
+    required = max(1, int(min_clean_runs or 0))
+    runs = scheduler.get("runs") if isinstance(scheduler.get("runs"), list) else []
+    clean_runs = [run for run in runs if isinstance(run, Mapping) and _is_clean_no_submit_run(run)]
+    return {
+        "required_clean_runs": required,
+        "observed_clean_runs": len(clean_runs),
+        "scheduler_success_count": _int_value(scheduler.get("success_count")),
+        "scheduler_error_count": _int_value(scheduler.get("error_count")),
+    }
+
+
+def _is_clean_no_submit_run(run: Mapping[str, Any]) -> bool:
+    if run.get("status") != "completed":
+        return False
+    if str(run.get("blocker") or "").strip():
+        return False
+    for key in (
+        "pre_pipeline_refresh_exit_code",
+        "market_regime_exit_code",
+        "position_review_queue_exit_code",
+        "pipeline_exit_code",
+        "scheduler_policy_exit_code",
+        "account_refresh_exit_code",
+        "post_run_verification_exit_code",
+        "scheduler_review_bundle_exit_code",
+    ):
+        value = run.get(key)
+        if value is not None and _int_value(value) != 0:
+            return False
+    return True
 
 
 def _int_value(value: Any) -> int:

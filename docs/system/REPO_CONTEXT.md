@@ -331,10 +331,10 @@ Scheduler-readiness features now exist:
   may deserve add-toward-target review, and does not create trade authority.
 - `scripts/longterm_paper_submit_mode_plan.py` is a disabled-by-default
   readiness checklist for future submit-capable paper profiles. It requires a
-  fresh ready scheduler handoff, a successful no-submit scheduler summary, and
-  a completed position-review queue; it emits no runnable submit command and
-  keeps `order_submission_enabled=false`, `submit_profile_enabled=false`, and
-  `broker_calls_enabled=false`.
+  fresh ready scheduler handoff, at least 3 clean completed no-submit
+  scheduler runs by default, and a completed position-review queue; it emits no
+  runnable submit command and keeps `order_submission_enabled=false`,
+  `submit_profile_enabled=false`, and `broker_calls_enabled=false`.
 - `scripts/longterm_scheduler_review_bundle.py` is the post-scheduler
   no-submit review gate bundler. It consumes a dashboard manifest, scheduler
   handoff, scheduler summary, position-review queue, and post-run verifier

@@ -1216,7 +1216,10 @@ writes `run_00N\scheduler_review_bundle\scheduler_review_bundle.json`,
 The bundle runs only after the verifier exits `0`; verifier failures skip it,
 and bundle failures mark the scheduler run failed with
 `scheduler_review_bundle_command_failed`. The stage is read-only and keeps
-order submission disabled.
+order submission disabled. The disabled paper-submit mode plan requires 3
+clean completed no-submit scheduler runs by default before it can return
+`ready_for_manual_review`; use `--min-clean-scheduler-runs` only if you are
+intentionally changing that soak requirement for a supervised review.
 When `--final-planning-refresh` is supplied, the preset forwards
 `--final-planning-timeout-seconds`; if the operator omits it, the preset uses a
 900-second default. The rendered `resource_controls` object records both

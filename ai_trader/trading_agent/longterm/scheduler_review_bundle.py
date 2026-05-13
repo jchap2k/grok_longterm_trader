@@ -35,6 +35,7 @@ class SchedulerReviewBundleInputs:
     max_handoff_age_hours: int = 24
     buy_promotion_artifact: str | Path = ""
     final_action_plan: str | Path = ""
+    min_clean_scheduler_runs: int = 3
 
 
 def build_scheduler_review_bundle(
@@ -56,6 +57,7 @@ def build_scheduler_review_bundle(
             pipeline_scheduler_summary=inputs.pipeline_scheduler_summary,
             position_review_queue=inputs.position_review_queue,
             max_handoff_age_hours=inputs.max_handoff_age_hours,
+            min_clean_scheduler_runs=inputs.min_clean_scheduler_runs,
         ),
         now_func=lambda: now,
     )

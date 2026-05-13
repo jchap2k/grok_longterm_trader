@@ -18,6 +18,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--post-run-verification", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--max-handoff-age-hours", type=int, default=24)
+    parser.add_argument(
+        "--min-clean-scheduler-runs",
+        type=int,
+        default=3,
+        help="Minimum clean completed no-submit scheduler runs before submit-mode manual review.",
+    )
     parser.add_argument("--buy-promotion-artifact", default="")
     parser.add_argument("--final-action-plan", default="")
     parser.add_argument("--json", action="store_true")
@@ -34,6 +40,7 @@ def run_cli(args: argparse.Namespace) -> int:
             post_run_verification=args.post_run_verification,
             output_dir=args.output_dir,
             max_handoff_age_hours=args.max_handoff_age_hours,
+            min_clean_scheduler_runs=args.min_clean_scheduler_runs,
             buy_promotion_artifact=args.buy_promotion_artifact,
             final_action_plan=args.final_action_plan,
         )

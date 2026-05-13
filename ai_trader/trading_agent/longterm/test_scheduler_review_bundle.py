@@ -56,7 +56,7 @@ def _ready_inputs(tmp_path: Path) -> SchedulerReviewBundleInputs:
         {
             "mode": "pipeline_scheduler",
             "status": "completed",
-            "success_count": 1,
+            "success_count": 3,
             "error_count": 0,
             "order_submission_enabled": False,
             "runs": [
@@ -72,6 +72,7 @@ def _ready_inputs(tmp_path: Path) -> SchedulerReviewBundleInputs:
                         "final_planning_timeout_seconds": 900,
                     },
                 }
+                for _ in range(3)
             ],
         },
     )
@@ -138,8 +139,29 @@ def test_scheduler_review_bundle_writes_ready_plan_and_dashboard_manifest(tmp_pa
     assert plan_path.exists()
     assert review_manifest.exists()
     assert loaded_plan["status"] == "ready_for_manual_review"
+    assert loaded_plan["scheduler_soak"]["required_clean_runs"] == 3
+    assert loaded_plan["scheduler_soak"]["observed_clean_runs"] == 3
     assert status == 200
     assert json.loads(body.decode("utf-8"))["status"] == "ready_for_manual_review"
+
+
+def test_scheduler_review_bundle_blocks_until_min_clean_scheduler_runs(tmp_path):
+    inputs = _ready_inputs(tmp_path)
+    scheduler = json.loads(Path(inputs.pipeline_scheduler_summary).read_text(encoding="utf-8"))
+    scheduler["success_count"] = 2
+    scheduler["runs"] = scheduler["runs"][:2]
+    Path(inputs.pipeline_scheduler_summary).write_text(json.dumps(scheduler), encoding="utf-8")
+
+    summary = build_scheduler_review_bundle(
+        inputs,
+        now_func=lambda: datetime(2026, 5, 8, 16, tzinfo=UTC),
+    )
+    plan = json.loads(Path(summary["paper_submit_mode_plan"]).read_text(encoding="utf-8"))
+
+    assert summary["status"] == "blocked"
+    assert "paper_submit_mode_plan_not_ready" in summary["blockers"]
+    assert "no_submit_clean_run_count_below_minimum" in plan["blockers"]
+    assert plan["checks"]["no_submit_scheduler_soak"] == "blocked"
 
 
 def test_scheduler_review_bundle_blocks_verification_or_scheduler_submit_boundary(tmp_path):
