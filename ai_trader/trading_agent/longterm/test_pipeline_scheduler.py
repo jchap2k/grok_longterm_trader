@@ -2842,6 +2842,7 @@ def test_pipeline_scheduler_cli_ongoing_no_submit_preset_renders_scheduler_revie
     assert "scheduler_cadence_verification.json" in run["scheduler_review_bundle_command"]
     assert "--output-dir" in run["scheduler_review_bundle_command"]
     assert "scheduler_review_bundle" in run["scheduler_review_bundle_command"]
+    assert "--allow-blocked-review-exit-zero" in run["scheduler_review_bundle_command"]
     assert "--submit-paper-orders" not in run["scheduler_review_bundle_command"]
 
 

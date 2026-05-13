@@ -26,6 +26,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--buy-promotion-artifact", default="")
     parser.add_argument("--final-action-plan", default="")
+    parser.add_argument(
+        "--allow-blocked-review-exit-zero",
+        action="store_true",
+        help=(
+            "Exit zero after writing blocked review artifacts when the order-submission boundary remains safe. "
+            "Use this for no-submit scheduler artifact collection."
+        ),
+    )
     parser.add_argument("--json", action="store_true")
     return parser
 
@@ -52,7 +60,11 @@ def run_cli(args: argparse.Namespace) -> int:
         print(f"Manifest: {summary['dashboard_review_gates_manifest']}")
         if summary["blockers"]:
             print("Blockers: " + ", ".join(summary["blockers"]))
-    return 0 if summary["status"] == "ready_for_manual_review" else 1
+    if summary["status"] == "ready_for_manual_review":
+        return 0
+    if args.allow_blocked_review_exit_zero and summary.get("checks", {}).get("order_submission_boundary") == "ready":
+        return 0
+    return 1
 
 
 def main(argv: list[str] | None = None) -> int:

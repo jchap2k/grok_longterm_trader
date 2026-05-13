@@ -164,6 +164,42 @@ def test_scheduler_review_bundle_blocks_until_min_clean_scheduler_runs(tmp_path)
     assert plan["checks"]["no_submit_scheduler_soak"] == "blocked"
 
 
+def test_scheduler_review_bundle_cli_can_exit_zero_for_blocked_review_artifact(tmp_path, capsys):
+    inputs = _ready_inputs(tmp_path)
+    scheduler = json.loads(Path(inputs.pipeline_scheduler_summary).read_text(encoding="utf-8"))
+    scheduler["success_count"] = 1
+    scheduler["runs"] = scheduler["runs"][:1]
+    Path(inputs.pipeline_scheduler_summary).write_text(json.dumps(scheduler), encoding="utf-8")
+
+    code = run_cli(
+        build_parser().parse_args(
+            [
+                "--dashboard-manifest",
+                str(inputs.dashboard_manifest),
+                "--scheduler-handoff",
+                str(inputs.scheduler_handoff),
+                "--pipeline-scheduler-summary",
+                str(inputs.pipeline_scheduler_summary),
+                "--position-review-queue",
+                str(inputs.position_review_queue),
+                "--post-run-verification",
+                str(inputs.post_run_verification),
+                "--output-dir",
+                str(inputs.output_dir),
+                "--allow-blocked-review-exit-zero",
+                "--json",
+            ]
+        )
+    )
+    printed = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert printed["status"] == "blocked"
+    assert printed["checks"]["order_submission_boundary"] == "ready"
+    assert printed["order_submission_enabled"] is False
+    assert Path(printed["paper_submit_mode_plan"]).exists()
+
+
 def test_scheduler_review_bundle_blocks_verification_or_scheduler_submit_boundary(tmp_path):
     inputs = _ready_inputs(tmp_path)
     verification = json.loads(Path(inputs.post_run_verification).read_text(encoding="utf-8"))

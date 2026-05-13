@@ -857,6 +857,7 @@ def _build_ongoing_no_submit_templates(args: argparse.Namespace) -> dict[str, st
             "{post_run_verification}",
             "--output-dir",
             "{scheduler_review_bundle_output_dir}",
+            "--allow-blocked-review-exit-zero",
             "--json",
         ]
 
