@@ -185,6 +185,14 @@ Perplexity state:
   broad enrichment.
 - Recent 25-name smoke produced full Perplexity research objects with article
   evidence and no malformed fallback rows.
+- OpenRouter source-text summarization now has an isolated adapter for cheap
+  supplied-text normalization. The default candidate is
+  `xiaomi/mimo-v2-flash`, based on local smoke tests showing low cost and clean
+  JSON with `response_format={"type":"json_object"}`. Intended future use is a
+  daily portfolio/search flow where a deterministic search layer collects URLs
+  and fetched text first, then MiMo v2 Flash turns that supplied text into
+  snippet-grounded evidence summaries. It is not wired into the scheduler yet
+  and must not make trade, sizing, or submit decisions.
 - `longterm_portfolio_news_monitor.py` now provides a deterministic daily
   portfolio/watchlist news-monitor artifact. It reuses relevant-news scoring,
   excludes protected holdings by default, links queued portfolio symbols to the
