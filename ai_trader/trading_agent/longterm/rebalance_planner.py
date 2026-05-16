@@ -31,6 +31,8 @@ class RebalanceProposal:
     target_review_due: bool | None = None
     source_thesis_state: str = ""
     target_thesis_state: str = ""
+    source_thesis_durability: str = ""
+    target_thesis_durability: str = ""
     source_review_adjustment: int = 0
     source_rebalance_score: int = 0
     rebalance_score_gap: int = 0
@@ -76,6 +78,7 @@ class RebalancePlanner:
                 benchmark_guard_reason=benchmark_guard_reason,
                 target_review_due=_review_due(target_review_status),
                 target_thesis_state=_thesis_state(target_review_status),
+                target_thesis_durability=_thesis_durability(target_review_status),
             )
         if benchmark_guard_result and benchmark_guard_result.should_pause_new_buys:
             return RebalanceProposal(
@@ -147,6 +150,8 @@ class RebalancePlanner:
                 target_review_due=_review_due(target_review_status),
                 source_thesis_state=weakest_thesis_state,
                 target_thesis_state=_thesis_state(target_review_status),
+                source_thesis_durability=_thesis_durability(_review_status_for(review_status_by_symbol, weakest_symbol)),
+                target_thesis_durability=_thesis_durability(target_review_status),
                 source_review_adjustment=weakest_review_adjustment,
                 source_rebalance_score=max(0, weakest_rebalance_score),
                 rebalance_score_gap=rebalance_score_gap,
@@ -198,11 +203,23 @@ def _thesis_state(status: Mapping[str, Any]) -> str:
     return str(status.get("thesis_state") or "")
 
 
+def _thesis_durability(status: Mapping[str, Any]) -> str:
+    """Extract thesis_durability (from re-underwriting) or fall back gracefully."""
+    return str(status.get("thesis_durability") or status.get("thesis_state") or "")
+
+
 def _review_risk_adjustment(status: Mapping[str, Any]) -> int:
     bucket = review_risk_bucket(status)
     adjustment = 1 if _review_due(status) else 0
     if bucket == "broken":
         adjustment += 4
     elif bucket in {"stale", "weakening"}:
+        adjustment += 2
+
+    # Additional penalty from new thesis_durability column (re-underwriting)
+    durability = str(status.get("thesis_durability") or "").lower()
+    if durability == "broken":
+        adjustment += 3
+    elif durability == "weakening":
         adjustment += 2
     return adjustment

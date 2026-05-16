@@ -54,6 +54,8 @@ def _record(
 
 def test_account_action_plan_builds_allowed_buy_intent(tmp_path):
     journal = LongTermDecisionJournal(tmp_path / "journal.db")
+    # Record high suggested_size_pct (8) but with enable_category_risk_sizing=false (default)
+    # the account plan caps new buys at legacy 2% (680 on 34k tradable).
     decision_id = _record(journal, "NVDA", recommendation="BUY", confidence=91, size=8)
     profile = PortfolioProfile(tradable_capital=34000, protected_symbols=["FXAIX"])
     state = PortfolioState(cash=5000, protected_symbols=["FXAIX"])
@@ -71,7 +73,9 @@ def test_account_action_plan_builds_allowed_buy_intent(tmp_path):
     assert payload["intents"][0]["intent_type"] == "BUY"
     assert payload["intents"][0]["symbol"] == "NVDA"
     assert payload["intents"][0]["order_intent"] == "BUY"
-    assert payload["intents"][0]["trade_value"] == 2720.0
+    # With enable_category_risk_sizing=false (default), new buys are capped at legacy 2%
+    # even if the journal records a higher suggested_size_pct (e.g. 8%).
+    assert payload["intents"][0]["trade_value"] == 680.0
     assert payload["intents"][0]["allowed"] is True
     assert payload["intents"][0]["decision_id"] == decision_id
     assert payload["intents"][0]["risk_review"]["allowed"] is True
@@ -328,11 +332,11 @@ def test_account_action_plan_parks_leftover_cash_in_spy_during_normal_regime(tmp
 
     assert [intent.intent_type for intent in plan.intents] == ["BUY", "PARK_IDLE_CASH"]
     assert plan.intents[0].symbol == "AMZN"
-    assert plan.intents[0].trade_value == 850.0
+    assert plan.intents[0].trade_value == 680.0
     parking = plan.intents[1]
     assert parking.symbol == "SPY"
     assert parking.order_intent == "BUY"
-    assert parking.trade_value == 4150.0
+    assert parking.trade_value == 4320.0
     assert parking.allowed is True
     assert "idle active cash" in parking.reason
 
@@ -383,8 +387,8 @@ def test_account_action_plan_caps_parking_to_active_sleeve_budget(tmp_path):
     )
 
     parking = [intent for intent in plan.intents if intent.intent_type == "PARK_IDLE_CASH"][0]
-    assert plan.intents[0].trade_value == 850.0
-    assert parking.trade_value == 33150.0
+    assert plan.intents[0].trade_value == 680.0
+    assert parking.trade_value == 33320.0
 
 
 def test_account_action_plan_splits_idle_cash_when_uncertainty_is_elevated(tmp_path):
@@ -409,8 +413,8 @@ def test_account_action_plan_splits_idle_cash_when_uncertainty_is_elevated(tmp_p
 
     parking = [intent for intent in plan.intents if intent.intent_type == "PARK_IDLE_CASH"]
     assert [(intent.symbol, intent.trade_value) for intent in parking] == [
-        ("SPY", 2075.0),
-        ("SGOV", 2075.0),
+        ("SPY", 2160.0),
+        ("SGOV", 2160.0),
     ]
 
 
@@ -440,7 +444,7 @@ def test_account_action_plan_uses_sgov_not_tlt_when_vix_spikes_with_rising_yield
 
     defensive = [intent for intent in plan.intents if intent.intent_type == "PARK_DEFENSIVE_CASH"]
     assert regime.risk_regime == "inflation_rate_shock"
-    assert [(intent.symbol, intent.trade_value) for intent in defensive] == [("SGOV", 4150.0)]
+    assert [(intent.symbol, intent.trade_value) for intent in defensive] == [("SGOV", 4320.0)]
     assert "TLT" not in [intent.symbol for intent in plan.intents]
 
 
@@ -470,8 +474,8 @@ def test_account_action_plan_caps_tlt_when_equity_panic_has_falling_yields(tmp_p
     defensive = [intent for intent in plan.intents if intent.intent_type == "PARK_DEFENSIVE_CASH"]
     assert regime.risk_regime == "equity_panic_falling_rates"
     assert [(intent.symbol, intent.trade_value) for intent in defensive] == [
-        ("SGOV", 2905.0),
-        ("TLT", 1245.0),
+        ("SGOV", 3024.0),
+        ("TLT", 1296.0),
     ]
 
 
@@ -501,6 +505,6 @@ def test_account_action_plan_tightens_new_buy_size_under_macro_pressure(tmp_path
     )
 
     buy = [intent for intent in plan.intents if intent.symbol == "MSFT" and intent.intent_type == "BUY"][0]
-    assert buy.trade_value == 1500.0
+    assert buy.trade_value == 500.0
     assert "macro regime caution" in buy.reason.lower()
     assert buy.risk_review["macro_regime"]["sizing_caution"] == "tighten_new_buy_sizing"

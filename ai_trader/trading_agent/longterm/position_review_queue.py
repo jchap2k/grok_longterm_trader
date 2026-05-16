@@ -247,6 +247,9 @@ def _base_row(
         "thesis_state": str(status.get("thesis_state") or ""),
         "review_due": bool(status.get("review_due")),
         "review_reason": str(status.get("review_reason") or ""),
+        # Re-underwriting durability signals (new in 2026-05)
+        "thesis_durability": str(status.get("thesis_durability") or status.get("thesis_state") or ""),
+        "reunderwrite_due": bool(status.get("reunderwrite_due") or status.get("thesis_durability") in {"weakening", "broken"}),
         "portfolio_market_value": market_value,
         "portfolio_quantity": float(holding.quantity if holding else 0.0),
         "portfolio_cost_basis": cost,
@@ -316,6 +319,7 @@ def _staged_graduation_review(
         suggested_size_pct=suggested_size_pct,
         margin_of_safety_score=margin_score,
         risk_report=evaluate_permanent_loss_risk(packet),
+        company_category=packet.get("company_category"),
     )
     if staged.label != "starter_position" or staged.recommended_size_pct <= 0:
         return None

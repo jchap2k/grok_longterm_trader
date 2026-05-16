@@ -158,11 +158,18 @@ def evaluate_staged_entry(
     suggested_size_pct: float,
     margin_of_safety_score: float,
     risk_report: PermanentLossRiskReport,
+    company_category: str | None = None,
+    enable_category_risk_sizing: bool = False,
 ) -> StagedEntryPlan:
-    """Prefer starter sizing when quality is promising but price/risk cushion is thin."""
+    """
+    Prefer starter sizing when quality is promising but price/risk cushion is thin.
+    Lynch-style company category adjustments are opt-in via enable_category_risk_sizing.
+    When disabled (default), uses legacy uniform starter caps (max 2%, MOS upper 75).
+    """
     original = max(0.0, float(suggested_size_pct or 0.0))
     if original <= 0:
         return StagedEntryPlan("no_entry", 0.0, original, "No positive active-sleeve size was suggested.")
+
     if risk_report.severity == "high":
         return StagedEntryPlan(
             "confirm_before_entry",
@@ -170,13 +177,44 @@ def evaluate_staged_entry(
             original,
             "Permanent-loss or overpayment risk requires confirmation before entry.",
         )
-    if risk_report.severity == "medium" or 60 <= margin_of_safety_score < 75:
+
+    # Gate category-specific starter caps behind the profile flag
+    if not enable_category_risk_sizing:
+        max_starter = 2.0
+        medium_mos_upper = 75
+        category_note = ""
+    else:
+        cat = (company_category or "").lower()
+        if cat in ("cyclical", "turnaround", "asset_play"):
+            max_starter = 1.0
+            medium_mos_upper = 78
+            category_note = f" ({cat} cap applied)"
+        elif cat == "slow_grower":
+            max_starter = 1.5
+            medium_mos_upper = 76
+            category_note = " (slow grower)"
+        elif cat == "fast_grower":
+            max_starter = 3.0
+            medium_mos_upper = 72
+            category_note = " (fast grower)"
+        else:
+            max_starter = 2.0
+            medium_mos_upper = 75
+            category_note = ""
+
+    # Preserve original logic: starter only if severity=="medium" OR in the medium MOS band
+    # (very low MOS without risk flags should still allow target if no other issues)
+    in_medium_mos_band = 60 <= margin_of_safety_score < medium_mos_upper
+
+    if risk_report.severity == "medium" or in_medium_mos_band:
+        starter_size = round(min(original, max_starter), 2)
         return StagedEntryPlan(
             "starter_position",
-            round(min(original, 2.0), 2),
+            starter_size,
             original,
-            "Use a staged starter position until the margin of safety is clearer.",
+            f"Use a staged starter position until the margin of safety is clearer.{category_note}",
         )
+
     return StagedEntryPlan(
         "target_position",
         round(original, 2),

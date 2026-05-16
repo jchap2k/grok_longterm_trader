@@ -8,6 +8,8 @@ import math
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
 
+from longterm.company_classifier import classify_from_idea
+
 
 FORMULA_VERSION = "research_selection_v1"
 SCHEMA_VERSION = 1
@@ -64,6 +66,14 @@ def select_research_queue(
                 }
             )
             continue
+
+        # Attach Lynch-style company category early (Fast Grower, Stalwart, etc.)
+        try:
+            category = classify_from_idea(row)
+            row["company_category"] = category.value
+        except Exception:
+            row["company_category"] = None
+
         scored.append(_with_selection_metadata(row, campaign_id=campaign_key, current=current, recent=recent))
 
     scored.sort(
@@ -200,6 +210,32 @@ def _selection_score(
         score -= 5.0
         portfolio_context = "recently_researched"
         penalties.append("recent research deprioritized -5.0")
+
+    # Lynch-style category tilt — stronger for high-quality versions of good categories
+    category = str(idea.get("company_category") or "").lower()
+    quality_growth = _scorecard_signal(scorecard)  # reuse the quality+growth signal we already calculated
+
+    if category == "fast_grower":
+        boost = 4.5 if quality_growth > 65 else 2.5
+        score += boost
+        reasons.append(f"category_boost=fast_grower(+{boost:.1f})")
+    elif category == "stalwart":
+        boost = 3.0 if quality_growth > 60 else 1.5
+        score += boost
+        reasons.append(f"category_boost=stalwart(+{boost:.1f})")
+    elif category == "slow_grower":
+        # Mild preference for high-quality slow growers (defensive compounders)
+        if quality_growth > 55:
+            score += 1.0
+            reasons.append("category_boost=high_quality_slow_grower")
+    elif category in ("cyclical", "turnaround"):
+        penalty = 4.0 if quality_growth < 50 else 1.5
+        score -= penalty
+        penalties.append(f"category_penalty={category}(-{penalty:.1f})")
+    elif category == "asset_play":
+        score -= 1.0  # Generally harder to underwrite, slight deprioritization
+        penalties.append("category_penalty=asset_play")
+
     return round(max(0.0, min(100.0, score)), 2), reasons, penalties, portfolio_context
 
 

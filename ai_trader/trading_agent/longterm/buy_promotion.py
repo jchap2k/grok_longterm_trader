@@ -8,20 +8,41 @@ from typing import Any, Mapping
 
 from longterm.decision_journal import LongTermDecisionJournal
 from longterm.graham_risk import (
+    StagedEntryPlan,
     classify_defensive_enterprising_mode,
     evaluate_permanent_loss_risk,
     evaluate_staged_entry,
     normalized_earnings_quality_label,
 )
+from longterm.risk.category_risk_policy import apply_category_risk_adjustment
 from longterm.portfolio_state import PortfolioState
 from longterm.reviewers import MarginOfSafetyReviewer
 from portfolio.portfolio_profile import PortfolioProfile
 from research.intake import create_research_packet_from_idea
+from research.research_packet import ResearchPacket
 
 
 ACTIONABLE_CONFIDENCE_THRESHOLD = 70
 MIN_ACTIONABLE_EVIDENCE_SCORE = 70
 MARGIN_OF_SAFETY_FOLLOWUP_THRESHOLD = 60
+
+
+def _get_company_category_str(packet: Any) -> str:
+    """Safely extract company_category whether packet is dict or ResearchPacket."""
+    if isinstance(packet, ResearchPacket):
+        return packet.company_category.value if packet.company_category else ""
+    if isinstance(packet, Mapping):
+        cat = packet.get("company_category")
+        if isinstance(cat, str):
+            return cat
+        if cat is not None:
+            try:
+                return str(cat.value) if hasattr(cat, "value") else str(cat)
+            except Exception:
+                return str(cat)
+    return ""
+
+
 
 _OVERPAYMENT_MARKERS = (
     "extreme p/e",
@@ -65,6 +86,10 @@ class BuyPromotionReview:
     staged_entry_size_pct: float
     staged_entry_label: str
     normalized_earnings_quality: str
+    company_category: str = ""
+    original_suggested_size_pct: float = 0.0          # LLM-suggested size before category adjustment
+    category_risk_adjusted_size_pct: float = 0.0      # Size after Lynch category risk multiplier
+    category_adjustment_applied: bool = False         # Whether the category multiplier was applied
     blockers: list[str] = field(default_factory=list)
     followups: list[str] = field(default_factory=list)
     reasons: list[str] = field(default_factory=list)
@@ -93,6 +118,21 @@ class BuyPromotionReviewer:
         protected.update(str(item).upper() for item in (portfolio_state.protected_symbols or []))
         protected.update(str(item).upper() for item in (packet.get("protected_symbols") or []))
 
+        company_category = _get_company_category_str(packet)
+        original_llm_size = suggested_size_pct
+
+        # Category risk sizing is opt-in
+        effective_suggested_size_pct = suggested_size_pct
+        category_adjustment_applied = False
+        adjustment_metadata = {}
+
+        if getattr(profile, "enable_category_risk_sizing", False):
+            effective_suggested_size_pct, adjustment_metadata = apply_category_risk_adjustment(
+                suggested_size_pct,
+                company_category,
+            )
+            category_adjustment_applied = adjustment_metadata.get("applied", False)
+
         blockers: list[str] = []
         followups: list[str] = []
         reasons: list[str] = []
@@ -117,6 +157,10 @@ class BuyPromotionReviewer:
                 staged_entry_size_pct=0.0,
                 staged_entry_label="not_applicable",
                 normalized_earnings_quality=normalized_earnings_quality_label(packet),
+                company_category=_get_company_category_str(packet),
+                original_suggested_size_pct=suggested_size_pct,
+                category_risk_adjusted_size_pct=suggested_size_pct,
+                category_adjustment_applied=False,
                 blockers=blockers,
                 followups=followups,
                 reasons=reasons,
@@ -149,6 +193,10 @@ class BuyPromotionReviewer:
                 staged_entry_size_pct=0.0,
                 staged_entry_label="not_applicable",
                 normalized_earnings_quality=normalized_earnings_quality_label(packet),
+                company_category=_get_company_category_str(packet),
+                original_suggested_size_pct=suggested_size_pct,
+                category_risk_adjusted_size_pct=suggested_size_pct,
+                category_adjustment_applied=False,
                 blockers=blockers,
                 followups=followups,
                 reasons=reasons,
@@ -160,10 +208,13 @@ class BuyPromotionReviewer:
         margin_of_safety_review = _margin_of_safety_review(packet)
         margin_of_safety_score = margin_of_safety_review.score
         permanent_loss_report = evaluate_permanent_loss_risk(packet)
+        enable_cat_risk = getattr(profile, "enable_category_risk_sizing", False)
         staged_entry = evaluate_staged_entry(
-            suggested_size_pct=suggested_size_pct,
+            suggested_size_pct=effective_suggested_size_pct,
             margin_of_safety_score=margin_of_safety_score,
             risk_report=permanent_loss_report,
+            company_category=company_category if enable_cat_risk else None,
+            enable_category_risk_sizing=enable_cat_risk,
         )
         defensive_enterprising_mode = classify_defensive_enterprising_mode(
             {**dict(packet), "recommendation": first_pass_action},
@@ -218,6 +269,39 @@ class BuyPromotionReviewer:
                 followups.append(marker.replace(" ", "_"))
                 reasons.append(f"Warning requires follow-up before action: {marker}.")
 
+        # === Category-aware adjustments (Lynch-style) — opt-in only ===
+        if getattr(profile, "enable_category_risk_sizing", False):
+            superscore = 0
+            try:
+                superscore = float(packet.get("quality_growth_scorecard", {}).get("superscore", 0))
+            except Exception:
+                pass
+
+            if company_category in ("cyclical", "turnaround", "asset_play"):
+                # Stricter standards for harder-to-underwrite categories
+                if evidence_score < MIN_ACTIONABLE_EVIDENCE_SCORE + 8:
+                    followups.append("category_strict_evidence")
+                    reasons.append(f"{company_category.title()} requires stronger evidence (score {evidence_score:.0f}).")
+
+                if margin_of_safety_score < 68:
+                    followups.append("category_strict_margin")
+                    reasons.append(f"{company_category.title()} requires higher margin of safety.")
+
+                # Cap starter size more aggressively for these categories
+                if staged_entry.label == "starter_position" and staged_entry.recommended_size_pct > 1.5:
+                    staged_entry = StagedEntryPlan(
+                        label=staged_entry.label,
+                        recommended_size_pct=1.5,
+                        original_size_pct=staged_entry.original_size_pct,
+                        reason=f"Category risk cap applied for {company_category}",
+                    )
+
+            elif company_category == "fast_grower" and superscore > 72:
+                # High-quality fast growers can be slightly more lenient
+                if "margin_of_safety_review" in followups and margin_of_safety_score > 55:
+                    followups = [f for f in followups if f != "margin_of_safety_review"]
+                    reasons = [r for r in reasons if "Margin of safety review" not in r]
+
         if blockers:
             promotion_decision = "BLOCKED"
         elif followups:
@@ -234,7 +318,7 @@ class BuyPromotionReviewer:
         else:
             promotion_decision = "ACTIONABLE_BUY"
             reasons.append("First-pass BUY cleared promotion review for dry-run account planning.")
-            if staged_entry.recommended_size_pct < suggested_size_pct:
+            if staged_entry.recommended_size_pct < effective_suggested_size_pct:
                 reasons.append(staged_entry.reason)
 
         return self._review(
@@ -243,7 +327,7 @@ class BuyPromotionReviewer:
             first_pass_action=first_pass_action,
             promotion_decision=promotion_decision,
             confidence=confidence,
-            suggested_size_pct=suggested_size_pct,
+            suggested_size_pct=effective_suggested_size_pct,
             evidence_score=evidence_score,
             portfolio_fit_score=portfolio_fit_score,
             valuation_fit_score=valuation_fit_score,
@@ -254,6 +338,10 @@ class BuyPromotionReviewer:
             staged_entry_size_pct=staged_entry.recommended_size_pct,
             staged_entry_label=staged_entry.label,
             normalized_earnings_quality=earnings_quality,
+            company_category=company_category,
+            original_suggested_size_pct=original_llm_size,
+            category_risk_adjusted_size_pct=effective_suggested_size_pct,
+            category_adjustment_applied=category_adjustment_applied,
             blockers=blockers,
             followups=_dedupe(followups),
             reasons=_dedupe(reasons),
@@ -278,17 +366,22 @@ class BuyPromotionReviewer:
         staged_entry_size_pct: float,
         staged_entry_label: str,
         normalized_earnings_quality: str,
+        company_category: str = "",
+        original_suggested_size_pct: float = 0.0,
+        category_risk_adjusted_size_pct: float = 0.0,
+        category_adjustment_applied: bool = False,
         blockers: list[str],
         followups: list[str],
         reasons: list[str],
     ) -> BuyPromotionReview:
+        final_size = category_risk_adjusted_size_pct or original_suggested_size_pct or suggested_size_pct
         return BuyPromotionReview(
             symbol=symbol,
             decision_id=str(row.get("decision_id") or ""),
             first_pass_action=first_pass_action,
             promotion_decision=promotion_decision,
             confidence=confidence,
-            suggested_size_pct=suggested_size_pct,
+            suggested_size_pct=final_size,
             evidence_score=round(evidence_score, 2),
             portfolio_fit_score=round(portfolio_fit_score, 2),
             valuation_fit_score=round(valuation_fit_score, 2),
@@ -299,6 +392,10 @@ class BuyPromotionReviewer:
             staged_entry_size_pct=round(staged_entry_size_pct, 2),
             staged_entry_label=staged_entry_label,
             normalized_earnings_quality=normalized_earnings_quality,
+            company_category=company_category,
+            original_suggested_size_pct=original_suggested_size_pct or suggested_size_pct,
+            category_risk_adjusted_size_pct=category_risk_adjusted_size_pct or final_size,
+            category_adjustment_applied=category_adjustment_applied,
             blockers=_dedupe(blockers),
             followups=_dedupe(followups),
             reasons=_dedupe(reasons),
@@ -333,17 +430,22 @@ def build_buy_promotion_markdown(reviews: list[BuyPromotionReview]) -> str:
     lines = [
         "# Buy Promotion Review",
         "",
-        "| Symbol | Promotion | First Pass | Confidence | Size % | Entry Plan | Evidence | Valuation Fit | Margin Safety | Perm Loss | Mode | Blockers | Followups | Reasons |",
-        "|---|---|---|---:|---:|---|---:|---:|---:|---|---|---|---|---|",
+        "| Symbol | Category | Promotion | First Pass | Confidence | Size % | Entry Plan | Evidence | Valuation Fit | Margin Safety | Perm Loss | Mode | Blockers | Followups | Reasons |",
+        "|---|---|---|---|---:|---:|---|---:|---:|---:|---|---|---|---|---|",
     ]
     for review in reviews:
+        size_display = f"{review.suggested_size_pct:g}%"
+        if review.original_suggested_size_pct and review.category_risk_adjusted_size_pct and abs(review.original_suggested_size_pct - review.category_risk_adjusted_size_pct) > 0.1:
+            size_display = f"{review.category_risk_adjusted_size_pct:g}% (LLM suggested {review.original_suggested_size_pct:g}%)"
+
         lines.append(
-            "| {symbol} | {promotion} | {first_pass} | {confidence} | {size:g} | {entry_label} ({entry_size:g}%) | {evidence:g} | {valuation:g} | {margin:g} | {perm_loss:g}: {flags} | {mode} | {blockers} | {followups} | {reasons} |".format(
+            "| {symbol} | {category} | {promotion} | {first_pass} | {confidence} | {size_display} | {entry_label} ({entry_size:g}%) | {evidence:g} | {valuation:g} | {margin:g} | {perm_loss:g}: {flags} | {mode} | {blockers} | {followups} | {reasons} |".format(
                 symbol=review.symbol,
+                category=review.company_category or "-",
                 promotion=review.promotion_decision,
                 first_pass=review.first_pass_action,
                 confidence=review.confidence,
-                size=review.suggested_size_pct,
+                size_display=size_display,
                 entry_label=review.staged_entry_label,
                 entry_size=review.staged_entry_size_pct,
                 evidence=review.evidence_score,

@@ -74,6 +74,10 @@ class ReviewStatusBuilder:
                 "thesis_state": status.thesis_state,
                 "matched_invalidation_conditions": status.matched_invalidation_conditions,
                 "review_reason": status.reason,
+                # Re-underwriting / durability fields (new columns, graceful on legacy rows)
+                "thesis_durability": row.get("thesis_durability") or status.thesis_state,
+                "last_reunderwritten_date": row.get("last_reunderwritten_date"),
+                "reunderwrite_due": (row.get("thesis_durability") in {"weakening", "broken"}),
             }
         return statuses
 

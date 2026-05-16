@@ -49,6 +49,10 @@ class ResearchPacket:
     fundamental_metrics: Dict[str, Any] = field(default_factory=dict)
     macro_regime_context: Dict[str, Any] = field(default_factory=dict)
 
+    # Tiered Enrichment metadata (added May 2026)
+    enrichment_tier: Optional[int] = None          # 0-3
+    tier_reasons: List[str] = field(default_factory=list)
+
     def __post_init__(self) -> None:
         self.symbol = (self.symbol or "").upper()
         self.company_name = self.company_name or ""
@@ -72,6 +76,9 @@ class ResearchPacket:
         self.evidence_brief = self.evidence_brief or ""
         self.fundamental_metrics = dict(self.fundamental_metrics or {})
         self.macro_regime_context = dict(self.macro_regime_context or {})
+
+        self.enrichment_tier = self.enrichment_tier
+        self.tier_reasons = list(self.tier_reasons or [])
 
         if self.combined_attractiveness_score is None:
             self.combined_attractiveness_score = self._compute_combined_score()
