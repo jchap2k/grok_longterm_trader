@@ -440,6 +440,57 @@ def _run_selection_stage(args: argparse.Namespace, campaign_dir: Path, state: di
         run_selection_cli(build_selection_parser().parse_args(selection_args))
     summary = _load_json(selection_dir / "research_queue_summary.json")
     state["research_selection"] = summary
+
+    # === Tiered Enrichment Decision (new, conservative) ===
+    # Run TierRouter on the selected ideas using available signals.
+    # This allows the evidence campaign to use tier-aware Perplexity settings.
+    selected_file = selection_dir / "research_queue_selected.json"
+    if selected_file.exists():
+        try:
+            from longterm.tier_router import route_enrichment_tier
+            from longterm.tier_definitions import get_tier_name
+
+            selected_ideas = json.loads(selected_file.read_text(encoding="utf-8"))
+            if not isinstance(selected_ideas, list):
+                selected_ideas = [selected_ideas]
+
+            tier_summary = {str(t): 0 for t in range(4)}
+            for idea in selected_ideas:
+                rs = idea.get("research_selection", {}) or {}
+                selection_score = float(rs.get("selection_score", 0.0))
+                category = idea.get("company_category") or rs.get("company_category")
+
+                routing = route_enrichment_tier(
+                    research_selection_score=selection_score,
+                    company_category=str(category) if category else None,
+                    # Other signals (Kronos, reviewer strength, etc.) can be added when available
+                )
+                idea["enrichment_tier"] = routing.tier
+                idea["tier_reasons"] = routing.reasons
+                tier_summary[str(routing.tier)] += 1
+
+            # Save tiered selected ideas (for downstream use)
+            _write_json(selected_file, selected_ideas)
+
+            # Conservative default for Perplexity search context based on tier distribution
+            # (Note: evidence stage already ran; this informs future re-runs or manual use)
+            tier0_pct = tier_summary.get("0", 0) / max(1, len(selected_ideas))
+            tier1_pct = tier_summary.get("1", 0) / max(1, len(selected_ideas))
+            default_search_context = "low" if (tier0_pct + tier1_pct) > 0.4 else "medium"
+
+            state["tier_summary"] = tier_summary
+            state["tiering"] = {
+                "default_perplexity_search_context": default_search_context,
+                "tier0_pct": tier0_pct,
+                "tier1_pct": tier1_pct,
+            }
+            # Do not print to stdout here — it would break the final JSON contract of the CLI.
+            # Diagnostics live in state for the campaign manifest.
+
+        except Exception as e:
+            # Record warning in state instead of printing (preserves JSON-only stdout contract)
+            state["tiering_error"] = str(e)
+
     if int(summary.get("selected_count") or 0) > 0:
         state["stage"] = "research_queue_ready"
         event_type = "research_queue_selected"
