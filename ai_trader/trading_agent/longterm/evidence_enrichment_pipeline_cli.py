@@ -81,6 +81,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional API-console credit total, e.g. 12 if you have purchased $12 toward Tier 1.",
     )
     parser.add_argument("--allow-unsourced-grok", action="store_true")
+    parser.add_argument("--tier-only", "--dry-run-tiers", dest="tier_only", action="store_true",
+                        help="Run only up to tier decision (no heavy LLM enrichment). Useful for threshold tuning.")
     return parser
 
 
@@ -105,6 +107,7 @@ def run_cli(args: argparse.Namespace) -> int:
         as_of_date=args.as_of_date or None,
         limit=args.limit,
         max_news_items=args.max_news_items,
+        tier_only=args.tier_only,
         published_after=args.published_after or None,
         news_batch_size=args.rate_limit_batch_size,
         news_pause_seconds=(0.0 if args.news_snapshot_file else args.rate_limit_pause_seconds),

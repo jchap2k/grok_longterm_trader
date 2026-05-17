@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Mapping
 
+from longterm.company_classifier import classify_from_idea
+
 
 def enrich_idea_with_quality_growth_scorecard(idea: Mapping[str, Any], *, as_of_date: str | None = None) -> dict[str, Any]:
     """Attach an auditable Python-derived quality-growth scorecard."""
@@ -58,11 +60,13 @@ def build_quality_growth_scorecard(idea: Mapping[str, Any], *, as_of_date: str |
         *safety_reasons,
         *attention_reasons,
     ]
+    category = classify_from_idea(idea)
     return {
         "symbol": str(idea.get("symbol") or metrics.get("symbol") or "").upper(),
         "as_of_date": as_of_date or date.today().isoformat(),
         "source_type": "python_quality_growth_scorecard",
         "basis": "deterministic_model",
+        "company_category": category.value,
         "superscore": superscore,
         "quality_score": round(quality, 1),
         "growth_score": round(growth, 1),

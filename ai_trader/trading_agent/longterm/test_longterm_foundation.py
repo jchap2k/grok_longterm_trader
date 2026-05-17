@@ -62,6 +62,41 @@ def test_classifier_assigns_growth_buckets():
     assert classify_company(24.0, 28.0) is CompanyCategory.FAST_GROWER
 
 
+def test_classify_from_idea_uses_scorecard_growth_data():
+    from longterm.company_classifier import classify_from_idea
+
+    idea = {
+        "symbol": "TEST",
+        "quality_growth_scorecard": {
+            "fundamental_metrics": {
+                "revenue_growth_cagr": {
+                    "3_yr_revenue_growth": 22.0,
+                    "3_yr_eps_growth": 19.0,
+                }
+            }
+        },
+    }
+    cat = classify_from_idea(idea)
+    assert cat is CompanyCategory.FAST_GROWER
+
+
+def test_classify_from_idea_detects_turnaround_and_asset_play():
+    from longterm.company_classifier import classify_from_idea
+
+    turnaround_idea = {
+        "symbol": "TURN",
+        "earnings_inflection": True,
+        "thesis": "New management executing restructuring plan with clear inflection in margins",
+    }
+    asset_idea = {
+        "symbol": "ASSET",
+        "thesis": "Significant net cash position and hidden real estate assets not reflected in market cap",
+    }
+
+    assert classify_from_idea(turnaround_idea) is CompanyCategory.TURNAROUND
+    assert classify_from_idea(asset_idea) is CompanyCategory.ASSET_PLAY
+
+
 def test_build_research_prompt_includes_packet_details_and_review_questions():
     packet = ResearchPacket(
         symbol="DUOL",

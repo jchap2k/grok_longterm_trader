@@ -7,5 +7,6 @@
   ],
   "benchmark_symbol": "FXAIX",
   "defensive_parking_symbol": "SPY",
-  "cash_symbol": "CASH"
+  "cash_symbol": "CASH",
+  "enable_category_risk_sizing": false
 }

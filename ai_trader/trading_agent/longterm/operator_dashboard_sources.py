@@ -93,8 +93,15 @@ def requested_ticker_symbols(parsed_path: str) -> list[str]:
 
 @lru_cache(maxsize=512)
 def cached_yfinance_history(symbol: str, period: str = "1y") -> list[dict[str, Any]]:
-    """Cache per-symbol history fetches while the dashboard server process is alive."""
-    return fetch_yfinance_history(symbol, period)
+    """Cache per-symbol history fetches while the dashboard server process is alive.
+    Returns empty list on any provider failure (rate limit, network, etc.) so
+    page generation degrades gracefully instead of crashing the request.
+    """
+    try:
+        return fetch_yfinance_history(symbol, period)
+    except Exception:
+        # Degrade: no chart data instead of failing the whole ticker page or test
+        return []
 
 
 def _journal_row_to_evidence_item(row: Mapping[str, Any]) -> dict[str, Any]:

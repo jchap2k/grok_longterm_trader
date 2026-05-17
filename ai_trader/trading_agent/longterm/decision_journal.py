@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
 from research.research_packet import ResearchPacket
 
@@ -19,6 +20,74 @@ def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition
     if column in existing:
         return
     conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
+@dataclass
+class ReunderwritingRecord:
+    """Structured, auditable record of a thesis re-underwriting event.
+
+    Stored as JSON in reunderwriting_memo_json on the child decision row.
+    The parent row (original decision) receives denormalized updates for
+    fast queries (last_reunderwritten_date + thesis_durability).
+    """
+
+    decision_id: str
+    parent_decision_id: str
+    symbol: str
+    timestamp: str
+    thesis_durability: str  # 'strong' | 'stable' | 'weakening' | 'broken'
+    delta_summary: str = ""
+    recommendation_delta: Optional[str] = None
+    conviction_delta: Optional[int] = None
+    size_delta_pct: Optional[float] = None
+    new_risks: list[str] = field(default_factory=list)
+    macro_changes: list[str] = field(default_factory=list)
+    reviewer_deltas: dict[str, Any] = field(default_factory=dict)
+    tier_changes: Optional[dict[str, Any]] = None
+    kronos_delta: Optional[dict[str, Any]] = None
+    memo: dict[str, Any] = field(default_factory=dict)
+
+    def to_memo_dict(self) -> dict[str, Any]:
+        """Serialize for storage in reunderwriting_memo_json (omit None/empty)."""
+        data = {
+            "decision_id": self.decision_id,
+            "parent_decision_id": self.parent_decision_id,
+            "symbol": self.symbol,
+            "timestamp": self.timestamp,
+            "thesis_durability": self.thesis_durability,
+            "delta_summary": self.delta_summary,
+            "recommendation_delta": self.recommendation_delta,
+            "conviction_delta": self.conviction_delta,
+            "size_delta_pct": self.size_delta_pct,
+            "new_risks": self.new_risks,
+            "macro_changes": self.macro_changes,
+            "reviewer_deltas": self.reviewer_deltas,
+            "tier_changes": self.tier_changes,
+            "kronos_delta": self.kronos_delta,
+            "memo": self.memo,
+        }
+        return {k: v for k, v in data.items() if v not in (None, [], {}, "")}
+
+    @staticmethod
+    def from_dict(data: Mapping[str, Any]) -> "ReunderwritingRecord":
+        """Rehydrate from stored JSON."""
+        return ReunderwritingRecord(
+            decision_id=str(data.get("decision_id") or ""),
+            parent_decision_id=str(data.get("parent_decision_id") or ""),
+            symbol=str(data.get("symbol") or "").upper(),
+            timestamp=str(data.get("timestamp") or ""),
+            thesis_durability=str(data.get("thesis_durability") or "stable"),
+            delta_summary=str(data.get("delta_summary") or ""),
+            recommendation_delta=data.get("recommendation_delta"),
+            conviction_delta=data.get("conviction_delta"),
+            size_delta_pct=data.get("size_delta_pct"),
+            new_risks=list(data.get("new_risks") or []),
+            macro_changes=list(data.get("macro_changes") or []),
+            reviewer_deltas=dict(data.get("reviewer_deltas") or {}),
+            tier_changes=data.get("tier_changes"),
+            kronos_delta=data.get("kronos_delta"),
+            memo=dict(data.get("memo") or {}),
+        )
 
 
 class LongTermDecisionJournal:
@@ -62,11 +131,34 @@ class LongTermDecisionJournal:
                     packet_json TEXT NOT NULL,
                     decision_json TEXT NOT NULL,
                     raw_response TEXT,
-                    usage_json TEXT
+                    usage_json TEXT,
+                    enrichment_tier INTEGER,
+                    tier_reasons_json TEXT,
+                    review_type TEXT,
+                    parent_decision_id TEXT,
+                    last_reunderwritten_date TEXT,
+                    thesis_durability TEXT,
+                    reunderwriting_memo_json TEXT
                 )
                 """
             )
             _ensure_column(conn, "longterm_decision_journal", "usage_json", "TEXT")
+            _ensure_column(conn, "longterm_decision_journal", "enrichment_tier", "INTEGER")
+            _ensure_column(conn, "longterm_decision_journal", "tier_reasons_json", "TEXT")
+            _ensure_column(conn, "longterm_decision_journal", "review_type", "TEXT")
+            _ensure_column(conn, "longterm_decision_journal", "parent_decision_id", "TEXT")
+            _ensure_column(conn, "longterm_decision_journal", "last_reunderwritten_date", "TEXT")
+            _ensure_column(conn, "longterm_decision_journal", "thesis_durability", "TEXT")
+            _ensure_column(conn, "longterm_decision_journal", "reunderwriting_memo_json", "TEXT")
+
+            # Index for fast re-underwriting lineage lookups (parent -> children)
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_longterm_decision_parent
+                ON longterm_decision_journal (parent_decision_id)
+                """
+            )
+
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS longterm_action_plan_journal (
@@ -805,6 +897,155 @@ class LongTermDecisionJournal:
             if symbol not in latest:
                 latest[symbol] = record
         return latest
+
+    # ------------------------------------------------------------------
+    # Thesis Re-underwriting persistence (Phase 1)
+    # ------------------------------------------------------------------
+
+    def record_reunderwriting(
+        self,
+        *,
+        parent_decision_id: str,
+        record: ReunderwritingRecord | Mapping[str, Any],
+    ) -> str:
+        """Persist a re-underwriting event as a child row in the journal.
+
+        - Creates a new row with review_type='reunderwriting' and parent_decision_id.
+        - Stores the full structured memo in reunderwriting_memo_json.
+        - Denormalizes last_reunderwritten_date + thesis_durability onto the parent.
+        - Legacy parent rows (no review_type) are treated as initial_decision.
+        """
+        if isinstance(record, ReunderwritingRecord):
+            rec = record
+        else:
+            rec = ReunderwritingRecord.from_dict(record)
+
+        if not rec.parent_decision_id or rec.parent_decision_id != parent_decision_id:
+            rec.parent_decision_id = parent_decision_id
+
+        child_id = rec.decision_id or str(uuid.uuid4())
+        rec.decision_id = child_id
+        timestamp = rec.timestamp or datetime.now().isoformat()
+        rec.timestamp = timestamp
+
+        memo_json = json.dumps(rec.to_memo_dict(), sort_keys=True)
+
+        conn = sqlite3.connect(self.db_path)
+        try:
+            # Insert the child re-underwriting row
+            conn.execute(
+                """
+                INSERT INTO longterm_decision_journal (
+                    decision_id, timestamp, symbol, company_name, idea_source,
+                    recommendation, key_thesis, packet_json, decision_json,
+                    review_type, parent_decision_id, reunderwriting_memo_json,
+                    thesis_durability
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'reunderwriting', ?, ?, ?)
+                """,
+                (
+                    child_id,
+                    timestamp,
+                    rec.symbol,
+                    None,
+                    "reunderwriting",
+                    None,
+                    rec.delta_summary[:500] if rec.delta_summary else "",
+                    memo_json,  # packet_json holds the memo for simplicity
+                    memo_json,  # decision_json also holds it
+                    parent_decision_id,
+                    memo_json,
+                    rec.thesis_durability,
+                ),
+            )
+
+            # Denormalize onto the parent row for fast dashboard/queue queries
+            conn.execute(
+                """
+                UPDATE longterm_decision_journal
+                SET last_reunderwritten_date = ?,
+                    thesis_durability = ?
+                WHERE decision_id = ?
+                """,
+                (timestamp, rec.thesis_durability, parent_decision_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        # Also refresh the symbol feedback profile (lightweight)
+        self.refresh_symbol_feedback_profile(rec.symbol)
+        return child_id
+
+    def list_reunderwritings_for_parent(self, parent_decision_id: str) -> list[dict[str, Any]]:
+        """Return all re-underwriting child rows for a given parent decision (newest first)."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                """
+                SELECT decision_id, timestamp, symbol, review_type, parent_decision_id,
+                       thesis_durability, reunderwriting_memo_json
+                FROM longterm_decision_journal
+                WHERE parent_decision_id = ? AND review_type = 'reunderwriting'
+                ORDER BY timestamp DESC
+                """,
+                (parent_decision_id,),
+            ).fetchall()
+        finally:
+            conn.close()
+
+        results: list[dict[str, Any]] = []
+        for row in rows:
+            record = dict(row)
+            memo = json.loads(record.get("reunderwriting_memo_json") or "{}")
+            record["reunderwriting_record"] = ReunderwritingRecord.from_dict(memo)
+            results.append(record)
+        return results
+
+    def latest_reunderwriting_by_symbol(self) -> dict[str, dict[str, Any]]:
+        """Return the most recent re-underwriting (if any) for each symbol that has one."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            # Latest per symbol among re-underwriting rows
+            rows = conn.execute(
+                """
+                SELECT decision_id, timestamp, symbol, review_type, parent_decision_id,
+                       thesis_durability, reunderwriting_memo_json
+                FROM longterm_decision_journal
+                WHERE review_type = 'reunderwriting'
+                ORDER BY timestamp DESC
+                """
+            ).fetchall()
+        finally:
+            conn.close()
+
+        latest: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            record = dict(row)
+            symbol = str(record["symbol"]).upper()
+            if symbol not in latest:
+                memo = json.loads(record.get("reunderwriting_memo_json") or "{}")
+                record["reunderwriting_record"] = ReunderwritingRecord.from_dict(memo)
+                latest[symbol] = record
+        return latest
+
+    def get_reunderwriting_lineage(self, decision_id: str) -> dict[str, Any]:
+        """Return the root decision + ordered list of all re-underwriting children."""
+        root = self.get_decision(decision_id)
+        children = self.list_reunderwritings_for_parent(decision_id)
+
+        # If this decision_id itself is a re-underwriting child, walk up to the root
+        if root.get("review_type") == "reunderwriting" and root.get("parent_decision_id"):
+            root = self.get_decision(root["parent_decision_id"])
+            children = self.list_reunderwritings_for_parent(root["decision_id"])
+
+        return {
+            "root_decision": root,
+            "reunderwritings": children,
+            "total_reunderwritings": len(children),
+            "latest_durability": (children[0]["thesis_durability"] if children else root.get("thesis_durability")),
+        }
 
     def rebuild_symbol_feedback_profiles(self) -> dict[str, Any]:
         """Rebuild durable per-symbol feedback profiles from decision history."""

@@ -21,6 +21,7 @@ class PortfolioProfile:
     low_risk_parking_symbol: str = "SGOV"
     duration_hedge_symbol: str = "TLT"
     cash_symbol: str = "CASH"
+    enable_category_risk_sizing: bool = False
 
     def __post_init__(self) -> None:
         self.account_strategy_mode = self.account_strategy_mode or ""
@@ -34,6 +35,7 @@ class PortfolioProfile:
         self.low_risk_parking_symbol = (self.low_risk_parking_symbol or "SGOV").upper()
         self.duration_hedge_symbol = (self.duration_hedge_symbol or "TLT").upper()
         self.cash_symbol = (self.cash_symbol or "CASH").upper()
+        self.enable_category_risk_sizing = bool(self.enable_category_risk_sizing)
 
     @property
     def protected_capital(self) -> float:

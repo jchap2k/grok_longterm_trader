@@ -85,6 +85,15 @@ class NextActionsPlanner:
             symbol = row["symbol"]
             promotion_review = promotion_reviews.get(str(row.get("decision_id") or ""))
             packet = create_research_packet_from_idea({"symbol": symbol}, profile=profile)
+            # Pass staged entry size to ActionPlanner when available (Priority 2)
+            staged_size = None
+            if promotion_review and promotion_review.staged_entry_label == "starter_position":
+                staged_size = promotion_review.staged_entry_size_pct
+
+            category_already_applied = False
+            if promotion_review and getattr(promotion_review, "category_adjustment_applied", False):
+                category_already_applied = True
+
             planned = ActionPlanner().plan(
                 packet,
                 profile=profile,
@@ -94,6 +103,8 @@ class NextActionsPlanner:
                     "confidence": row.get("confidence"),
                     "suggested_size_pct": row.get("suggested_size_pct"),
                 },
+                recommended_size_pct=staged_size,
+                category_adjustment_already_applied=category_already_applied,
             )
             if portfolio_state.holding_value(symbol) <= 0 and planned.order_intent == "BUY":
                 if promotion_review and promotion_review.promotion_decision != "ACTIONABLE_BUY":
@@ -232,6 +243,10 @@ def build_next_actions_markdown(
     actions.extend(_paper_execution_eligibility_actions(paper_execution_eligibility))
     actions = _prioritize_actions(actions)
 
+    # Priority 2 Polish: Separate staged entry recommendations for prominent display
+    staged_entry_actions = [a for a in actions if a.category == "open_starter_position"]
+    regular_actions = [a for a in actions if a.category != "open_starter_position"]
+
     lines = [
         "# Long-Term Next Actions",
         "",
@@ -243,15 +258,41 @@ def build_next_actions_markdown(
         "|---|---:|",
         *_category_summary_lines(actions),
         "",
+    ]
+
+    # Dedicated Staged Entry section (high visibility for operator)
+    if staged_entry_actions:
+        lines.append("## Staged Entry Recommendations")
+        lines.append("")
+        lines.append("**These positions should be opened at reduced starter size due to developing margin of safety.**")
+        lines.append("")
+        lines.append("| Symbol | Action | Details |")
+        lines.append("|---|---|---|")
+        for action in staged_entry_actions:
+            lines.append(f"| **{action.symbol}** | **{action.action}** | {action.reason} |")
+        lines.append("")
+
+    # Main Actions table (excluding staged entries to avoid duplication)
+    lines.extend([
         "## Actions",
         "",
         "| Priority | Category | Symbol | Action | Reason |",
         "|---:|---|---|---|---|",
-    ]
-    for action in actions:
+    ])
+    for action in regular_actions:
+        cat_display = action.category
+        # Polish: Show Lynch company category in the Category column when available in the reason
+        if action.category in ("buy_promotion_review", "open_starter_position") and "[" in action.reason and "]" in action.reason:
+            # Try to extract category from the end of the reason
+            import re
+            match = re.search(r'\[([a-z_]+)\]', action.reason)
+            if match:
+                cat_display = f"{action.category} [{match.group(1)}]"
+
         lines.append(
-            f"| {action.priority} | {action.category} | {action.symbol} | {action.action} | {action.reason} |"
+            f"| {action.priority} | {cat_display} | {action.symbol} | {action.action} | {action.reason} |"
         )
+
     if account_action_plan:
         lines.extend(_account_action_plan_lines(account_action_plan))
     if deferred_research_queue:
@@ -316,10 +357,25 @@ def _account_action_plan_lines(account_action_plan: Mapping[str, Any]) -> list[s
                 continue
             trade_value = _format_currency(intent.get("trade_value"))
             allowed = "yes" if bool(intent.get("allowed")) else "no"
+
+            intent_type = str(intent.get("intent_type") or "")
+            promotion = intent.get("promotion_review") or {}
+            staged_label = promotion.get("staged_entry_label")
+            company_cat = promotion.get("company_category") or ""
+
+            # Priority 2 Polish: Clearly mark staged starter entries in the action plan
+            if staged_label == "starter_position":
+                display_intent = f"{intent_type} (Starter)"
+            else:
+                display_intent = intent_type
+
+            if company_cat:
+                display_intent += f" [{company_cat}]"
+
             lines.append(
                 "| "
                 f"{_markdown_cell(str(intent.get('symbol') or ''))} | "
-                f"{_markdown_cell(str(intent.get('intent_type') or ''))} | "
+                f"{_markdown_cell(display_intent)} | "
                 f"{_markdown_cell(str(intent.get('order_intent') or ''))} | "
                 f"{trade_value} | "
                 f"{allowed} | "
@@ -389,6 +445,13 @@ def _promotion_category(review: BuyPromotionReview) -> str:
         return "review_holding"
     if review.promotion_decision == "BLOCKED":
         return "buy_promotion_blocked"
+
+    # Priority 2 improvement: Make starter positions clearly trackable
+    if review.staged_entry_label == "starter_position":
+        return "open_starter_position"
+    if review.staged_entry_label == "confirm_before_entry":
+        return "confirm_before_entry"
+
     return "buy_promotion_review"
 
 
@@ -399,15 +462,42 @@ def _promotion_action(review: BuyPromotionReview) -> str:
         return "CONFIRM"
     if review.promotion_decision == "BLOCKED":
         return "BLOCKED"
+
+    # Priority 2: Clearer actions for staged entry situations
+    if review.staged_entry_label == "starter_position":
+        return "OPEN STARTER"
+    if review.staged_entry_label == "confirm_before_entry":
+        return "CONFIRM"
+
     return "REVIEW"
 
 
 def _promotion_reason(review: BuyPromotionReview) -> str:
     details = review.blockers or review.followups or review.reasons
     suffix = "; ".join(details)
+
+    base = f"Buy promotion review: {review.promotion_decision}."
     if suffix:
-        return f"Buy promotion review: {review.promotion_decision}. {suffix}"
-    return f"Buy promotion review: {review.promotion_decision}."
+        base += f" {suffix}"
+
+    # Priority 2: Clear, trackable recommendation for staged entry
+    if review.staged_entry_label == "starter_position" and review.staged_entry_size_pct > 0:
+        msg = (
+            f"Open **starter position** at {review.staged_entry_size_pct}% of portfolio "
+            f"(full size would be {review.suggested_size_pct}%). "
+            f"Margin of safety still developing."
+        )
+        if review.company_category:
+            msg += f"  | Category: {review.company_category}"
+        return msg
+
+    if review.staged_entry_label == "confirm_before_entry":
+        base += " High permanent loss risk — confirm before any entry."
+
+    if review.company_category:
+        base += f" Category: {review.company_category}."
+
+    return base
 
 
 def _mr_market_review_for_symbol(portfolio_state: PortfolioState, symbol: str):

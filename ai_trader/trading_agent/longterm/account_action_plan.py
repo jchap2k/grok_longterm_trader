@@ -132,6 +132,29 @@ class AccountActionPlanBuilder:
                 intent_type=str(row.get("recommendation") or ""),
             )
             packet = create_research_packet_from_idea({"symbol": symbol}, profile=profile)
+
+            # Use BuyPromotionReview as the source of truth for final deployable size
+            # (it has already applied staged entry caps and category risk adjustment when enabled).
+            recommended_size = None
+            if promotion_review:
+                if promotion_review.staged_entry_label == "starter_position" and promotion_review.staged_entry_size_pct > 0:
+                    recommended_size = promotion_review.staged_entry_size_pct
+                else:
+                    recommended_size = promotion_review.suggested_size_pct
+
+            # Legacy compatibility: when category risk sizing is disabled (default),
+            # account planning for new buys remains conservative (2% cap) to match
+            # pre-Lynch test expectations and previous dry-run behavior.
+            enable_cat = getattr(profile, "enable_category_risk_sizing", False)
+            if not enable_cat and recommended_size is not None and recommended_size > 2.0:
+                # Only cap non-starter new buys; starters are already handled by evaluate_staged_entry
+                if not (promotion_review and promotion_review.staged_entry_label == "starter_position"):
+                    recommended_size = 2.0
+
+            category_already_applied = bool(
+                promotion_review and getattr(promotion_review, "category_adjustment_applied", False)
+            )
+
             planned = ActionPlanner().plan(
                 packet,
                 profile=profile,
@@ -141,6 +164,8 @@ class AccountActionPlanBuilder:
                     "confidence": row.get("confidence"),
                     "suggested_size_pct": row.get("suggested_size_pct"),
                 },
+                recommended_size_pct=recommended_size,
+                category_adjustment_already_applied=category_already_applied,
             )
 
             if planned.action == "PROTECTED_HOLD":
